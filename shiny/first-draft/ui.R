@@ -1,15 +1,17 @@
 words_to_extract <- read.csv("data/words_to_extract.csv") %>% select(word) %>% pull(.)
+library(ggiraph)
+
 fluidPage(
-  titlePanel("What's the context of the selected keywords?"),
+  titlePanel("What's the lifetime of the commenting systems?"),
   tabsetPanel(
     tabPanel(
-      "keywords in context",
+      " ",
       sidebarLayout(
         sidebarPanel(
-          p("Choose one of your categories via the drop-box-menu below."),
+          p("Choose how to sort the commenting systems: "),
           # p("Worauf sich der erste bezieht, bestimmt ihr selbst über die Auswahl im Drop-Down-Menü."),
           # textInput("searchWord", "Suchwort", "Klimawandel"),
-          selectInput("searchWord", "Kategorie", words_to_extract),
+          selectInput("searchWord", "sort commenting systems ...", c("sort_life_span", "sort_name")),
           submitButton("request", icon("refresh")),
           verbatimTextOutput("value"),
           br()#,
@@ -17,8 +19,8 @@ fluidPage(
          ),
         mainPanel(
           verticalLayout(
-            DT::dataTableOutput("printhateindex"),
-            tags$hr()#,
+            girafeOutput("getSystemsOverTime")#,
+            # tags$hr()#,
             # plotOutput("printOneHitWonder", width = "600px", inline = FALSE)#,
             # tags$hr(),
             # plotOutput("printembeddingsLines", width = "600px", inline = FALSE)
