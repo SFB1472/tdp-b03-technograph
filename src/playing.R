@@ -1,12 +1,14 @@
 library(tidyverse)
 library(lubridate)
 library(ggiraph)
+source("src/config-graphics.R")
 
 regex_year_only <- "^[\\d]{4,4}$"
 regex_month_name <- "^[a-zA-Z]{1,}"
 regex_full_date <- "^\\d{2,2}\\.\\d{2,2}\\.\\d{4,4}"
 
 # to be changed for reading directly from google
+# https://docs.google.com/spreadsheets/d/13s-hrOrP0kYrfWJEx-BD675JF51CKN9PBhO9M_lay_U/edit#gid=241642220
 raw_vis_data <- read.csv("data/Commenting Technology Museum - List of commenting systems.csv") %>% 
   select(name, starts_with("date_"))
 
@@ -52,25 +54,28 @@ df_raw_vis_data <- raw_vis_data %>%
         unsafe_end == "year"~ end_date %m+% years(-1),
         unsafe_end %in% c("none", "unknown", "special") ~ end_date
       ),
-      indicator = case_when(
-        unsafe_start != "none" ~ 1,
-        unsafe_start == "none" ~ 2,
-        unsafe_end %in% c("month", "year") ~ 3
+      time_span = interval( start_date, end_date) %>% as.duration(.) %>% as.period(., unit = "years")
       )
-      )
+
+save(df_raw_vis_data, file="shiny/first-draft/data/df_raw_vis_data.RData")
 
 plot <- df_raw_vis_data %>% 
   filter(!is.na(name), name != "") %>% 
+  arrange((time_span)) %>% 
   head(50) %>% #View()
   ggplot(., aes()) +
   geom_rect_interactive(aes(xmin = start_date, xmax = secure_start, ymin = 0.5, ymax = -0.5, tooltip = name, fill = "timespan_unsafe")) +
   geom_rect_interactive( aes(xmin = secure_start, xmax = secure_end, ymin = 0.5, ymax = -0.5, tooltip = name)) +
   geom_rect_interactive(aes(xmin = secure_end, xmax = end_date, ymin = 0.5, ymax = -0.5, tooltip = name, fill = "timespan_unsafe")) +
-  facet_wrap(~name, ncol = 1) +
+  facet_wrap(~reorder(name, time_span), ncol = 1) +
   scale_x_date() +
   theme_b03_box_timeline
 
 girafe(ggobj = plot)
 
+#check on enddates! sieht so aus, als wäre das nicht ganz korrekt, dass alle so lange laufen. 
+## wie viele haben ein "special" bei unsafe date?
+
+# darstellung finden um alle systeme zu zeigen. 
 
 
