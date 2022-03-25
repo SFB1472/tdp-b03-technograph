@@ -15,7 +15,7 @@ library(urltools)
 load(file = "../data/df_snippet_info.RData")
 df_snippet_info <- df_snippit_info %>% distinct() %>% rename("snippet" = "snippit")
 
-source("../config/config.R")
+source("../config/graphic-config.R")
 
 snippets_to_search_for <- read_csv("../data/helper/22-03-09-snipits-download.csv") %>% 
   select("system" = `Commenting system`, "snippet" = Snipit) %>% 
