@@ -1,10 +1,15 @@
 library(shiny)
 library(tidyverse)
 library(ggiraph)
+library(MetBrewer)
 
 source("config.R")
 
 load(file = "data/df_raw_vis_data.RData")
+load(file = "data/df_snippets_year.RData")
+load(file = "data/df_sites_year.RData")
+
+year_breaks <- df_sites_year %>% select(year) %>% distinct() %>% pull(.)
 
 df_raw_vis_data <- df_raw_vis_data %>% 
   filter(!is.na(name), name != "", !is.na(start_date)) %>% 
@@ -34,9 +39,43 @@ get_systems_over_time_ggirafe <- function(sorting){
          height_svg = 11)
 }
 
-shinyServer(function(input, output) {
+get_snippets_over_time <- function(){
+  # print(year_breaks)
+  plot_snippets <- df_snippets_year %>% 
+    right_join(., df_sites_year) %>% #View()
+    ggplot(., aes()) +
+    geom_jitter_interactive(aes(x = year, y = site, color = snippet, tooltip = paste0("year: ", year, "\nsite: ", site, "\nsnippet: ", snippet)), width = .2, height = 0, na.rm = TRUE) +
+    # facet_wrap(~site, ncol = 1)+
+    scale_color_manual(values = met.brewer("Troy", 6), na.value = NA) +
+    scale_x_continuous(breaks = year_breaks,  expand = c(0, NA), name = "crawl_year") +#, limits = year_breaks) +
+    theme_b03_dot_timeline
+  
+  girafe(ggobj = plot_snippets)
+}
 
+get_sites_over_time <- function(){
+  
+  plot <- df_sites_year %>% 
+    ggplot(aes(x = year, y = site, fill = color_breaks)) +
+    geom_tile_interactive(aes(tooltip = paste0("year: ", year, "\nsite: ", site))) +
+    scale_fill_manual(values = met.brewer("Hokusai2"), na.value = "grey90") +
+    scale_x_continuous(breaks = year_breaks, expand = c(0, NA), name = "crawl_year") +
+    scale_y_discrete(expand = c(0, NA)) +
+    theme_b03_heatmap
+  
+  girafe(ggobj = plot) 
+}
+
+shinyServer(function(input, output) {
+  ## Tab 1
   getSystemsOverTime <- reactive({get_systems_over_time_ggirafe(input$searchWord)})
   output$getSystemsOverTime <- renderGirafe({getSystemsOverTime()})
+  
+  ## Tab 2
+  getSnippetsOverTime <- reactive({get_snippets_over_time()})
+  output$getSnippetsOverTime <- renderGirafe({getSnippetsOverTime()})
+  
+  getSitesOverTime <- reactive({get_sites_over_time()})
+  output$getSitesOverTime <- renderGirafe({getSitesOverTime()})
 
 })
