@@ -7,7 +7,7 @@ library(tidyverse)
 # save(df_raw_archive, file = "data/raw/df_raw_archive.Rdata")
 
 snippits_to_search_for <- read_csv("data/helper/22-03-09-snipits-download.csv") %>% 
-  select("system" = `Commenting system`, "snippit" = Snipit) %>% 
+  select("system" = `Commenting system`, "snippet" = Snipit) %>% 
   filter(!is.na(system))
 
 find_snippit <- function(x, pos){
@@ -19,7 +19,7 @@ find_snippit <- function(x, pos){
     df <- x %>%
       select(crawl_date, url, filename, md5, sha1, content) %>%
       mutate(detected = ifelse(str_detect(content, fixed(i)), 1, 0),
-             snippit = i) %>%
+             snippet = i) %>%
       select(-content)
     
     })

@@ -2,27 +2,28 @@ library(tidyverse)
 library(lubridate)
 library(urltools)
 
-path <-  "data/snippit-detection/"
+path <-  "data/snippet-detection/"
 
-all_snippit_info <- list.files(path = path)
+all_snippet_info <- list.files(path = path)
 # all_snippit_info <- "snippit-detection-1.csv"
 
 
-df_snippit_info <- map_df(all_snippit_info, function(i){
+df_snippet_info <- map_df(all_snippet_info, function(i){
   df <- read_csv(file = paste0(path, i)) %>% 
     select(-filename) %>% 
     mutate(crawl_date = ymd(crawl_date),
-           site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
+           site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.),
+           year = year(crawl_date))
   
 })
 
-save(df_snippit_info, file = "data/df_snippit_info.RData")
+save(df_snippet_info, file = "data/df_snippet_info.RData")
 
-df_snippit_info %>% 
+df_snippet_info %>% 
   filter(is.na(site)) %>% View()
   
 
-df_snippit_info %>% 
+df_snippet_info %>% 
   mutate(site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.),
          year = year(crawl_date)) %>% 
   filter(site == "wiwo", year == 2017) %>% View()
@@ -34,12 +35,12 @@ df_snippit_info %>%
 ## im summarise-statement schreib ich ein na.rm mit rein, denn manche zeilen haben bei detected tatsächlich ein NA. 
 ## Warum? Ist dort kein html in der content-spalte?
 
-test <- df_snippit_info %>% 
+test <- df_snippet_info %>% 
   # filter(detected == 1) %>% 
   mutate(site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.),
          year = year(crawl_date)) %>% 
   group_by(year, site) %>% 
-  summarise(counted_snippits = sum(detected, na.rm=TRUE), is_present = n())
+  summarise(counted_snippets = sum(detected, na.rm=TRUE), is_present = n())
 
-nr_domains <- df_snippit_info %>% group_by(site) %>% summarise(count = n()) #%>% nrow()
+nr_domains <- df_snippet_info %>% group_by(site) %>% summarise(count = n()) #%>% nrow()
 
