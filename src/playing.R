@@ -7,9 +7,12 @@ regex_year_only <- "^[\\d]{4,4}$"
 regex_month_name <- "^[a-zA-Z]{1,}"
 regex_full_date <- "^\\d{2,2}\\.\\d{2,2}\\.\\d{4,4}"
 
+
+
 # to be changed for reading directly from google
 # https://docs.google.com/spreadsheets/d/13s-hrOrP0kYrfWJEx-BD675JF51CKN9PBhO9M_lay_U/edit#gid=241642220
-raw_vis_data <- read.csv("data/Commenting Technology Museum - List of commenting systems.csv") %>% 
+raw_vis_data <- read.csv("data/22-01-11-Commenting Technology Museum - List of commenting systems.csv") %>% 
+  # column name -> name_product bei Aktualisierung
   select(name, starts_with("date_"))
 
 df_raw_vis_data <- raw_vis_data %>% 

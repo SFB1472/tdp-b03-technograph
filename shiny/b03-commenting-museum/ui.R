@@ -1,27 +1,36 @@
-# words_to_extract <- read.csv("data/words_to_extract.csv") %>% select(word) %>% pull(.)
+
 library(ggiraph)
 
 fluidPage(
-  titlePanel("What's the lifetime of the commenting systems?"),
+  titlePanel("Technographer"),
   tabsetPanel(
     
-    tabPanel("snippets in sites",
-             sidebarLayout(
-               sidebarPanel(
-                 p("Das obere Diagramm zeigt, wieviel Hass über die Zeit in den beobachteten Gruppen zum Ausdruck gebracht wurde."),
-                 p("Zur Systematik: wurde eins unserer Wörter aus der Tabelle in einer Nachricht gefunden, gibt es einen Hass-Punkt. Je mehr Worte gefunden wurden, desto höher der Hass-Index pro Nachricht (siehe Tabelle)"),
-                 p("Für diese Diagramme wurden alle Hass-Werte addiert und durch das Nachrichtenaufkommen pro Tag geteilt.")
-               ),
-               mainPanel(
+    tabPanel("Perspective on domains",
+             # sidebarLayout(
+               # fluidRow(column( 12,
+               
+               # mainPanel(
+             
+               fluidRow(
+                 column(2, ""),
+                 column(8,
+                        h3("Snippets over Time"),
+                        p("For every sippet found in the german dataset the corresponding domain is painted over time. Colors indicates which snippet has been detected. Hover over the colored data to get all the info at first sight."),
+                 # p(""),
                  girafeOutput("getSnippetsOverTime"),
                  # textOutput("table_caution"),
                  tags$hr(),
+                 h3("Amount of websites archived per month"),
                  girafeOutput("getSitesOverTime"),
                  tags$hr()
+                 ),
+                 column(2, "")
+                 )
+             
                  # plotOutput("printhatebarsfacets")
                  # DT::dataTableOutput('strongestEmbeddingsPerPeriod')
-                 )
-               )
+                 # )
+               # )
              ),
     tabPanel(
       "life time",
@@ -38,6 +47,7 @@ fluidPage(
         ),
         mainPanel(
           verticalLayout(
+            
             girafeOutput("getSystemsOverTime")#,
             # tags$hr()#,
             # plotOutput("printOneHitWonder", width = "600px", inline = FALSE)#,

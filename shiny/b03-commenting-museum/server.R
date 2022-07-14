@@ -1,8 +1,5 @@
-library(shiny)
-library(tidyverse)
-library(ggiraph)
-library(MetBrewer)
-
+library(needs)
+needs(shiny, tidyverse, ggiraph, MetBrewer)
 source("config.R")
 
 load(file = "data/df_raw_vis_data.RData")
@@ -10,6 +7,12 @@ load(file = "data/df_snippets_year.RData")
 load(file = "data/df_sites_year.RData")
 
 year_breaks <- df_sites_year %>% select(year) %>% distinct() %>% pull(.)
+
+
+girafe_css(
+  css ="fill:orange;stroke:gray;",
+  text = "align:left",
+  point = "stroke-width:3px")
 
 df_raw_vis_data <- df_raw_vis_data %>% 
   filter(!is.na(name), name != "", !is.na(start_date)) %>% 
@@ -36,7 +39,8 @@ get_systems_over_time_ggirafe <- function(sorting){
   
   girafe(ggobj = plot, options = list(opts_sizing(rescale = FALSE)),
          width_svg = 10,
-         height_svg = 11)
+         height_svg = 11
+         )
 }
 
 get_snippets_over_time <- function(){
@@ -46,11 +50,14 @@ get_snippets_over_time <- function(){
     ggplot(., aes()) +
     geom_jitter_interactive(aes(x = year, y = site, color = snippet, tooltip = paste0("year: ", year, "\nsite: ", site, "\nsnippet: ", snippet)), width = .2, height = 0, na.rm = TRUE) +
     # facet_wrap(~site, ncol = 1)+
-    scale_color_manual(values = met.brewer("Troy", 6), na.value = NA) +
+    scale_color_manual(values = met.brewer("Troy", 6), na.value = NA, name = "snippets found") +
     scale_x_continuous(breaks = year_breaks,  expand = c(0, NA), name = "crawl_year") +#, limits = year_breaks) +
     theme_b03_dot_timeline
   
-  girafe(ggobj = plot_snippets)
+  girafe(ggobj = plot_snippets, options = list(opts_sizing(rescale = TRUE)),
+         width_svg = 10,
+         height_svg = 5.5
+         )
 }
 
 get_sites_over_time <- function(){
@@ -63,7 +70,10 @@ get_sites_over_time <- function(){
     scale_y_discrete(expand = c(0, NA)) +
     theme_b03_heatmap
   
-  girafe(ggobj = plot) 
+  girafe(ggobj = plot, options = list(opts_sizing(rescale = TRUE)),
+         width_svg = 10,
+         height_svg = 5.5
+  ) 
 }
 
 shinyServer(function(input, output) {

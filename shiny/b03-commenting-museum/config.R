@@ -20,7 +20,7 @@ theme_b03_dot_timeline <- theme(
   legend.position = "top",
   legend.direction = "horizontal",
   # legend.margin = margin(0, 1, 0.2, 0, "in"),
-  # legend.key = element_rect(fill = "#ffffff"),
+  legend.key = element_blank(),
   # legend.key.size = unit(0.2, "in"),
   # text = element_text(family = sz_font, color = sz_black),
   # plot.background = element_rect(fill = "#f2f2f2", color = NA),
