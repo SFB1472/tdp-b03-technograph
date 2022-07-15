@@ -1,5 +1,5 @@
 library(needs)
-needs(shiny, tidyverse, ggiraph, MetBrewer)
+needs(shiny, tidyverse, ggiraph, MetBrewer, googlesheets4)
 source("config.R")
 
 load(file = "data/df_raw_vis_data.RData")
@@ -8,6 +8,14 @@ load(file = "data/df_sites_year.RData")
 
 year_breaks <- df_sites_year %>% select(year) %>% distinct() %>% pull(.)
 
+link_manuell_added_data_points_domains <- "https://docs.google.com/spreadsheets/d/1aEQAAh0UZlFImajCQ-E7cH-0nrlH8TGuxQt4PTbVCJE/"
+gs4_auth(cache=".secrets")
+
+ss <- gs4_get(link_manuell_added_data_points_domains)
+gs_manual_domain_snippet <- read_sheet(ss)
+
+gs4_deauth
+# print(google_sheet)
 
 girafe_css(
   css ="fill:orange;stroke:gray;",
@@ -24,7 +32,7 @@ df_raw_vis_data <- df_raw_vis_data %>%
 
 
 get_systems_over_time_ggirafe <- function(sorting){
-  print(sorting)
+  # print(sorting)
   
   df_plot <- df_raw_vis_data %>% 
     filter(filter_sort == sorting)
@@ -43,15 +51,30 @@ get_systems_over_time_ggirafe <- function(sorting){
          )
 }
 
+
+#### graphic: dot plot on which domains snippets had been found
+
 get_snippets_over_time <- function(){
   # print(year_breaks)
-  plot_snippets <- df_snippets_year %>% 
+  df_na_archived_domains <- df_sites_year %>% 
+    filter(is.na(counted_sites)) %>% 
+    mutate(counted_sites = "no sites archived")
+  
+  # print(head(gs_manual_domain_snippet))
+  
+  data_plot_snippets <- df_snippets_year %>% 
     right_join(., df_sites_year) %>% #View()
-    ggplot(., aes()) +
-    geom_jitter_interactive(aes(x = year, y = site, color = snippet, tooltip = paste0("year: ", year, "\nsite: ", site, "\nsnippet: ", snippet)), width = .2, height = 0, na.rm = TRUE) +
-    # facet_wrap(~site, ncol = 1)+
-    scale_color_manual(values = met.brewer("Troy", 6), na.value = NA, name = "snippets found") +
-    scale_x_continuous(breaks = year_breaks,  expand = c(0, NA), name = "crawl_year") +#, limits = year_breaks) +
+    mutate(type = "automated") #%>% 
+  
+  plot_snippets <- ggplot(data = data_plot_snippets, aes()) +
+    geom_jitter_interactive(data = data_plot_snippets, aes(x = year, y = site, color = snippet, tooltip = paste0("year: ", year, "\nsite: ", site, "\nsnippet: ", snippet), shape = type), width = .2, height = 0, na.rm = TRUE) +
+    geom_tile(data = df_na_archived_domains, aes(x = year, y = site), fill = "grey90") +
+    # geom_tile_interactive(data = df_na_archived_domains, aes(x = year, y = site, tooltip = paste0("year: ", year, "\nsite: ", site, "\nno sites archived")), fill = "grey90") +
+    geom_point_interactive(data = gs_manual_domain_snippet, aes(x = year, y = site, color = snippet, tooltip = tooltip_info, shape = type), size = 2) +
+    scale_color_manual(values = met.brewer("Troy", 6), na.value = NA, name = "sort of snippets", guide = guide_legend(override.aes = list(shape = 15) )) +
+    scale_shape_manual(values = c(16, 18), breaks = c("automated", "manual"), name = "sort of observation",
+      guide = guide_legend(override.aes = list(color = "black") ) )+
+    scale_x_continuous(breaks = year_breaks,  expand = c(0, NA), name = "crawl year") +#, limits = year_breaks) +
     theme_b03_dot_timeline
   
   girafe(ggobj = plot_snippets, options = list(opts_sizing(rescale = TRUE)),
