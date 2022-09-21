@@ -1,8 +1,15 @@
 
+typo_sfb_serif <- "Nantes-Regular"
+typo_sfb_mono <- "GTAmericaMonoLC-Rg"
+
+typo_sfb_mono_remote <- "GT America Mono LC Rg"
+
+sfb_black <- "#000000"
+sfb_grey <- "#E5E5E5"
 
 theme_b03_dot_timeline <- theme(
   strip.background = element_blank(),
-  axis.text.y = element_text(size = 8),
+  axis.text.y = element_text(family = typo_sfb_mono, size = 8, hjust = 0),
   axis.ticks = element_blank(),
   # axis.ticks.length = unit(0,"in"),
   # axis.title = element_blank(),
@@ -30,23 +37,29 @@ theme_b03_dot_timeline <- theme(
   # plot.margin = unit(c(0, 0.1, 0, 0.1), "in")
 )
 
+library(ggtext)
+
 theme_b03_heatmap <- theme(
   strip.background = element_blank(),
-  axis.text.y = element_text(size = 8),
+  axis.title = element_blank(),
+  axis.text = element_text(family = typo_sfb_mono_remote, size = 8, hjust = 0.5),
   axis.ticks = element_blank(),
-  panel.grid.major.y = element_line(color = "#dddddd", size = .2),
-  panel.grid.minor.y = element_line(color = "#dddddd", size = .2),
-  # axis.ticks.length = unit(0,"in"),
+  text = element_text(hjust = 0),
+  panel.grid = element_blank(),
+  # panel.grid.major.y = element_line(color = "#dddddd", size = .2),
+  # panel.grid.minor.y = element_line(color = "#dddddd", size = .2),
+  axis.ticks.length = unit(0,"in"),
   # axis.title = element_blank(),
   # panel.background = element_rect(fill = "#f2f2f2"),
   panel.background = element_blank(),
   panel.border = element_blank(),
   # panel.spacing = unit(c(0,0,0,0), "lines"),
-  panel.grid.major.x = element_line(color = "#c2c2c2", size = .2),
-  panel.grid.minor.x = element_line(color = "#e2e2e2", size = .2),
+  panel.grid.major.y = element_line(color = "#c2c2c2", size = .2),
+  panel.grid.minor.y = element_line(color = "#e2e2e2", size = .1),
   # legend.background = element_blank(),
   # legend.title = element_blank(),
   legend.justification = "left",
+  # legend.position = "none",
   legend.position = "top",
   legend.direction = "horizontal",
   # legend.margin = margin(0, 1, 0.2, 0, "in"),
@@ -54,10 +67,82 @@ theme_b03_heatmap <- theme(
   # legend.key.size = unit(0.2, "in"),
   # text = element_text(family = sz_font, color = sz_black),
   # plot.background = element_rect(fill = "#f2f2f2", color = NA),
-  # plot.title = element_text(family = sz_font, color = sz_black),
+  plot.title = element_markdown(),
+  plot.subtitle = element_markdown(),
+  plot.title.position = "plot",
   # strip.background = element_blank(),
   strip.text = element_blank(),
   panel.spacing = unit(0, "in")
+  # panel.spacing = elemen
+  # plot.margin = unit(c(0, 0.1, 0, 0.1), "in")
+)
+
+
+theme_b03_heatmap_intro  <- theme(
+  strip.background = element_blank(),
+  axis.title = element_blank(),
+  axis.text = element_blank(),
+  axis.text.x = element_text(family = typo_sfb_mono, size = 10, hjust = 0.5, margin = unit(c(.1, 0, 0, 0), 'in')),
+  axis.ticks.length = unit(0,"in"),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank(),
+  panel.background = element_blank(),
+  panel.border = element_blank(),
+  legend.justification = "center",
+  # legend.position = "none",
+  legend.title = element_text(hjust = 0.5),
+  legend.position = "top",
+  legend.direction = "horizontal",
+  # legend.margin = margin(0, 1, 0.2, 0, "in"),
+  # legend.key = element_rect(fill = "#ffffff"),
+  # legend.key.size = unit(0.2, "in"),
+  text = element_text(family = typo_sfb_mono, color = sfb_black),
+  # plot.background = element_rect(fill = "#f2f2f2", color = NA),
+  plot.title = element_markdown(),
+  plot.subtitle = element_markdown(),
+  plot.title.position = "plot",
+  # strip.background = element_blank(),
+  strip.text = element_blank(),
+  panel.spacing = unit(0, "in")
+  # panel.spacing = elemen
+  # plot.margin = unit(c(0, 0.1, 0, 0.1), "in")
+)
+
+theme_b03_heatmap_details <- theme(
+  strip.background = element_blank(),
+  axis.title = element_blank(),
+  axis.text = element_text(size = 8, hjust = 0.5),
+  axis.ticks = element_blank(),
+  text = element_text(size = 8, hjust = 0),
+  panel.grid = element_blank(),
+  # panel.grid.major.y = element_line(color = "#dddddd", size = .2),
+  # panel.grid.minor.y = element_line(color = "#dddddd", size = .2),
+  axis.ticks.length = unit(0,"in"),
+  # axis.title = element_blank(),
+  # panel.background = element_rect(fill = "#f2f2f2"),
+  panel.background = element_blank(),
+  panel.border = element_blank(),
+  # panel.spacing = unit(c(0,0,0,0), "lines"),
+  panel.grid.major.y = element_line(color = "#c2c2c2", size = .2),
+  panel.grid.minor.y = element_line(color = "#e2e2e2", size = .1),
+  # legend.background = element_blank(),
+  # legend.title = element_blank(),
+  legend.justification = "left",
+  legend.position = "none",
+  # legend.position = "top",
+  legend.direction = "horizontal",
+  # legend.margin = margin(0, 1, 0.2, 0, "in"),
+  # legend.key = element_rect(fill = "#ffffff"),
+  # legend.key.size = unit(0.2, "in"),
+  # text = element_text(family = sz_font, color = sz_black),
+  # plot.background = element_rect(fill = "#f2f2f2", color = NA),
+  # plot.title = element_markdown(),
+  plot.subtitle = element_textbox_simple(size = 10, lineheight = 1, padding = margin(5, 0, 20, 0)),
+  plot.title.position = "plot",
+  # strip.background = element_blank(),
+  strip.text = element_blank(),
+  panel.spacing = unit(0, "in")
+  # panel.spacing = elemen
   # plot.margin = unit(c(0, 0.1, 0, 0.1), "in")
 )
 
