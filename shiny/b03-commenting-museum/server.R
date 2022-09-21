@@ -6,6 +6,8 @@ load(file = "data/df_raw_vis_data.RData")
 load(file = "data/df_snippets_year.RData")
 load(file = "data/df_sites_year.RData")
 load(file = "data/df_snippets_per_month_domain.RData")
+load(file = "data/df_heatmaps_availability.RData")
+
 
 df_timespan <- seq(ymd("2007-01-01"), ymd("2021-06-01"), by = "month") %>% as_tibble()
 
@@ -240,7 +242,23 @@ get_systems_over_time_ggirafe <- function(){
   )
 }
 
+get_histograms <- function(heatmap_for){
+  print((heatmap_for))
+  df_heatmaps_availability %>%
+  filter(site == heatmap_for) %>%
+    ggplot() +
+    geom_tile(aes(x = month, y = year, fill = count)) +
+    scale_x_continuous(breaks = 1:12) +
+    scale_y_continuous(breaks = 2007:2021) +
+    theme_b03_heatmap
+  
+  # 
+}
+
+
+
 shinyServer(function(input, output) {
+
   ## Tab 1
   getSystemsLifeTime <- reactive({get_systems_over_time_ggirafe()})
   output$getSystemsLifeTime <- renderGirafe({getSystemsLifeTime()})
@@ -258,4 +276,8 @@ shinyServer(function(input, output) {
   getSitesOverTime <- reactive({get_sites_over_time()})
   output$getSitesOverTime <- renderGirafe({getSitesOverTime()})
 
+  ## Tab 3
+  getHistograms <- reactive({get_histograms(input$heatmap_for)})
+  output$getHistograms <- renderPlot({getHistograms()})
+  
 })

@@ -1,5 +1,8 @@
 library(ggiraph)
 
+load("data/heatmap_for.RData")
+
+
 fluidPage(
   titlePanel("Technographer"),
   tabsetPanel(
@@ -29,13 +32,29 @@ fluidPage(
     tabPanel(
       "Perspective on commenting systems",
           verticalLayout(
+            
             h3("Currently documented popularity of commenting systems found in the german dataset"),
             girafeOutput("getSystemsOverTime"),
             tags$hr(),
             h3("Systems that could be found"),
             girafeOutput("getSystemsLifeTime")
       )
+      
+    ),
+    tabPanel(
+      "Temporary: heatmaps",
+      fluidRow(
+        column(2, ""),
+        column(8,
+        # tags$hr(),
+        # selectInput("searchWord3", "Suchwort", freq_word_to_print, "Klimawandel"),
+        selectInput(inputId = "heatmap_for", label = "print data for domain: ", choices = heatmap_for, selected = "spiegel"),
+        verbatimTextOutput("value3"),
+        h3("How many sites do we have for the selected domain?"),
+        plotOutput("getHistograms")
+      ),
+      column(2, "")
     )
   )
-)
+))
 
