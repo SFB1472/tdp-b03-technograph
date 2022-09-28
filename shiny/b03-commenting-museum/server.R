@@ -1,5 +1,5 @@
 library(needs)
-needs(shiny, tidyverse, ggiraph, MetBrewer, googlesheets4, ggtext, patchwork, lubridate)
+needs(shiny, tidyverse, ggiraph, MetBrewer, googlesheets4, ggtext, patchwork, lubridate, ggforce)
 source("config.R")
 
 load(file = "data/df_raw_vis_data.RData")
@@ -39,9 +39,33 @@ df_raw_vis_data <- df_raw_vis_data %>%
   mutate(sort_name = row_number()) %>% 
   pivot_longer(., sort_life_span:sort_name, names_to = "filter_sort", values_to = "values")
 
+site_with_systems <- df_snippets_year %>% select(site) %>% distinct() %>% pull(.)
+
+df_sites_year <- df_sites_year %>% 
+  mutate(system_detected = ifelse(site %in% site_with_systems, "system found", "no system found"))
+
 ###################################
 ## currently first tab graphics 
 ###################################
+
+### websites with systems
+
+get_overview_sites_with_systems <- function(){
+  color_breaks <- c("#e5e5e5", "#098eb7")
+  
+  df_sites_year %>% 
+    select(site, system_detected) %>% #View()
+    distinct() %>% #View()
+    group_by(system_detected) %>% 
+    summarise(overview = n()) %>% #View()
+    mutate(bar = "bar") %>% 
+    ggplot(., aes(y = bar, x = overview, fill = system_detected, label = overview)) +
+    geom_bar(stat = "identity") +
+    geom_text(position = "stack", hjust = 1, color = "white", family = typo_sfb_mono_bold_remote) +
+    scale_fill_manual(values = color_breaks) + 
+    theme_void() + theme_b03_text
+  
+}
 
 #### graphic: dot plot on which domains snippets had been found
 
@@ -55,20 +79,20 @@ get_domains_over_time <- function(){
   
   data_plot_snippets <- df_snippets_year %>% 
     right_join(., df_sites_year) %>% #View()
-    mutate(type = ifelse(!is.na(system),"automated", NA)) %>% 
+    mutate(type = ifelse(!is.na(system), "automated", NA)) %>% 
     group_by(year, site, system, type) %>% 
     summarise(snippet = paste0(snippet), counted_snippets = sum(counted_snippets)) %>%  #%>% View()
     ungroup()
   
   plot_snippets <- ggplot() +
     geom_tile(data = df_na_archived_domains, aes(x = year, y = site), fill = "grey90") +
-    geom_point_interactive(data = data_plot_snippets, aes(x = year, y = site, fill = system, shape = type, tooltip = paste0("system: ", system, "\nsite: ", site, "\nyear: ", year)), width = .2, height = 0, na.rm = TRUE, size = 5, color = "black", alpha = .8, position = position_nudge(x = -.1)) +
+    geom_point_interactive(data = data_plot_snippets, aes(x = year, y = site, fill = system, shape = type, tooltip = paste0("site: ", site, "\nyear: ", year, "\nsystem: ", system)), width = .2, height = 0, na.rm = TRUE, size = 5, color = "black", alpha = .8, position = position_nudge(x = -.1)) +
     # geom_tile_interactive(data = df_na_archived_domains, aes(x = year, y = site, tooltip = paste0("year: ", year, "\nsite: ", site, "\nno sites archived")), fill = "grey90") +
-    geom_point_interactive(data = gs_manual_domain_snippet, aes(x = year, y = site, fill = technology, tooltip = paste0("comment: ", tooltip_info, "\nsystem: ", technology, "\nsite: ", site, "\nyear: ", year), shape = type), size = 5, color = "black", alpha = .8, position = position_nudge(x = .1)) +
+    geom_point_interactive(data = gs_manual_domain_snippet, aes(x = year, y = site, fill = technology, tooltip = paste0("site: ", site, "\nyear: ", year, "\ncomment: ", tooltip_info, "\nsystem: ", technology), shape = type), size = 5, color = "black", alpha = .8, position = position_nudge(x = .1)) +
     scale_fill_manual(values = met.brewer("Klimt", 3), na.value = NA, name = "type of system") +
     scale_shape_manual(values = c(21, 23), breaks = c("automated", "manual"), name = "type of observation")+
     scale_x_continuous(breaks = year_breaks,  expand = c(0, NA), name = "crawl year") +#, limits = year_breaks) +
-    theme_b03_dot_timeline +
+    theme_b03_base + theme_b03_dot_timeline +  
     coord_cartesian(clip = "off") +
     guides(
       fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
@@ -76,8 +100,8 @@ get_domains_over_time <- function(){
     )
   
   girafe(ggobj = plot_snippets, options = list(opts_sizing(rescale = TRUE)),
-         width_svg = 10,
-         height_svg = 6
+         width_svg = 16,
+         height_svg = 10
          )
 }
 
@@ -86,16 +110,18 @@ get_domains_over_time <- function(){
 get_sites_over_time <- function(){
   
   plot <- df_sites_year %>% 
-    ggplot(aes(x = year, y = site, fill = color_breaks)) +
-    geom_tile_interactive(aes(tooltip = paste0("year: ", year, "\nsite: ", site))) +
-    scale_fill_manual(values = met.brewer("Hokusai2"), na.value = "grey90") +
+    ggplot(aes(x = year, y = site, fill = counted_sites)) +
+    geom_tile_interactive(aes(tooltip = paste0("year: ", year, "\nsite: ", site, "\nsites_counted: ", counted_sites))) +
+    scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
     scale_x_continuous(breaks = year_breaks, expand = c(0, NA), name = "crawl_year") +
     scale_y_discrete(expand = c(0, NA)) +
-    theme_b03_heatmap
+    ggforce::facet_col(facets = vars(system_detected), scales = "free_y", space = "free") +
+    theme_b03_base + theme_b03_heatmap + theme_b03_facets  +
+    guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
   
   girafe(ggobj = plot, options = list(opts_sizing(rescale = TRUE)),
-         width_svg = 10,
-         height_svg = 5.5
+         width_svg = 16,
+         height_svg = 10
   ) 
 }
 
@@ -171,7 +197,7 @@ get_details_on <- function(domain_to_look_at){
 <span style ='color:#f5bb50;'>Yellow</span> shows, that there was a system found by the automated search.\n
 The the second and third column showing the qualitativ research. Any findings detected by researcher is colored <span style ='color:#cba9be;'>purple</span>.
 In case those findings are verified by an interview partner, fields are colored in slightly <span style ='color:#b0799a;'>darker color</span>.") +
-    theme_b03_heatmap_details +
+    theme_b03_base + theme_b03_heatmap_details + 
     coord_cartesian(clip = 'off')
   
   
@@ -184,10 +210,10 @@ In case those findings are verified by an interview partner, fields are colored 
     scale_color_manual(values = c("#ffffff", "#000000", "#ffffff")) +
     scale_fill_manual(values = detail_colors) +
     labs(subtitle = "In case of any qualitative research findings, it's sometimes necessary to comment on the concrete finding. It's noted in this column of the graphic.")+
-    theme_b03_heatmap_details + theme(axis.text.x = element_blank()) +
+    theme_b03_base + theme_b03_heatmap_details + theme(axis.text.x = element_blank()) +
     coord_cartesian(clip = 'off')
   
-  print("hi")
+  # print("hi")
   
   plots <- plot_details + plot_text
   plots
@@ -212,7 +238,7 @@ get_snippets_over_time <- function(){
   
   plot <- df %>% ggplot(., aes()) +
     geom_tile(aes(x = year, y = system, fill=counted_domains)) +
-    theme_b03_heatmap
+    theme_b03_base + theme_b03_heatmap
   
   girafe(ggobj = plot, options = list(opts_sizing(rescale = TRUE)),
          width_svg = 10,
@@ -234,7 +260,7 @@ get_systems_over_time_ggirafe <- function(){
     geom_rect_interactive(aes(xmin = secure_end, xmax = end_date, ymin = values -0.45, ymax = values + 0.45, tooltip = paste0(name, ", Laufzeit: ", time_span), fill = "timespan_unsafe")) +
     scale_x_date(date_minor_breaks = "1 year") +
     scale_y_continuous(breaks = df_plot$values, labels = df_plot$name, expand = c(0,NA))+
-    theme_b03_box_timeline
+    theme_b03_base + theme_b03_box_timeline
   
   girafe(ggobj = plot, options = list(opts_sizing(rescale = FALSE)),
          width_svg = 10,
@@ -243,16 +269,14 @@ get_systems_over_time_ggirafe <- function(){
 }
 
 get_histograms <- function(heatmap_for){
-  print((heatmap_for))
+
   df_heatmaps_availability %>%
   filter(site == heatmap_for) %>%
     ggplot() +
     geom_tile(aes(x = month, y = year, fill = count)) +
     scale_x_continuous(breaks = 1:12) +
     scale_y_continuous(breaks = 2007:2021) +
-    theme_b03_heatmap
-  
-  # 
+    theme_b03_base + theme_b03_heatmap
 }
 
 
@@ -260,6 +284,10 @@ get_histograms <- function(heatmap_for){
 shinyServer(function(input, output) {
 
   ## Tab 1
+  
+  getOverviewSitesWithSystems <- reactive({get_overview_sites_with_systems()})
+  output$getOverviewSitesWithSystems <- renderPlot({getOverviewSitesWithSystems()})
+  
   getSystemsLifeTime <- reactive({get_systems_over_time_ggirafe()})
   output$getSystemsLifeTime <- renderGirafe({getSystemsLifeTime()})
   
