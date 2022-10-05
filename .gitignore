@@ -44,3 +44,5 @@ data/*
 shiny/first-draft/data/*
 
 config/config-secret.R
+
+*.svg
