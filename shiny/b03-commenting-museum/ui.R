@@ -44,16 +44,23 @@ fluidPage(
              ),
     tabPanel(
       "Perspective on commenting systems",
-          verticalLayout(
+      fluidRow(
+        column(2, ""),
+        column(8,
+            ## grafik zeigt, auf wie viel unterschiedlichen seiten im jeweiligen jahr systems gefunden wurden.
+            h3("Currently documented popularity of commenting systems found"),
+            p("Years marked only with an outline, the system could be found as the company existed. In the marked year, however, nothing was discovered in the current data set."),
+            plotOutput("getSystemsOverTime"),
             
-            h3("Currently documented popularity of commenting systems found in the german dataset"),
-            girafeOutput("getSystemsOverTime"),
             tags$hr(),
-            h3("Systems that could be found"),
-            girafeOutput("getSystemsLifeTime")
-      )
+            
+            h3("Documented systems that could possibly be found"),
+            p("Lighter color indicates that the concrete date is unknown."),
+            girafeOutput("getSystemsLifeTime", width = "100%", height = "1200px")
+      ),
+      column(2, "")
       
-    ),
+    )),
     tabPanel(
       "Temporary: heatmaps",
       fluidRow(
@@ -67,5 +74,6 @@ fluidPage(
       column(2, "")
     )
   )
-))
+)
+)
 

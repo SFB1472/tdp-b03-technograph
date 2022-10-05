@@ -2,14 +2,15 @@ library(needs)
 needs(shiny, tidyverse, ggiraph, MetBrewer, googlesheets4, ggtext, patchwork, lubridate, ggforce)
 source("config.R")
 
-load(file = "data/df_raw_vis_data.RData")
 load(file = "data/df_snippets_year.RData")
 load(file = "data/df_sites_year.RData")
 load(file = "data/df_snippets_per_month_domain.RData")
 load(file = "data/df_heatmaps_availability.RData")
+load(file = "data/df_system_lifetime.RData")
 
 
-df_timespan <- seq(ymd("2007-01-01"), ymd("2021-06-01"), by = "month") %>% as_tibble()
+df_timespan_month <- seq(ymd("2007-01-01"), ymd("2021-06-01"), by = "month") %>% as_tibble()
+df_timespan_year <- seq(ymd("2007-01-01"), ymd("2021-06-01"), by = "year") %>% as_tibble()
 
 year_breaks <- df_sites_year %>% select(year) %>% distinct() %>% pull(.)
 
@@ -24,20 +25,6 @@ gs_manual_domain_snippet <- read_sheet(ss) %>%
          technology = ifelse(is.na(technology), "other", technology))
 
 gs4_deauth()
-
-
-girafe_css(
-  css ="fill:orange;stroke:gray;",
-  text = "align:left",
-  point = "stroke-width:3px")
-
-df_raw_vis_data <- df_raw_vis_data %>% 
-  filter(!is.na(name), name != "", !is.na(start_date)) %>% 
-  arrange((time_span)) %>% 
-  mutate(sort_life_span = row_number()) %>% 
-  arrange(desc(name)) %>% 
-  mutate(sort_name = row_number()) %>% 
-  pivot_longer(., sort_life_span:sort_name, names_to = "filter_sort", values_to = "values")
 
 site_with_systems <- df_snippets_year %>% select(site) %>% distinct() %>% pull(.)
 
@@ -125,7 +112,7 @@ get_sites_over_time <- function(){
   ) 
 }
 
-
+##################################
 #### graphic on details: 
 
 get_details_on <- function(domain_to_look_at){
@@ -134,7 +121,7 @@ get_details_on <- function(domain_to_look_at){
     mutate(date = paste0(year, "-", month, "-1") %>% ymd(.),
            type = "automated") %>% 
     filter(site == domain_to_look_at) %>% 
-    right_join(., df_timespan, by = c("date" = "value")) %>% #View()
+    right_join(., df_timespan_month, by = c("date" = "value")) %>% #View()
     mutate(verification = "automated",
            verification_code = case_when(
              is.na(type) ~ "0",
@@ -143,7 +130,7 @@ get_details_on <- function(domain_to_look_at){
   
   df_detail_data_manuall <- gs_manual_domain_snippet %>% 
     filter(site == domain_to_look_at) %>% 
-    right_join(., df_timespan, by = c("date" = "value")) %>% 
+    right_join(., df_timespan_month, by = c("date" = "value")) %>% 
     group_by(date) %>% 
     mutate(verified_by_researcher = ifelse(verified_by_researcher == "x", "2", NA),
            verified_by_interview = ifelse(verified_by_interview == "x", "3", NA)) %>% #View()
@@ -230,43 +217,54 @@ In case those findings are verified by an interview partner, fields are colored 
 
 
 get_snippets_over_time <- function(){
-  df <- df_snippets_year %>% 
+  
+  df_plot <- df_snippets_year %>% 
     select(year, system, site) %>% 
     distinct() %>% 
     group_by(year, system) %>% 
-    summarise(counted_domains = n())# %>% View()
+    summarise(counted_domains = n()) #%>% #View()
   
-  plot <- df %>% ggplot(., aes()) +
-    geom_tile(aes(x = year, y = system, fill=counted_domains)) +
-    theme_b03_base + theme_b03_heatmap
+  df_system_lifetime_filtered <- df_system_lifetime %>% 
+    filter(name %in% df_plot$system) %>% #View()
+    group_by(name, check_years) %>% #View()
+    summarise(counted_years = sum(present, na.rm = TRUE)) %>%
+    mutate(counted_years = ifelse(counted_years == 1, as.character(counted_years), NA))
   
-  girafe(ggobj = plot, options = list(opts_sizing(rescale = TRUE)),
-         width_svg = 10,
-         height_svg = 5.5)
+  ggplot() +
+    geom_tile(data = df_system_lifetime_filtered, aes(x = check_years, y = name, color = counted_years), fill = "white", alpha = 0.7) +
+    scale_color_manual(values = c("1" = "darkgreen"), na.value = NA) + 
+    geom_tile(data = df_plot, aes(x = year, y = system, fill = counted_domains)) +
+    scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites with system" ) +
+    theme_b03_base + theme_b03_heatmap +
+    guides(color = "none",
+           fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
+  
+  # girafe(ggobj = plot, options = list(opts_sizing(rescale = TRUE)),
+  #        width_svg = 10,
+  #        height_svg = 5.5)
 }
 
 #####################################################
 #### grafik zeitverlauf zu lebenszeit eines systems
 
 get_systems_over_time_ggirafe <- function(){
-  # print(sorting)
-  sorting <- "sort_life_span"
-  df_plot <- df_raw_vis_data %>% 
-    filter(filter_sort == sorting)
-  
-  plot <- df_plot %>% ggplot(., aes()) +
-    geom_rect_interactive(aes(xmin = start_date, xmax = secure_start, ymin = values - 0.45, ymax = values + 0.45, tooltip = paste0(name, ", Laufzeit: ", time_span), fill = "timespan_unsafe")) +
-    geom_rect_interactive( aes(xmin = secure_start, xmax = secure_end, ymin = values - 0.45, ymax = values + 0.45, tooltip = paste0(name, ", Laufzeit: ", time_span))) +
-    geom_rect_interactive(aes(xmin = secure_end, xmax = end_date, ymin = values -0.45, ymax = values + 0.45, tooltip = paste0(name, ", Laufzeit: ", time_span), fill = "timespan_unsafe")) +
-    scale_x_date(date_minor_breaks = "1 year") +
-    scale_y_continuous(breaks = df_plot$values, labels = df_plot$name, expand = c(0,NA))+
-    theme_b03_base + theme_b03_box_timeline
+
+  plot <- df_system_lifetime %>% 
+    mutate(cat = ifelse(is.na(present), NA, cat)) %>% 
+    ggplot(., aes()) +
+    geom_tile_interactive(aes(x = check_years, y = reorder(name, desc(sorting_lifetime)), fill = cat, tooltip = paste0("system: ", name, "\nlifetime: ", time_span)), color = NA) +
+    scale_fill_manual(values = c("year" = "#333333", "year_unsecure" = "#c2c2c2"), na.value = NA) +
+    theme_b03_base + theme_b03_box_timeline + theme(legend.position = "none")
   
   girafe(ggobj = plot, options = list(opts_sizing(rescale = FALSE)),
          width_svg = 10,
-         height_svg = 11
+         height_svg = 7
   )
 }
+
+###################################
+## currently third tab graphics 
+###################################
 
 get_histograms <- function(heatmap_for){
 
@@ -276,10 +274,11 @@ get_histograms <- function(heatmap_for){
     geom_tile(aes(x = month, y = year, fill = count)) +
     scale_x_continuous(breaks = 1:12) +
     scale_y_continuous(breaks = 2007:2021) +
-    theme_b03_base + theme_b03_heatmap
+    guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines"))) +
+    theme_b03_base + theme_b03_heatmap + theme(axis.title = element_text(hjust = 0.5))
 }
 
-
+##################################
 
 shinyServer(function(input, output) {
 
@@ -288,21 +287,22 @@ shinyServer(function(input, output) {
   getOverviewSitesWithSystems <- reactive({get_overview_sites_with_systems()})
   output$getOverviewSitesWithSystems <- renderPlot({getOverviewSitesWithSystems()})
   
-  getSystemsLifeTime <- reactive({get_systems_over_time_ggirafe()})
-  output$getSystemsLifeTime <- renderGirafe({getSystemsLifeTime()})
-  
-  getSystemsOverTime <- reactive({get_snippets_over_time()})
-  output$getSystemsOverTime <- renderGirafe({getSystemsOverTime()})
-  
-  getDetailOnDomain  <- reactive({get_details_on("ksta")})
-  output$getDetailOnDomain <- renderPlot({getDetailOnDomain()})
-  
-  ## Tab 2
   getSnippetsOverTime <- reactive({get_domains_over_time()})
   output$getSnippetsOverTime <- renderGirafe({getSnippetsOverTime()})
   
   getSitesOverTime <- reactive({get_sites_over_time()})
   output$getSitesOverTime <- renderGirafe({getSitesOverTime()})
+  
+  getDetailOnDomain  <- reactive({get_details_on("ksta")})
+  output$getDetailOnDomain <- renderPlot({getDetailOnDomain()})
+  
+  ## Tab 2
+  getSystemsOverTime <- reactive({get_snippets_over_time()})
+  output$getSystemsOverTime <- renderPlot({getSystemsOverTime()})
+  
+  
+  getSystemsLifeTime <- reactive({get_systems_over_time_ggirafe()})
+  output$getSystemsLifeTime <- renderGirafe({getSystemsLifeTime()})
 
   ## Tab 3
   getHistograms <- reactive({get_histograms(input$heatmap_for)})
