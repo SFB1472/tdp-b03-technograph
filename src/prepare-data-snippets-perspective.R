@@ -60,7 +60,43 @@ df_raw_vis_data <- raw_vis_data %>%
       time_span = interval( start_date, end_date) %>% as.duration(.) %>% as.period(., unit = "years")
       )
 
-save(df_raw_vis_data, file="shiny/first-draft/data/df_raw_vis_data.RData")
+save(df_raw_vis_data, file= paste0(path_to_shinydata, "df_raw_vis_data.RData"))
+load(paste0(path_to_shinydata, "df_raw_vis_data.RData"))
+
+from_to <- df_raw_vis_data %>% 
+  select(start_date, end_date) %>% 
+  summarise(start = min(start_date, na.rm = TRUE), end = max(end_date, na.rm = TRUE)) %>% 
+  mutate(start = year(start),
+         end = year(end))
+
+seq_years_ <- seq(as.numeric(from_to$start), as.numeric(from_to$end), by = 1) %>% as.character(.)
+
+df_raw_vis_data[,seq_years_] = NA
+
+df_system_lifetime <- df_raw_vis_data %>% 
+  filter(!is.na(secure_start), !is.na(time_span)) %>% 
+  arrange(desc(time_span)) %>% 
+  mutate(start_year_unsecure = year(start_date) %>% as.numeric(.),
+         end_year_unsecure = year(end_date) %>% as.numeric(.),
+         start_year = year(secure_start) %>% as.numeric(.),
+         end_year = year(secure_end) %>% as.numeric(.),
+         sorting_lifetime = row_number()) %>% 
+  select(name, sorting_lifetime, time_span, start_year_unsecure, end_year_unsecure, start_year, end_year, as.character(from_to$start):ncol(.)) %>% 
+  distinct() %>% 
+  pivot_longer(., as.character(from_to$start):as.character(from_to$end), names_to = "check_years", values_to = "year") %>% 
+  mutate(check_years = as.numeric(check_years),
+    year = (check_years >= start_year & check_years <= end_year),
+    # year = ifelse(year == FALSE, NA, year),#) %>% 
+    year_unsecure = (check_years >= start_year_unsecure & check_years <= end_year_unsecure),
+    year_unsecure = ifelse(year_unsecure == year, FALSE, year_unsecure)) %>%
+  pivot_longer(., year:year_unsecure, names_to = "cat", values_to = "present") %>%
+  select(-start_year,-start_year_unsecure, -end_year, -end_year_unsecure) %>% 
+  mutate(present = ifelse(present == FALSE, NA, 1))
+
+## false values rausfiltern, für obere grafik nur values printen, für untere categorie wichtig.
+
+save(df_system_lifetime, file = paste0(path_to_shinydata, "df_system_lifetime.RData"))
+
 
 plot <- df_raw_vis_data %>% 
   filter(!is.na(name), name != "") %>% 
