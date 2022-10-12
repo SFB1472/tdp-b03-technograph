@@ -13,7 +13,7 @@ This is research project is part of the CRC Transformation of the Popular. The w
 
 ## Research approach
 
-![figure showing the research appreach](images/research_approach.png)
+![figure showing the research appreach](images/research-approach.png)
 
 ## Data
 
