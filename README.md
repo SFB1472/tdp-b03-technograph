@@ -21,8 +21,11 @@ Some context to the datasets.
 We will not provide a download link for the data, but publish an index of all sites analysed.
 
 The links to the pages can be found here:
+
 [World](data/links/world-analysed-sites.csv)
+
 [Dutch](data/links/nl-analysed-sites.csv)
+
 [German](data/links/de-analysed-sites.csv)
 
 ## App

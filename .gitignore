@@ -41,7 +41,7 @@ vignettes/*.pdf
 .DS_Store
 *.Rproj
 data/*
-!data/links/
+!data/links/*
 
 config/config-secret.R
 
