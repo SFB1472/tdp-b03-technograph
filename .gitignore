@@ -41,8 +41,10 @@ vignettes/*.pdf
 .DS_Store
 *.Rproj
 data/*
-shiny/first-draft/data/*
+!data/links/*
 
 config/config-secret.R
 
 *.svg
+*.ai
+
