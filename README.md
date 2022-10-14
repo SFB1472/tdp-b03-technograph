@@ -12,7 +12,7 @@ This is research project is part of the CRC Transformation of the Popular. The w
 
 ## Research approach - visualised
 
-This figure illustrates the research approach of detecting commenting systems and understanding the practices of them. This is achieved by combining semi-automated research, »manual« search and interviews with an app as a central hub app in this research architecture.
+This figure illustrates the research approach of detecting commenting systems and understanding the practices of them. This is achieved by combining semi-automated research, »manual« research and interviews with an app as a central hub app in this research architecture.
 
 ![figure showing the research appreach](images/research-approach.png)
 
