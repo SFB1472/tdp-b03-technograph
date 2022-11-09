@@ -1,5 +1,5 @@
 
-
+library(ggtext)
 
 typo_sfb_serif <- "Nantes-Regular"
 typo_sfb_mono <- "GTAmericaMonoLC-Rg"

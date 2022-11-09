@@ -10,9 +10,16 @@ fluidPage(
                fluidRow(
                  column(2, ""),
                  column(8,
+                        h3("Which websphere do you want to look at?"),
+                        selectInput("selected_sphere", "Please choose from the menu below", c("World", "Dutch", "German"),
+                                    "World"),
+                        submitButton("abschicken", icon("arrows-rotate")),
+                        
+                        tags$hr(),
+
                         h3("In how many pages have systems been found so far?"),
                         plotOutput("getOverviewSitesWithSystems", height = "50px"),
-                        
+                        # uiOutput("test_text"),
                         tags$hr(),
                         
                         h3("Detected Systems over Time"),
@@ -23,15 +30,16 @@ fluidPage(
                         girafeOutput("getSnippetsOverTime", height = "700px"),
                         
                         tags$hr(),
-                        
+
                         h3("Number of archived pages per year"),
                         p("This graph only shows if and how many html pages are included in the delivery from the internet archive for the respective domain."),
                         p(" In addition, the graph is divided into two parts: whether systems were found or not."),
                         girafeOutput("getSitesOverTime", height = "700px"),
                         
                         tags$hr(),
-                        
-                        h3("Get Details on a specific domain")#,
+
+                        h3("Get Details on a specific domain"),
+                        p("Currently this section is static. It's always the data of 'Kölner Stadtanzeiger' visible.")
                         
                  ),
                  column(2, ""),
@@ -60,20 +68,20 @@ fluidPage(
       ),
       column(2, "")
       
-    )),
-    tabPanel(
-      "Temporary: heatmaps",
-      fluidRow(
-        column(2, ""),
-        column(8,
-        selectInput(inputId = "heatmap_for", label = "print data for domain: ", choices = heatmap_for, selected = "spiegel"),
-        verbatimTextOutput("value3"),
-        h3("How many sites do we have for the selected domain?"),
-        plotOutput("getHistograms")
-      ),
-      column(2, "")
-    )
-  )
+    ))#,
+  #   tabPanel(
+  #     "Temporary: heatmaps",
+  #     fluidRow(
+  #       column(2, ""),
+  #       column(8,
+  #       selectInput(inputId = "heatmap_for", label = "print data for domain: ", choices = heatmap_for, selected = "spiegel"),
+  #       verbatimTextOutput("value3"),
+  #       h3("How many sites do we have for the selected domain?"),
+  #       plotOutput("getHistograms")
+  #     ),
+  #     column(2, "")
+  #   )
+  # )
 )
 )
 
