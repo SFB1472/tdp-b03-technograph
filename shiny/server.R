@@ -21,18 +21,15 @@ year_breaks_for_plotting <- df_timespan_year %>%
 ANNOTATION_IS_EMPTY <- TRUE
 
 check_gs_empty <- function(gs){
-  # print(gs %>% nrow())
   ANNOTATION_IS_EMPTY <<- gs %>% nrow() == 0
-  # print(ANNOTATION_IS_EMPTY)
 }
+gs4_auth(cache=here::here(".secrets"), email = TRUE)
+# drive_auth(cache = ".secrets", email = TRUE)
 
 
 get_gs_annoted_data <- function(sphere){
-  # link_predefined_domains <- SPREADSHEET_ANNOTATION_DATA[[{{CURRENT_SPHERE}}]]
-  # gs4_auth(cache=".secrets", scopes = "https://www.googleapis.com/auth/spreadsheets.readonly")
-  gs4_deauth()
-  gs_annotation_raw <- read_sheet(SPREADSHEET_ANNOTATION_DATA, sheet = SPREADSHEET_ANNOTATION[[{{sphere}}]]) #%>%
-  # gs_annotation <- read_sheet(SPREADSHEET_ANNOTATION_DATA, sheet = "de-domains") %>% 
+  # gs4_deauth()
+  gs_annotation_raw <- read_sheet(SPREADSHEET_ANNOTATION_DATA, sheet = SPREADSHEET_ANNOTATION[[{{sphere}}]])
     
   check_gs_empty(gs_annotation_raw)
   if(!ANNOTATION_IS_EMPTY) {
@@ -44,10 +41,8 @@ get_gs_annoted_data <- function(sphere){
   else{
     gs_annotation <- gs_annotation_raw %>% 
       mutate(type = "manual",
-             # date = paste0(year, "-", ifelse(is.na(month), "1", month), "-", ifelse(is.na(day), "1", day)) %>% ymd(.),
              technology = ifelse(is.na(technology), "other", technology)) 
   }
-#   
   return(gs_annotation)
 }
 
