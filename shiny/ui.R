@@ -12,7 +12,7 @@ fluidPage(
                  column(8,
                         h3("Which websphere do you want to look at?"),
                         selectInput("selected_sphere", "Please choose from the menu below", c("World", "Dutch", "German"),
-                                    "World"),
+                                    "German"),
                         submitButton("abschicken", icon("arrows-rotate")),
                         
                         tags$hr(),
