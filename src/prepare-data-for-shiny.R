@@ -2,6 +2,7 @@ library(tidyverse)
 library(urltools)
 library(BAMMtools)
 library(lubridate)
+library(urltools)
 
 source("config/config.R")
 
@@ -11,11 +12,33 @@ df_domains_to_analyse <- read_csv(file = "data/helper/22-09-21-Top News Websites
   mutate(cleaned_urls = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.),)
 
 load("data/df_snippet_info.RData")
-
+df_snippet_info <- df_snippit_info %>% 
+  rename("snippet" = "snippit")
+rm(df_snippit_info)
 
 ######################################################
 ## preparing data for dot plot graphic 
 ######################################################
+
+##https://docs.google.com/spreadsheets/d/10Dy9nvovj1HCFVIok417d0JErk_caHQs/edit#gid=788821906
+df_snippet_mapping <- read_csv(file = "data/helper/22-07-15-Commenting-system-detection-patterns.csv") %>% select(-Regex,-Target, "system" = "Commenting system")
+
+df_snippets_year <- df_snippet_info %>% 
+  ungroup() %>% 
+  filter(site %in% df_domains_to_analyse$cleaned_urls) %>% #View()
+  mutate(year = year(crawl_date)) %>% #View()
+  group_by(year, site, snippet) %>% 
+  summarise(counted_snippets = sum(detected, na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  arrange(desc(counted_snippets)) %>% 
+  filter(counted_snippets > 0) %>% 
+  left_join(., df_snippet_mapping, by = c("snippet" = "Snipit"))
+
+save(df_snippets_year, file = paste0(path_to_shinydata, "df_snippets_year.RData"))
+
+#####################################################################################################################
+## preparing data for printing heatmap about how many pages of a domain are in the dump from the internet archive 
+#####################################################################################################################
 
 df_counted_sites_year <- df_snippet_info %>% 
   filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
@@ -39,24 +62,3 @@ df_sites_year <- df_counted_sites_year %>%
   )
 
 save(df_sites_year, file = paste0(path_to_shinydata,"df_sites_year.RData"))
-
-
-#####################################################################################################################
-## preparing data for printing heatmap about how many pages of a domain are in the dump from the internet archive 
-#####################################################################################################################
-
-
-df_snippet_mapping <- read_csv(file = "../data/helper/22-07-15-Commenting-system-detection-patterns.csv") %>% select(-Regex,-Target, "system" = "Commenting system")
-
-df_snippets_year <- df_snippet_info %>% 
-  ungroup() %>% 
-  filter(site %in% df_domains_to_analyse$cleaned_urls) %>% #View()
-  mutate(year = year(crawl_date)) %>% #View()
-  group_by(year, site, snippet) %>% 
-  summarise(counted_snippets = sum(detected, na.rm=TRUE)) %>% 
-  ungroup() %>% 
-  arrange(desc(counted_snippets)) %>% 
-  filter(counted_snippets > 0) %>% 
-  left_join(., df_snippet_mapping, by = c("snippet" = "Snipit"))
-
-save(df_snippets_year, file = paste0(path_to_shinydata, "df_snippets_year.RData"))
