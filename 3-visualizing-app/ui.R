@@ -1,6 +1,6 @@
 library(ggiraph)
 
-load("data/heatmap_for.RData")
+# load("data/heatmap_for.RData")
 
 
 fluidPage(
