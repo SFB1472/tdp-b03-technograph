@@ -17,8 +17,11 @@ df_sites_to_parse <- read_csv("data/German-wanted-sites.csv")
 
 file_list <- list.files("data/0-preprocessing/German/") #%>% head(20)
 
-# df_scripts_empty <- tibble(site = character(), attrs = character(), content = character())
-# write_csv(df_scripts_empty, "data/1-parsing/scripts/German/scripts-raw.csv")
+html_element_to_search_for <- "script"
+
+df_empty <- tibble(site = character(), name = character(), attr = character(), group = character(), missing = character())
+write_csv(df_empty, paste0("data/1-parsing/tags/", CURRENT_SPHERE, "/", html_element_to_search_for, "-raw.csv"))
+
 
 # if parsing the many files fail, restart here ------------------------------------------------------------
 
@@ -27,50 +30,11 @@ already_parsed_sites <- read_csv("data/1-parsing/scripts/German/scripts-raw.csv"
 
 file_list <- setdiff(file_list, already_parsed_sites)
 
-# parsing script tags ------------------------------------------------------------
+# parsing tags ------------------------------------------------------------
 
-df_scripts <- map_df(file_list, function(i){
-  print(i)
-  i <- "000080b9fc7f12c6c4c4255621e5a61c3e4c7179.html"
-  test_site <- xml2::read_xml(paste0("data/0-preprocessing/German/", i), as_html = TRUE, options = "RECOVER") #%>% 
+df_tags <- map_df(file_list, function(i){
   
-  df_empty <- tibble(
-    site = i %>% str_remove(".html"), 
-    attrs  =  NA,
-    content =  NA
-  )
-  
-  if(length(test_site) > 1){
-    
-    if(length(all_tags) != 0){
-    all_script_tags <- test_site %>% html_elements("script")
-    
-      df_inner <- tibble(
-        site = i %>% str_remove(".html"), 
-        attrs  =  all_script_tags %>% html_attrs(),
-        content =  all_script_tags %>%  xml_text()
-      )
-    }
-    else{
-      df_inner <- df_empty
-    }
-    
-  } else {
-    df_inner <- df_empty
-  }
-  write_csv(df_inner, "data/1-parsing/scripts/German/scripts-raw.csv", append = TRUE)
-    
-})
-
-
-df_forms_empty <- tibble(site = character(), name = character(), attr = character(), group = character())
-write_csv(df_scripts_empty, "data/1-parsing/scripts/German/form-action-raw.csv")
-
-# parsing form tags ------------------------------------------------------------
-
-df_form_actions <- map_df(file_list, function(i){
-  
-  # i <- "ce9196596a502815242c6e79b990a19e82e0a7bb.html"
+  # i <- "0010d9b0459a8ab77877b9e8f6f56fc6f810c270.html"
   
   cli::cli_inform("Parse file {i}")
   
@@ -78,16 +42,17 @@ df_form_actions <- map_df(file_list, function(i){
     site = i %>% str_remove(".html"), 
     name  =  NA,
     attr =  NA,
-    group = NA
+    group = NA,
+    missing = NA
   )
   
-  test_site <- xml2::read_xml(paste0("data/0-preprocessing/German/", i), as_html = TRUE, options = "RECOVER") #%>% 
+  site <- xml2::read_xml(paste0("data/0-preprocessing/", CURRENT_SPHERE, "/", i), as_html = TRUE, options = "RECOVER") #%>% 
   
-  if(length(test_site) > 1){
-    
-    all_tags <- test_site %>% html_elements("form")
+  if(length(site) > 1){
+    all_tags <- site %>% html_elements(html_element_to_search_for)
     
     if(length(all_tags) != 0){
+      # print("innen")
     
       df_inner <- tibble(
         site = i %>% str_remove(".html"),
@@ -100,20 +65,25 @@ df_form_actions <- map_df(file_list, function(i){
       ) %>% 
         mutate(group = row_number()) %>% 
         unnest(attrs) %>%
-        unnest(data)
+        unnest(data) %>% 
+        mutate(missing = NA)
       
       test_that(
         desc = "df_inner: no duplicates",
         expect_unique(everything(), data = df_inner)
       )
     } else{
+      # print("no tags found")
+      df_empty$missing[[1]] = "no tags found"
       df_inner <- df_empty
     }
   } else {
+    # print("unvalid html site")
+    df_empty$missing[[1]] = "unvalid html site"
     df_inner <- df_empty
   }
   
-  write_csv(df_inner, "data/1-parsing/scripts/German/form-action-raw.csv", append = TRUE)
+  write_csv(df_inner, paste0("data/1-parsing/tags/", CURRENT_SPHERE, "/", html_element_to_search_for, "-raw.csv"), append = TRUE)
   
 })
 
