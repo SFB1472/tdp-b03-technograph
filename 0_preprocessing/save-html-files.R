@@ -4,6 +4,7 @@
 ################################################################################################################
 
 library(tidyverse)
+source("config/config.R")
 
 save_site <- function(x, pos){
   print(pos)
@@ -12,7 +13,7 @@ save_site <- function(x, pos){
     current <- tibble(...) %>% 
       select(sha1, filename, content)
     
-    save_name <- paste0("data/html-site/", current$sha1, ".html")
+    save_name <- paste0("data/0-preprocessing/", CURRENT_SPHERE,"/", current$sha1, ".html")
     
     if(!file.exists(save_name)){
       write_file(current$content, save_name)
@@ -20,4 +21,4 @@ save_site <- function(x, pos){
     })
   }
 
-read_csv_chunked("data/raw/html-file-information.csv", SideEffectChunkCallback$new(save_site), chunk_size = 100)
+read_csv_chunked(paste0("data/raw/",CURRENT_SPHERE,"/html-file-information.csv"), SideEffectChunkCallback$new(save_site), chunk_size = 100)
