@@ -7,21 +7,13 @@ library(googlesheets4)
 library(testdat)
 source("config/config.R")
 
-gs4_auth(cache=".secrets")
+search_date <- lubridate::today()
+html_element_to_search_for <- "form"
 
-gs_domain_to_look <- read_sheet(SPREADSHEET_PATH_GENERELL, sheet = SPREADSHEET_PATH_DOMAINS[[{{CURRENT_SPHERE}}]]) %>% 
-  select(Name, URL) %>% 
-  mutate(site = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.)) 
-
-df_sites_to_parse <- read_csv("data/German-wanted-sites.csv")
-
-file_list <- list.files("data/0-preprocessing/German/") #%>% head(20)
-
-html_element_to_search_for <- "script"
-
-df_empty <- tibble(site = character(), name = character(), attr = character(), group = character(), missing = character())
+df_empty <- tibble(site = character(), tag = character(), search_date = date(), name = character(), attr = character(), group = character(), missing = character())
 write_csv(df_empty, paste0("data/1-parsing/tags/", CURRENT_SPHERE, "/", html_element_to_search_for, "-raw.csv"))
 
+file_list <- list.files(paste0("data/0-preprocessing/", CURRENT_SPHERE, "/"))
 
 # if parsing the many files fail, restart here ------------------------------------------------------------
 
@@ -40,6 +32,8 @@ df_tags <- map_df(file_list, function(i){
   
   df_empty <- tibble(
     site = i %>% str_remove(".html"), 
+    tag = html_element_to_search_for, 
+    search_date = search_date,
     name  =  NA,
     attr =  NA,
     group = NA,
@@ -56,6 +50,8 @@ df_tags <- map_df(file_list, function(i){
     
       df_inner <- tibble(
         site = i %>% str_remove(".html"),
+        tag = html_element_to_search_for,
+        search_date = search_date,
         attrs  =  all_tags %>% html_attrs() %>% map_df(., function(j){
           df_attrs <- tibble(
             name = names(j),
@@ -66,7 +62,7 @@ df_tags <- map_df(file_list, function(i){
         mutate(group = row_number()) %>% 
         unnest(attrs) %>%
         unnest(data) %>% 
-        mutate(missing = NA)
+        mutate(missing = NA) 
       
       test_that(
         desc = "df_inner: no duplicates",
