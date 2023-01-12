@@ -28,11 +28,16 @@ vignettes/*.pdf
 .Renviron
 .DS_Store
 *.Rproj
+
+4_docs/*.html
+
 data/*
 !data/index/
+
 config/config-secret.R
 *.svg
 *.ai
+
 .secrets
 
 */venv/*
