@@ -35,4 +35,4 @@ config/config-secret.R
 *.ai
 .secrets
 
-*/*/venv/*
+*/venv/*
