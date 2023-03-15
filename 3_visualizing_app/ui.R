@@ -1,7 +1,5 @@
 library(ggiraph)
-
-# load("data/heatmap_for.RData")
-
+library(gdtools)
 
 fluidPage(
   titlePanel("Technograph"),
@@ -27,6 +25,7 @@ fluidPage(
                         p("The lowest level shows if there is any data at all for this page and this year. This is coded in grey (no data available) or white (there are html-files in the dump from the archive)."),
                         p("Colors indicate which system has been detected. The shape indicates how the system has been found."),
                         p("You can hover over the data points to read the information directly."),
+                        addGFontHtmlDependency(family = c("Roboto Mono")),
                         girafeOutput("getSnippetsOverTime", height = "700px"),
                         
                         tags$hr(),

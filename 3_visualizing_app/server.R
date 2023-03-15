@@ -1,15 +1,20 @@
 library(needs)
-needs(shiny, tidyverse, ggiraph, MetBrewer, googlesheets4, ggtext, patchwork, lubridate, ggforce)
+needs(shiny, tidyverse, ggiraph, MetBrewer, googlesheets4, ggtext, patchwork, lubridate, ggforce, gdtools)
 source("config/config.R")
 source("config/config-graphic.R")
 
+
+
 # load(file = paste0("data/", CURRENT_SPHERE,"/df_systems_per_year.Rdata"))
-# load(file = paste0("data/", CURRENT_SPHERE,"/df_sites_per_year.RData"))
+# load(file = paste0("3_visualizing_app/data/", CURRENT_SPHERE,"/df_sites_per_year.RData"))
+# load(file = paste0("3_visualizing_app/data/", CURRENT_SPHERE,"/gs_domain_to_look.RData"))
 load(file = "data/df_snippets_per_month_domain.RData")
 # load(file = "data/df_heatmaps_availability.RData")
 load(file = "data/df_system_lifetime.RData")
 
 ## https://stackoverflow.com/questions/62898726/how-to-refresh-rdata-objects-in-shiny-app
+
+df_systems_color_legend <- read_csv(file = "data/colors-systems.csv")
 
 df_timespan_month <- seq(ymd("2007-01-01"), ymd("2021-06-01"), by = "month") %>% as_tibble()
 df_timespan_year <- seq(ymd("2007-01-01"), ymd("2021-06-01"), by = "year") %>% as_tibble()
@@ -23,12 +28,12 @@ ANNOTATION_IS_EMPTY <- TRUE
 check_gs_empty <- function(gs){
   ANNOTATION_IS_EMPTY <<- gs %>% nrow() == 0
 }
-gs4_auth(cache=here::here(".secrets"), email = TRUE)
+# gs4_auth(cache=here::here(".secrets"), email = TRUE)
 # drive_auth(cache = ".secrets", email = TRUE)
 
 
 get_gs_annoted_data <- function(sphere){
-  # gs4_deauth()
+  gs4_deauth()
   gs_annotation_raw <- read_sheet(SPREADSHEET_ANNOTATION_DATA, sheet = SPREADSHEET_ANNOTATION[[{{sphere}}]])
     
   check_gs_empty(gs_annotation_raw)
@@ -52,10 +57,12 @@ get_gs_annoted_data <- function(sphere){
 
 ### websites with systems
 
-get_overview_sites_with_systems <- function(df_systems_per_year, df_sites_per_year){
+get_overview_sites_with_systems <- function(df_systems_per_year, df_sites_per_year, df_form_comments){
   color_breaks <- c("#e5e5e5", "#098eb7")
   
   site_with_systems <- df_systems_per_year %>% 
+    mutate(year = as.numeric(year)) %>% 
+    bind_rows(., df_form_comments) %>% 
     filter(!is.na(system)) %>% 
     select(site) %>% distinct() %>% pull(.)
   
@@ -76,28 +83,42 @@ get_overview_sites_with_systems <- function(df_systems_per_year, df_sites_per_ye
 
 #### graphic: dot plot on which domains snippets had been found
 
-get_domains_over_time <- function(df_systems_per_year, df_sites_per_year, translate_sites, gs_annotation){
+get_domains_over_time <- function(df_systems_per_year, df_sites_per_year, gs_domain_to_look, gs_annotation, df_form_comments){
   print("building dot plot")
+  
   df_na_archived_domains <- df_sites_per_year %>%
     filter(is.na(counted_sites)) %>%
-    left_join(., translate_sites, by = "site") %>% 
+    left_join(., gs_domain_to_look, by = "site") %>% 
     mutate(counted_sites = "no sites archived")
   
-  nr_systems_found <- df_systems_per_year %>% select(system) %>% distinct() %>% nrow()
   
-  data_plot_snippets <- df_systems_per_year %>%
+  df_joined_automated <- df_systems_per_year %>% 
     mutate(type = ifelse(!is.na(system), "automated", NA),
            year = as.numeric(year)) %>% 
+    bind_rows(., df_form_comments) %>% #View()#, by = c("site", "Name", "URL", "year")) %>% 
     group_by(year, site) %>%
-    mutate(year_printing = paste0(year, ".", nr_systems_per_site) %>% as.numeric()) %>% #View()
+    mutate(
+      nr_systems_per_site = row_number() %>% max(.),
+      duplicated = ifelse(is.na(system) & nr_systems_per_site > 1, "duplicated", NA)) %>% #View()
+    filter(is.na(duplicated)) %>%
+    mutate(
+      nr_systems_per_site = row_number(),
+      year_printing = paste0(year, ".", nr_systems_per_site) %>% as.numeric()) %>% #View()
     ungroup()
+  
+  systems_found <- df_joined_automated %>% select(system) %>% distinct() %>% pull(.)
+  # nr_systems_found <- df_joined_automated %>% select(system) %>% distinct() %>% nrow()
+  color_values <- df_systems_color_legend %>% filter(system %in% systems_found) %>% deframe()
+  
+  # data_plot_snippets <- df_systems_per_year %>%
+  # View(df_na_archived_domains)
   
   plot_snippets <- ggplot() +
     geom_tile(data = df_na_archived_domains, aes(x = year, y = Name), fill = "grey90") +
-    geom_point_interactive(data = data_plot_snippets, aes(x = year_printing, y = Name, fill = system, shape = type, tooltip = paste0("site: ", site, "\nyear: ", year, "\nsystem: ", system)), width = .2, height = 0, na.rm = TRUE, size = 5, color = "black", alpha = .8) +
+    geom_point_interactive(data = df_joined_automated, aes(x = year_printing, y = Name, fill = system, shape = type, tooltip = paste0("site: ", site, "\nyear: ", year, "\nsystem: ", system)), width = .2, height = 0, na.rm = TRUE, size = 5, color = "black", alpha = .8) +
     # geom_tile_interactive(data = df_na_archived_domains, aes(x = year, y = site, tooltip = paste0("year: ", year, "\nsite: ", site, "\nno sites archived")), fill = "grey90") +
     geom_point_interactive(data = gs_annotation, aes(x = year, y = Name, fill = technology, tooltip = paste0("site: ", site, "\nyear: ", year, "\ncomment: ", tooltip_info, "\nsystem: ", technology), shape = type), size = 5, color = "black", alpha = .8, position = position_nudge(x = -.3)) +
-    scale_fill_manual(values = met.brewer("Klimt", nr_systems_found), na.value = NA, name = "type of system") +
+    scale_fill_manual(values = color_values, na.value = NA, name = "type of system") +
     scale_shape_manual(values = c(21, 23), breaks = c("automated", "manual"), name = "type of observation")+
     scale_x_continuous(breaks = year_breaks_for_plotting, labels = year_breaks_for_plotting,  expand = c(0, NA), name = "crawl year") +#, limits = year_breaks) +
     theme_b03_base + theme_b03_dot_timeline +  
@@ -107,7 +128,7 @@ get_domains_over_time <- function(df_systems_per_year, df_sites_per_year, transl
       shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
     )
   
-  girafe(ggobj = plot_snippets, options = list(opts_sizing(rescale = TRUE)),
+  girafe(ggobj = plot_snippets, fonts = list(mono = typo_sfb_mono_remote), options = list(opts_sizing(rescale = TRUE)),
          width_svg = 16,
          height_svg = 10
          )
@@ -115,9 +136,11 @@ get_domains_over_time <- function(df_systems_per_year, df_sites_per_year, transl
 
 #### graphic: how often which domain has been crawled (only those with snippets found)
 
-get_sites_over_time <- function(df_systems_per_year, df_sites_per_year, translate_sites){
+get_sites_over_time <- function(df_systems_per_year, df_sites_per_year, translate_sites, df_form_comments){
   
   site_with_systems <- df_systems_per_year %>% 
+    mutate(year = as.numeric(year)) %>% 
+    bind_rows(.,df_form_comments) %>% 
     filter(!is.na(system)) %>% 
     select(site) %>% distinct() %>% pull(.)
   
@@ -324,19 +347,21 @@ shinyServer(function(input, output) {
       load(paste0("data/", input$selected_sphere,"/df_systems_per_year.RData"))
       load(paste0("data/", input$selected_sphere,"/df_sites_per_year.RData"))
       load(paste0("data/",  input$selected_sphere,"/gs_domain_to_look.RData"))
+      load(paste0("data/",  input$selected_sphere,"/df_form_comments.RData"))
       react_data$systems <- df_systems_per_year
       react_data$sites <- df_sites_per_year
+      react_data$form <- df_form_comments
       react_data$translate_sites <- gs_domain_to_look
       react_data$annotation <- get_gs_annoted_data(input$selected_sphere)
     })
   
-  getOverviewSitesWithSystems <- reactive({get_overview_sites_with_systems(react_data$systems, react_data$sites)})
+  getOverviewSitesWithSystems <- reactive({get_overview_sites_with_systems(react_data$systems, react_data$sites, react_data$form)})
   output$getOverviewSitesWithSystems <- renderPlot({getOverviewSitesWithSystems()})
 
-  getSnippetsOverTime <- reactive({get_domains_over_time(react_data$systems, react_data$sites, react_data$translate_sites, react_data$annotation)})
+  getSnippetsOverTime <- reactive({get_domains_over_time(react_data$systems, react_data$sites, react_data$translate_sites, react_data$annotation, react_data$form)})
   output$getSnippetsOverTime <- renderGirafe({getSnippetsOverTime()})
   
-  getSitesOverTime <- reactive({get_sites_over_time(react_data$systems, react_data$sites, react_data$translate_sites)})
+  getSitesOverTime <- reactive({get_sites_over_time(react_data$systems, react_data$sites, react_data$translate_sites, react_data$form)})
   output$getSitesOverTime <- renderGirafe({getSitesOverTime()})
 
   getDetailOnDomain  <- reactive({get_details_on("ksta", react_data$annotation)})
