@@ -1,11 +1,16 @@
 
-library(ggtext)
+# library()
 
 typo_sfb_serif <- "Nantes-Regular"
 typo_sfb_mono <- "GTAmericaMonoLC-Rg"
 
-typo_sfb_mono_remote <- "GT America Mono LC Rg"
+register_gfont("Roboto Mono")
+
+typo_sfb_mono_remote <- "Roboto Mono"
 typo_sfb_mono_bold_remote <- "GT America Mono Rg"
+
+# systemfonts::register_font(typo_sfb_mono_remote)
+# systemfonts::register_font(typo_sfb_mono_bold_remote)
 
 sfb_black <- "#000000"
 sfb_grey <- "#E5E5E5"
