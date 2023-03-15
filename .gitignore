@@ -41,3 +41,4 @@ config/config-secret.R
 .secrets
 
 */venv/*
+2_analysing/datengrundlage_files/*
