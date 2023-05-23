@@ -29,7 +29,7 @@ vignettes/*.pdf
 .DS_Store
 *.Rproj
 
-4_docs/*.html
+4_doc/_site/*
 
 data/*
 !data/index/
@@ -41,4 +41,4 @@ config/config-secret.R
 .secrets
 
 */venv/*
-2_analysing/datengrundlage_files/*
+
