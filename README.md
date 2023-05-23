@@ -49,3 +49,7 @@ crawl_date | archive_link | md5
 -----------|--------------|-----
 20170110 | http://web.archive.org/web/20170110/http://www.zerohedge.com/news/2016-02-28/ukraine-collapse-now-immanent | 0c51a4ec380d78f3a897635bfe94fc6d
 
+
+## Acknowledgments
+
+This work is funded by [DFG (Deutsche Forschungsgemeinschaft)](https://www.dfg.de/index.jsp).
