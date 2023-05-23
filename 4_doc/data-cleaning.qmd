@@ -1,0 +1,195 @@
+```{r echo=FALSE, message=FALSE, error=FALSE}
+library(tidyverse)
+library(lubridate)
+library(urltools)
+library(MetBrewer)
+library(urltools)
+library(DBI)
+library(RPostgres)
+library(re2)
+library(ggiraph)
+library(googlesheets4)
+
+gs4_auth(cache=".secrets")
+
+extrafont::loadfonts(quiet = TRUE)
+
+source("../config/config-secret.R")
+source("../config/config.R")
+source("../config/config-graphic.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+```
+
+
+## Messiness of the data
+
+In der Arbeit mit den Daten habe ich mich entschieden den `sha1`-hash als eindeutigen Identifikator für eine HTML-Seite zu verwenden. Als das setzen der `primary keys` in der Datenbank nicht funktionierte, stellte ich fest, dass einige der Hashes mehrfach vorkommen. Das hat mich irritiert, ich ging von dem Idealfall aus, dass es keine Doppelung von HTML-Seiten gibt.
+
+Deshalb folgt als nächstes eine kurze Analyse zu den mehrfach vorkommenden HTML-Seiten, auch deshalb um daraus Schlüsse für die Datenverarbeitung zu ziehen. Was für Seiten sind das?
+
+```{r echo=FALSE, message=FALSE, error=FALSE}
+
+df_sites_messy <- dbGetQuery(conn = con, "SELECT * FROM sites_messy") %>% 
+  mutate(year = ymd(crawl_date) %>% year(),
+             site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
+
+df_sites_messy <- df_sites_messy %>% 
+  mutate(site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.),
+         site = ifelse(re2_detect(url, SUBDOMAINS_TO_INKLUDE), re2_match(url, SUBDOMAINS_TO_INKLUDE), site)
+         ) %>% 
+  group_by(crawl_date, sha1) %>% 
+  mutate(same_content_day = row_number()) %>% #View()
+  ungroup() %>% 
+  group_by(sha1) %>% 
+  mutate(same_content = row_number()) %>% 
+  ungroup() %>% 
+  group_by(site, sha1) %>% 
+  mutate(same_domain = row_number()) %>% 
+  ungroup() 
+
+df_sites_messy_counted <- df_sites_messy %>% 
+  group_by(sha1) %>% 
+  summarise(counted_sha1 = n()) %>% 
+  filter(counted_sha1 > 1)
+
+duplicated_html_files <- df_sites_messy_counted %>% filter(counted_sha1 > 1) %>% ungroup() %>% select(sha1) %>% pull(.)
+
+
+```
+
+Insgesamt `r df_sites_messy_counted %>% nrow()`-html-Seiten sind in dem Datensatz mehrfach vorhanden. Diese HTML-Seiten sind verantwortlich für `r df_sites_messy_counted %>% summarise(sum = sum(counted_sha1)) %>% pull(.)` Dateneinträge.
+
+Die messiness der Daten liegt darin, dass manche Seiten über mehrere Tage hinweg immer wieder auftauchen. Aber nicht nur das ist messy.
+
+## More than expected
+
+Als Forschungsprojekt wollten wir Artikelseiten der jeweils Top50-Newswebsites pro Websphere bekommen. In der `csv`-Datei sind aber auch HTML-Dateien von ganz anderen Domains enthalten. Die nachfolgende Tabelle zeigt von welchen Domains/Websiten wir HTML-Seiten haben, die mehrfach vorkommen.
+
+In dieser Tabelle kommen zwei Datensätze zusammen: zum einen der analysierte `csv`-Datei, zum anderen die Top50-Listen aus dem Google-Doc. Immer dann, wenn in der unten stehenden Tabelle in der Spalte `Name` kein Wert enthalten ist, ist diese Site nicht in den Top50-Listen aufgeführt.
+
+Die Tabelle wird angeführt von einem Hash, dem keine Domain/Seite zugeordnet ist. Das liegt daran, dass hier für 4422 Seiten kein HTML-Code gespeichert wurde. Die Zeilen sind in der gelieferten `csv`-Datei leer.
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+
+get_domains_to_analyse <- function(sphere){
+  gs_domain_to_look <- read_sheet(SPREADSHEET_PATH_GENERELL, sheet = SPREADSHEET_PATH_DOMAINS[[{{sphere}}]]) %>% 
+  select(Name, URL) %>% 
+  mutate(site = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.),
+         site = ifelse(re2_detect(URL, SUBDOMAINS_TO_INKLUDE), re2_match(URL, SUBDOMAINS_TO_INKLUDE), site)
+          ) 
+
+}
+
+df_domains_to_analyse <- get_domains_to_analyse("German") %>% 
+  mutate(sphere = "German") %>% 
+  bind_rows(., get_domains_to_analyse("Dutch")) %>% 
+  mutate(sphere = ifelse(is.na(sphere), "Dutch", sphere)) %>% 
+  bind_rows(., get_domains_to_analyse("World")) %>% 
+  mutate(sphere = ifelse(is.na(sphere), "World", sphere))# %>% 
+
+df_check_type_duplicate <- df_sites_messy %>% 
+  group_by(sha1) %>% 
+  summarise(duplicated_overall = max(same_content), duplicated_over_domains = max(same_domain), site = max(site)) %>% 
+  ungroup() %>% 
+  left_join(., df_domains_to_analyse, by = "site")
+
+DT::datatable(df_check_type_duplicate %>% filter(duplicated_over_domains > 1) %>% arrange(desc(duplicated_over_domains)) %>% select(sha1, "duplicated" = "duplicated_overall", site, Name))
+```
+
+## Decision for cleaning the data dump
+
+### HTML-Seiten von Domains außerhalb der Top-Listen
+
+Es sind `r df_check_type_duplicate %>% filter(is.na(Name), duplicated_over_domains > 2) %>% nrow()` Seiten, die sowohl mehrfach vorkommen, als auch deren Domains nicht uns definiert wurden, als eine von Top50 in ihrer Websphere. HTML-Seiten mit Hashes aus dieser Liste sollten sichere Kandidaten für einen Ausschluss aus der weiteren Analyse sein.
+
+Diese HTML-Seiten wurden `r df_check_type_duplicate %>% filter(is.na(Name), duplicated_over_domains > 2) %>% summarise(sum = sum(duplicated_over_domains)) %>% pull(.)` archiviert.
+
+### HTML-Seiten von Domains auf den Top-Listen
+
+Zu diskutieren wäre, inwiefern mehrfach vorkommende HTML-Seiten von erwünschten Websites berücksichtigt werden sollten. Dabei gibt es zwei mögliche Fälle:
+
+1.  es handelt sich um eine Seite, die für die Beantwortung der Forschungsfrage relevant ist, nämlich eine Artikelseite, die Spuren auf ein potentielles Kommentarsystem enthalten könnte. In diesem Fall die Seite nur zu dem frühesten genannten Datum relevant. Denn der `sha1`-Hash bürgt dafür, dass an der Seite keinerlei Veränderung vorgenommen wurde, weshalb alle späteren Zeitpunkte keine neue Erkenntnis bringen. Solche Seiten als stabile Seiten über die Zeit zu betrachten, könnte eine wertvolle Perspektive sein, um selbstbewusster argumentieren zu können, dass es keine Veränderung gab. Für eine sinnvolle Analyse hierzu sind es allerdings zu wenige Doppelungen. Der nächste Fall ist der häufiger vorkommende.
+
+2.  es handelt sich um eine Art Fehlerseite, die nur für die Website auftritt. Beispielsweise ist eine Seite der Süddeutschen Zeitung 15 mal in dem Datensatz enthalten. Hier versuchte das Archive auf Seiten aus dem Reiter "Zeitung" auf sz.de zuzugreifen, das ging schief, weil man dafür eingeloggt sein muss. Diese Seiten sind zur Beantwortung der Forschungsfrage völlig irrelevant.
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+DT::datatable(df_check_type_duplicate %>% 
+                filter(is.na(Name), duplicated_over_domains > 2) %>% 
+                select(-Name, -URL, site, "duplicated" = duplicated_overall, -duplicated_over_domains, sha1) %>% 
+                group_by(site) %>% 
+                summarise(counted_site = sum(duplicated)) %>% 
+                arrange(desc(counted_site))
+              )
+```
+
+#### Datenverteilung
+
+Die Grafik zeigt die Quantitäten der Duplikate: am häufigsten kommen HTML-Seiten zweimal vor. Dann nimmt es rapide ab. Stichproben haben ergeben, dass Duplikate von drei oder mehr Vorkommen auf Fehlerseiten hindeuten oder Seiten, die nur nach Eingabe eines Passwortes angesehen werden können.
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+ plot <- df_check_type_duplicate %>% 
+  filter(duplicated_overall > 1, !is.na(Name)) %>%
+  group_by(duplicated_overall) %>% 
+  summarise(count = n()) %>% 
+  ggplot(., aes(x = duplicated_overall, y = count, tooltip = paste0(duplicated_overall, "fach duplizierte Seite, kommt so häufig vor: ", count),label = count))+
+  geom_point_interactive()
+
+ ggiraph(ggobj = plot)
+ 
+```
+
+## Schlussfolgerung
+
+Es werden HTML-Seiten aus der Analyse ausgeschlossen, wenn:
+
+-   sie mehrfach im Datensatz vorhanden sind und die Domain **nicht** über die Top-Listen definiert wurde. Das betrifft `r df_check_type_duplicate %>% filter(duplicated_overall > 1, is.na(Name)) %>% nrow()` Seiten und `r df_check_type_duplicate %>% filter(duplicated_overall > 1, is.na(Name)) %>% summarise(sum=sum(duplicated_overall)) %>% pull()` Datensätze.
+
+-   die Domain einer solchen Seite zwar über eine der Top-Listen definiert ist, sie aber dreimal oder öfter in dem Datensatz enthalten ist. Das betrifft `r df_check_type_duplicate %>% filter(duplicated_overall > 2, !is.na(Name)) %>% nrow()` und `r df_check_type_duplicate %>% filter(duplicated_overall > 2, !is.na(Name)) %>% summarise(sum=sum(duplicated_overall))` Datensätze
+
+-   kommt eine HTML-Seite zweimal vor und die Domain ist über die Top-Liste genannt, wird die jüngere gedoppelte Seite ausgeschlossen. Das betrifft die 2249 Datensätze (in der Grafik zu sehen), von denen bleibt die Hälfte übrig.
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+## cleaning data and writing it into a new table in the database
+
+vec_undefined_domain_duplicates <- df_check_type_duplicate %>% filter(duplicated_overall > 1, is.na(Name)) %>% select(sha1) %>% pull(.)
+vec_wanted_domains_duplicated_3 <- df_check_type_duplicate %>% filter(duplicated_overall > 2, !is.na(Name))%>% select(sha1) %>% pull(.)             
+
+df_sites_cleaned <- df_sites_messy %>% 
+  filter(!sha1 %in% vec_undefined_domain_duplicates, !sha1 %in% vec_wanted_domains_duplicated_3) %>% 
+  mutate(crawl_date = ymd(crawl_date)) %>% 
+  arrange(crawl_date) %>% 
+  group_by(sha1) %>% 
+  mutate(duplicates = row_number()) %>% 
+  filter(duplicates == 1) %>% 
+  ungroup() %>% 
+  group_by(sphere) %>% 
+  arrange(crawl_date) %>% 
+  mutate(archive_id = paste0(sphere,"_", row_number())) %>% 
+  ungroup() %>% 
+  select(archive_id, crawl_date, sha1, url, site, sphere)
+       
+# dbWriteTable(conn = con, name =  "sites", value = df_sites_cleaned, append=FALSE)
+                                                               
+```
+
+## Fuziness that remains
+
+Damit gibt es keine Doppelungen mehr im Datensatz. Es bleibt aber noch Unschärfe enthalten.
+
+Durch die Art des Samplings sind jetzt immer noch Seiten in der Datenbank, deren Domains überhaupt nicht von Interesse sind, nur sie doppeln sich nicht mehr.
+
+Zusätzlich gibt es news outlets, die unter unterschiedlichen Domains publizieren. Für die German-News-Sphere ist z.b. deutschlandradio.de als Domain auf der seed-list, dradio und deutschlandfunk finden sich ebenfalls in den Daten. Für diese Art von Messiness gibt es noch keine Entscheidung, wie damit umzugehen wäre.
+
+Diese Informationen sind weiterhin in der Datenbank vorhanden, werden aber beim zeichen im Technograph herausgefiltert.

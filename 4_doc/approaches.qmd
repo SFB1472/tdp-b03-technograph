@@ -1,0 +1,25 @@
+---
+title: "Approaches"
+---
+
+
+## Methodik
+
+Um Kommentar (-systeme, -möglichkeiten, -e) in HTML-Dokumenten zu finden, werden zwei unterschiedliche Ansätze verfolgt. 
+
+
+![](/img/Scribbles-7.jpg)
+
+### HTML als reiner Text
+
+Der Erste betrachtet HTML als reinen Text, alle Auszeichnungselemente, die typisch sind für HTML als Auszeichnungssprache, werden dabei ignoriert. Im Forschungsprojekt wurde relevante Kommentarsoftware gesammelt und zusätzlich recherchiert, auf welche Art diese Software in den HTML-Seiten sichtbar wird. Diese Spuren werden als Snippets bezeichnet und liegen in einem [Spreadsheet](https://docs.google.com/spreadsheets/d/1adwVWgBeZI70j0wHZsD6xho1jZTbJzXZ6RHtx86QJc8/edit?usp=sharing) vor.
+
+
+### HTML als strukturierter Text
+
+Der zweite Ansatz macht sich zu nutze, dass HTML eine Auszeichnungssprache ist. Jede Seite liefert eine Reihe von Information über ihre Struktur mit, sie ist direkt ablesbar. Auf der Suche nach Möglichkeiten zu kommentieren, sind unterschiedliche Ansätze möglich. 
+
+- HTML-Seiten folgen technischen Standards. Damit die Browser wissen, nach welchem Standard eine Seite entwickelt wurde und sie entsprechend anzeigen können, enthält jede (valide) Seite in der ersten Zeile den sogenannten `<doctype>`-tag, der diese Info enthält.
+- Interaktionsmöglichkeiten erfordern den Einsatz von Scripten. Diese werden über `<script>`-tags eingebunden.
+- Für die Eingabe von Texten auf Websiten, werden häufig Formulare verwenden. Diese haben einen eigenen tag, den `<form>`-tag
+- Aktuellere Seiten werden für das Einbinden der erforderlichen Funktionalität eher auf `<div>`-tags setzen. Das ist der komplizierteste Ansatz. Deswegen steht er in der Liste auch am Schluss, in der Hoffnung im Laufe der Analyse von den oben genannten Tags zu lernen und das Wissen einsetzen zu können für diesen sehr generischen Tag.

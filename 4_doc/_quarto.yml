@@ -1,0 +1,33 @@
+project:
+  type: website
+
+website:
+  title: "Fieldnotes"
+  sidebar:
+    style: "docked"
+    search: true
+    contents:
+      - section: "Basics: data export from the internet archive"
+        contents:
+          - text: "Data basis: sampling and structure"
+            file: datengrundlage.qmd
+          - text: "Data cleaning"
+            file: data-cleaning.qmd
+      - section: "Parsing: How to find commenting possibilities in HTML?"
+        contents:
+          - text: "Different approaches how to interpret HTML"
+            file: approaches.qmd
+          - text: "Learning about infrastructure: Analysing doctype"
+            file: analyzing-doctypes.qmd
+          - text: "Analysing form tags"
+            file: analyzing-form-tags.qmd
+
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true
+
+editor: visual
+

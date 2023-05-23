@@ -1,0 +1,98 @@
+```{r echo=FALSE, message=FALSE, error=FALSE}
+library(tidyverse)
+library(lubridate)
+library(urltools)
+library(MetBrewer)
+library(urltools)
+library(DBI)
+library(RPostgres)
+library(re2)
+library(ggiraph)
+library(googlesheets4)
+
+gs4_auth(cache=".secrets")
+
+extrafont::loadfonts(quiet = TRUE)
+
+source("../config/config-secret.R")
+source("../config/config.R")
+source("../config/config-graphic.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+```
+
+Welche Fragen sind fürs Forschungsprojekt wichtig?
+
+-   ab wann haben wir überhaupt Daten: Weil das Projekt verspricht ab den späten 90ern zu untersuchen.
+-   aus welchen Monaten haben wir Daten: Weil das Internet Archiv vermutlich eher aus den ersten Monaten im Jahr Daten geliefert hat, somit sind eher keine Auswertungen im Jahresverlauf möglich.
+-   Die webspheres sind wichtig. Datenverteilung zeichnen, aber was genau?
+
+## Sampling der Daten
+
+Für jede dieser Webspheres wurde eine Liste der 50 wichtigsten Newswebsites definiert (wie genau nochmal?), die als Ausgangspunkt für das Sampling beim Internet Archives dienten. Von diesen jeweils 50 (Start-) Seiten wurde für fünf aufeinanderfolgende (im besten Fall) Monate alle Verlinkungen auf Unterseiten gesucht. Homepages enthalten in der Regel keine Kommentarsysteme, weswegen es notwendig war nach Artikelseiten zu suchen.
+
+Homepages enthalten aber nicht nur Verweise auf Artikelseiten. Um den Datensatz spezifischer zusammenzustellen, wurde hier noch einmal gefiltert, auf solche Verweise, die möglichst nur einmal genannt werden. Da es sich um Nachrichtenseiten handelt und anzunehmen ist, das Verweise auf Artikel nur einmal zu finden sind, Verlinkungen auf Werbung oder Ressortseiten von der Startseite aus häufiger zu sehen sind.
+
+Unter der Annahme, dass für alle abgefragten Domains zu allen Zeitpunkten im gefragten Zeitraum Seiten archiviert wurden, hieße das für den vorliegenden Datensatz, er enthielte für jedes Jahr aus den ersten fünf Monaten eine umfangreiche Liste aus Artikeln, auf die von den jeweiligen Homepages verwiesen wurde.
+
+Das wäre der Idealzustand, der Datensatz, der momentan vorliegt enthält auch Seiten, nach denen nicht gefragt wurde bzw fehlen auch solche, die eigentlich dabei sein könnten, weil zwar Archive angelegt wurden, aber nicht im Export enthalten sind.
+
+
+## Struktur der Daten
+
+Im Forschungsprojekt liegen bereits Daten aus dem Internet Archive vor. Für eine möglichst breites Spektrum im Forschungsprozess wurden drei Webspheres definiert, die sich niederschlagen in drei unterschiedlichen Datensätzen. Hauptsächlich unterscheiden sie sich über die Sprache: englisch, deutsch und niederländisch. Der englischsprachige Datensatz umfasst internationale Newswebsites, so dass auch Entwicklungen außerhalb der westlichen Hemisphäre sichtbar werden können.
+
+Für jede Websphere gibt es unterschiedliche Datensätze: - html-file-information.csv: das ist die wichtigste Datei. In ihr sind alle HTML-Seiten direkt eingebunden, zusammen mit ein bisschen Metadaten. Die zentralen Variablen/Spalten hier sind `crawl_date`, `url` und zwei Spalten überschrieben mit `sha1` bzw. `md5`. Hierin ist die HTML-Datei mittels eines kryptografischen Algorithmus eindeutig identifizierbar, man nennt diese Verfahren auch Hash-Funktionen. Für ein einfacheres Arbeiten mit dieser `csv`-Datei wurden die HTML-Dateien unter dem `sha1`-hash im Dateisystem gespeichert (momentan nur lokal).
+
+-   js-file-information.csv: diese Tabelle ist schon wesentlich weniger umfangreich (Anzahl der Zeilen) als die Zuvorbeschriebene. Sie enthält ähnliche Spalten wie auch die html-file-information-Tabelle: `crawl_date`, `url`, die hashes als Metadaten. Anstelle der HTML-Seiten sind hier Scripte über die `content`-Spalte eingebunden. Für die Forschungsfrage könnte es sehr interessant sind, diese Scripte zu verbinden mit den Websiten, in denen sie eingebunden sind. Und hier wird es knifflig: die Script-Tabelle ist nicht mit der HTML-Tabelle verknüpft, die hashes beziehen auf den jeweiligen Content. Parsen der HTML-Seiten und der Versuch eine Verknüfung über die Script-URL herzustellen führte zu einer lächerlich kleinen Überlappung von Zeilen (lediglich um die 700 Treffer, bei über 50.000 gelisteten Scripten, Bezugspunkt German Websphere)
+
+-   css-file-information.csv: auch diese Tabelle könnte von großem Nutzen sein, enthält aber so wenig Zeilen, dass hier unbedingt mehr Kontext zur Entstehung des files notwendig ist
+
+-   xml-file-information.csv: mehr Kontext zum Verständnis notwendig
+
+-   json-file-information.csv: mehr Kontext zum Verständnis notwendig
+
+-   plain-text-file-information.csv: erschließt sich nicht, was hier enthalten sein könnte.
+
+
+## Abgedeckter Zeitraum der Daten
+
+Im Forschungsantrag steht beschrieben, dass der Zeitraum von 1996 bis heute (bzw. möglichst aktuell) untersucht wird. Die folgende Grafik zeigt, dass in dem ersten Datendump Aufzeichnungen erst ab 2007 starten und das auch nur für sehr wenige Domains. So richtig startet die Aufzeichnung erst 2008.
+
+```{r message=FALSE, error=FALSE, echo=FALSE, warning=FALSE}
+
+df_sites <- dbGetQuery(conn = con, "SELECT * FROM sites") %>% 
+  mutate(year = ymd(crawl_date) %>% year(),
+             site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
+
+```
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df_timespan_year <- seq(ymd("1996-01-01"), ymd("2021-06-01"), by = "year") %>% as_tibble()
+
+year_breaks_for_plotting <- df_timespan_year %>% 
+  mutate(years = year(value)) %>% 
+  select(years) %>% pull(.)
+
+df_sites %>% 
+  group_by(year, sphere) %>% 
+  summarise(counted_sites = n()) %>% 
+  ungroup() %>% 
+  ggplot(., aes(x = year, y = sphere, fill = counted_sites)) +
+  geom_tile() +
+  scale_x_continuous(breaks = year_breaks_for_plotting, limits = c(min(year_breaks_for_plotting), max(year_breaks_for_plotting)), expand = c(0, NA), name = "crawl_year") +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+  scale_y_discrete(expand = c(0, NA)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) + theme_b03_base + theme_b03_heatmap + theme_b03_facets  + 
+  guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
+
+```
+
