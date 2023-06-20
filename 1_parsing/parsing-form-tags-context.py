@@ -47,9 +47,10 @@ def extract_info(elem):
     PARSED_DOC.append(info)
 
 def iterarte_tags (all_form_tags):
+    # print("iterate tags")
     for elem in all_form_tags:
 
-        if(type(elem) != bs4.element.NavigableString and type(elem) != bs4.element.Comment and type(elem) != bs4.element.Script):
+        if(type(elem) != bs4.element.NavigableString and type(elem) != bs4.element.Comment and type(elem) != bs4.element.Script and type(elem)!= bs4.element.Stylesheet):
         # if(len(list(elem.children))> 0):
             if(len(elem.contents)> 0):
                 extract_info(elem)
@@ -67,11 +68,13 @@ def iterate_files():
 
     for index, row in files_to_analyse.iterrows():
         html_file = row["sha1"] + ".html"
-    # html_file = "0131ad7cec51b2fa0907587bd542af0d77147faf.html"
+        # html_file = "01f54b0451211022117efe16d8232c6f93c355fb.html"
         print(html_file)
         html_file = PATH_TO_FILES + html_file
         with open(html_file) as fp:
-            # html_file_clean = str(html_file).replace(PATH_TO_FILES, "").removesuffix(".html")
+            # reset global object for storing parsed data recursevly
+            global PARSED_DOC 
+            PARSED_DOC = []
             contents = fp.read()
             # try: 
             contents = re.sub("\n", '', contents)
@@ -83,18 +86,17 @@ def iterate_files():
             iterarte_tags(all_form_tags)
             counted_items = 0
             for item in PARSED_DOC:
-                # print(item)
                 counted_items += 1
                 item["group"] = counted_items
                 item["site"] = row["sha1"]
+                # item["site"] = html_file
                 item["context_of"] = "form"
                 item["sphere"] = CURRENT_SPHERE
                 df = pd.DataFrame(item)
-                # print(df)
                 with eng.connect() as conn:
                     df.to_sql("tags_context", con=conn, if_exists='append', index=False)
-                
-                # except(RecursionError):
-                #     print(row["sha1"])
+                    
+                    # except(RecursionError):
+                    #     print(row["sha1"])
 
 iterate_files()
