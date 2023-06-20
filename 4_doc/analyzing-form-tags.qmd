@@ -90,7 +90,10 @@ get_form_info <- function(sphere, tag){
 
 ```
 
-## To do: Warum form-Tags untersuchen?
+## Warum form-Tags untersuchen?
+
+Damit User auf einer Website Kommentare schreiben können, sind Eingabefelder notwendig. In HTML-Seiten werden diese Eingegabefelder häufig über Formulare zur Verfügung gestellt, der entsprechende Tag dafür heißt `<form>`. Auf diese Weise können Kommentarmöglichkeiten in solchen Seiten gefunden werden, die direkt eine Kommentierung erlauben. Kommentarmöglichkeiten, die einen Klick entfernt sind, weil sie beispielsweise erst eine Anmeldung erfordern oder auf eigenen Kommentarseiten ausgelagert sind, werden durch diese Analyse nicht erfasst.
+
 
 ## Wie verbreitet sind die form-Tags?
 
@@ -391,7 +394,7 @@ get_form_with_comment <- function(sphere_, tag){
 # 
 # SPHERE_FOR_SHEET <- "Dutch"
 # 
-# # test <- get_form_with_comment(SPHERE_FOR_SHEET, "form")
+# test <- get_form_with_comment(SPHERE_FOR_SHEET, "form")
 # df_current_sphere_with_comment <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%# View()
 #     group_by(year, site) %>% 
 #     summarise(counted = n()) %>% #View()
@@ -403,7 +406,7 @@ get_form_with_comment <- function(sphere_, tag){
 
 
 ## saving df for futher parsing
-# df_parsing_more_info <- test %>% select(sha1, group, sphere) %>% distinct()
+# df_parsing_more_info <- test %>% select(sha1, sphere) %>% distinct()
 # write_csv(df_parsing_more_info, paste0("../data/2-analysing/", SPHERE_FOR_SHEET, "/sites-with-comment-traces-form-tags.csv"))
 
 ```
