@@ -13,6 +13,8 @@ website:
             file: datengrundlage.qmd
           - text: "Data cleaning"
             file: data-cleaning.qmd
+          - text: "Matching scripts files to html pages"
+            file: script-files-to-html-pages.qmd
       - section: "Parsing: How to find commenting possibilities in HTML?"
         contents:
           - text: "Different approaches how to interpret HTML"
