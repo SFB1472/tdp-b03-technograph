@@ -23,6 +23,10 @@ website:
             file: analyzing-doctypes.qmd
           - text: "Analysing form tags"
             file: analyzing-form-tags.qmd
+       - section: "Analyzing"
+        contents: 
+          - text: "Context of form tags"
+            file: form-context.qmd
 
 
 format:

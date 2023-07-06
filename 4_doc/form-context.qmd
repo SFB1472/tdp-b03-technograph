@@ -1,0 +1,185 @@
+---
+title: "Analyzing form context"
+---
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+library(googlesheets4)
+
+source("../config/config.R")
+source("../config/config-secret.R")
+
+gs4_auth(cache=".secrets")
+gs_domain_to_look <- read_sheet(SPREADSHEET_PATH_GENERELL, sheet = SPREADSHEET_PATH_DOMAINS[[{{CURRENT_SPHERE}}]]) %>% 
+  select(Name, URL) %>% 
+  mutate(site = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.)) 
+
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+dbDisconnect(con)
+
+get_hashes <- function(sphere){
+  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.hashed_forms FROM sites s INNER JOIN findings_hashed fh ON fh.sha1 = s.sha1 WHERE s.sphere LIKE '", sphere, "' ORDER BY s.crawl_date"))
+}
+
+# 7a7680601a641ca3f1ad02053e6aa35fe53c111e
+
+test <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sphere, s.site, s.url, s.sha1, tc.parent_path_str, tc.group, tc.name, tc.attr, tc.value, tc.text FROM sites s INNER JOIN tags_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE 'German' AND tc.site LIKE '7a7680601a641ca3f1ad02053e6aa35fe53c111e'  ORDER BY s.sha1, tc.group"))
+# 
+test2 <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sphere, s.site, s.url, s.sha1, tc.parent_path_str, tc.group, tc.name, tc.attr, tc.value, tc.text FROM sites s INNER JOIN tags_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE 'German' AND tc.site LIKE 'cc879db7bc2bf85ace60968cfcb31be123592d13'  ORDER BY s.sha1, tc.group"))
+
+
+```
+
+## Form findings gehasht -> was bedeutet das?
+
+Ein Hash ist ein kryptografisches Verfahren, um Inhalte mittels einer relativ kurzen Zeichenkette eindeutig identifizierbar zu machen. Ändert sich die Zeichenkette, ändert sich der Hash. 
+
+Das Internet Archive wendet diese Methode an, um HMTL-Seiten oder Javascript-files eindeutig identifizieren zu können. 
+
+Exkurs: Dieses Verfahren wird außerdem eingesetzt um sicherzustellen, dass man beispielsweise keine Schadsoftware heruntergeladen hat. Der Hash wird vom Hersteller/Vertreiber der Software auf der Website zur Verfügung gestellt und kann von der Person, die die Software installieren möchte gebenutzt werden um den Check durchzuführen, dass die heruntergeladene Datei auch wirklich diejenige ist, die erwartet wurde. Firefox stellt diese Informationen beispielsweise zur Verfügung. 
+
+Kommentarbereiche in Websites sind äußerst heterogen. Jede Redaktion entscheidet wieder neu, wie dieser Bereich auf der jeweiligen Seite aussehen soll und wie sie strukturiert ist. Das hat Auswirkungen auf den Quellcode: alle Spuren die ich finde sind unterschiedlich umfangreich und deswegen schwer zu handhaben, wenn es an die Frage geht, wann Änderungen passiert sind. Mittels des Hashes gebe ich diesen unterschiedlich umfangreichen Spuren einen Fingerabdruck, der es mir so ermöglicht unterschiedliche Seiten miteinander zu vergleichen.
+
+
+Und warum welche Spalten? Zuerst den parent-path mit drin gehabt, aber dann ist die position wieder mit codiert, das ist quatsch, das muss getrennt sein. zudem noch die gruppe mit drin gehabt, aber das ist auch eine indirekte pfadabhängigkeit. denn wenn beispielsweise eine suche oder newsletteranmeldung über den kommentaren eingefügt wurde, verändert sich die gruppennummer für die kommentare. beim hashing gibt es dann einen anderen wert, obwohl sich der bereich womöglich gar nicht änderts.
+
+Und Suche der findings noch einmal geändert: in der tags-context nur in den form attributen gesucht, nicht in allen. Führt dazu, dass es ca. 2000 findings weniger gibt. Aber am Beispiel der SZ gibt es sehr viel weniger noise, damit meine ich, weniger findings, die nur ein- oder zweimal auftreten. Noise gibts immer noch eine Menge, aber das ist noch zu analysieren. 
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df_hashes_de <- get_hashes("German") 
+
+df <- df_hashes_de %>%
+  arrange(crawl_date, hashed_forms) %>% 
+  mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.)) %>% 
+  mutate(change_indicator = ifelse(hashed_forms == lag(hashed_forms), 0, 1),
+         prev_site = paste0("http://web.archive.org/web/", lag(crawl_date), "/", lag(url)),
+         archive_url = paste0("http://web.archive.org/web/", crawl_date, "/", url), .by = c(site, subdomain)) %>% #View()
+  mutate(counted_form = n(),.by = hashed_forms) %>% 
+  group_by(site, subdomain, counted_form) %>%
+  arrange(site, subdomain, counted_form) %>% 
+  mutate(hash_group_size = rank(counted_form))
+  
+
+```
+
+
+## Für diese Seiten funktioniert das hashen der Kommentarbereiche nicht
+
+Was bedeutet das? 
+
+
+im fall vom freitag funktioniert es nicht, weil urls, die auf den artikel verweisen, in einem versteckten input-tag im value attr mitgeschickt werden. kann ich herausfinden, welche elemente änderungen enthalten, die keine auswirkung auf den kommentarbereich haben?
+vielleicht einfach alles rausfiltern, was eine url in value hat?
+
+```{r}
+
+df_hashed_outliers <- df %>% 
+  ungroup() %>% 
+  reframe(max_same_forms = max(counted_form), min_same_forms = min(counted_form), .by = c("crawl_date", "site", "url", "hashed_forms", "subdomain", "archive_url")) #%>% 
+  
+df_hashed_outliers_min <- df_hashed_outliers %>% filter(max_same_forms < 3) %>% select(site) %>% distinct()
+
+df_hashed_outliers_max <- df_hashed_outliers %>% filter(max_same_forms > 2) %>% select(site) %>% distinct()
+
+sites_to_ignore <- df_hashed_outliers_min %>% anti_join(., df_hashed_outliers_max) %>% filter(site %in% gs_domain_to_look$site) %>% pull(.)# %>% View()
+
+```
+
+##
+
+```{r}
+
+## hier fehlen alle seiten ohne form-findings
+
+df_counted_sites_with_form_findings <- df %>% 
+  reframe(nr_sites_with_form_findings = n(), .by = c(site, subdomain)) %>% 
+  filter(site %in% gs_domain_to_look$site)
+
+df_hashes_per_site <- df %>% 
+  select(site, subdomain, hashed_forms, counted_form) %>% 
+  filter(site %in% gs_domain_to_look$site) %>% 
+  distinct() %>% 
+  reframe(counted_hashes_distinct = n(), .by = c(site, subdomain))
+
+df_stats_per_site <- df_counted_sites_with_form_findings %>% 
+  left_join(., df_hashes_per_site) %>% 
+  mutate(ratio_hashes_sites = round(counted_hashes_distinct/nr_sites_with_form_findings, digits = 1))
+
+df_stats_per_site %>% select(nr_sites_with_form_findings) %>% sum()
+
+df %>% 
+  filter(!site %in% sites_to_ignore, site %in% gs_domain_to_look$site) %>% 
+  ggplot(., aes(x = crawl_date, y = site, fill = change_indicator)) +
+  geom_tile() #+
+  # theme(legend.position = "none")
+  
+
+```
+
+```{r}
+get_parent_pathes <- function(sphere){
+  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, tc.parent_path_str, regexp_matches(tc.value, '", COMMENTS_IN_TAGS, "') as matches FROM sites s INNER JOIN tags_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE '", sphere, "' AND tc.name LIKE 'form' ORDER BY s.crawl_date"))
+}
+
+df_pathes_2 <- get_parent_pathes("German")
+
+df_pathes_2 %>% 
+  mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.)) %>% 
+  # group_by(site, subdomain) %>% 
+  mutate(change_indicator = ifelse(parent_path_str == lag(parent_path_str), 0, 1), .by = c("site", "subdomain")) %>% View()
+  
+
+```
+
+
+
+```{r}
+
+get_attr_names <- function(sphere){
+  df <- dbGetQuery(conn = con, paste0("SELECT tc.value FROM tag_context tc WHERE tc.sphere LIKE '", sphere, "'"))
+}
+
+df_count_content <- get_attr_names("German")
+
+df_count_content %>% 
+  summarise(counted = n(), .by = value) %>% View()
+
+df_count_content_ids <- df_count_content %>% 
+  select(-value, -text) %>% 
+  distinct() %>% 
+  group_by(sha1, name) %>% 
+  mutate(is_form = ifelse(name == "form", 1, 0)) %>% 
+  ungroup() %>% 
+  group_by(sha1, is_form) %>% 
+  mutate(form_group = row_number(),
+         form_group = ifelse(is_form == 0, NA, form_group)) %>% 
+  ungroup() %>%
+  group_by(sha1) %>% 
+  fill(form_group) %>% 
+  mutate(id_sha1_form_group = paste0(sha1, "_", form_group))
+
+id_sha1_form_group <- function(sphere){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT fh.id_sha1_form_group, fh.hashed_forms FROM findings_hashed_2 fh WHERE fh.sphere LIKE '", sphere, "'")) #%>% select(id_sha1_form_group) %>% pull(.)
+}
+df_id_sha1_form_group <- form_id_to_look_at("German")
+
+df_count_content_temp <- df_count_content %>% 
+  left_join(., df_count_content_ids) %>% 
+  left_join(., df_id_sha1_form_group) %>% 
+  filter(!is.na(hashed_forms))
+  # filter(id_sha1_form_group %in% df_id_sha1_form_group$id_sha1_form_group)
+
+```
+

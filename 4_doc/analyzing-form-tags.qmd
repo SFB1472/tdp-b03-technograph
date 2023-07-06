@@ -406,7 +406,7 @@ get_form_with_comment <- function(sphere_, tag){
 
 
 ## saving df for futher parsing
-# df_parsing_more_info <- test %>% select(sha1, sphere) %>% distinct()
+# df_parsing_more_info <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>% select(sha1, sphere) %>% distinct()
 # write_csv(df_parsing_more_info, paste0("../data/2-analysing/", SPHERE_FOR_SHEET, "/sites-with-comment-traces-form-tags.csv"))
 
 ```
@@ -420,6 +420,8 @@ get_form_with_comment <- function(sphere_, tag){
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.height=7.5}
 
 SPHERE_FOR_SHEET <- "German"
+# df_parsing_more_info <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>% select(sha1, sphere) %>% distinct()
+# write_csv(df_parsing_more_info, paste0("../data/2-analysing/", SPHERE_FOR_SHEET, "/sites-with-comment-traces-form-tags.csv"))
 
 df_counted_attrs_with <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%
   group_by(name) %>%
@@ -451,6 +453,8 @@ df_c %>% ggplot(., aes(x = value, y = reorder(name, desc(order)), fill = cat, la
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.height=7.5}
 
 SPHERE_FOR_SHEET <- "Dutch"
+# df_parsing_more_info <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>% select(sha1, sphere) %>% distinct()
+# write_csv(df_parsing_more_info, paste0("../data/2-analysing/", SPHERE_FOR_SHEET, "/sites-with-comment-traces-form-tags.csv"))
 
 df_counted_attrs_with <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%
   group_by(name) %>%
@@ -482,6 +486,8 @@ df_c %>% ggplot(., aes(x = value, y = reorder(name, desc(order)), fill = cat, la
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.height=7.5}
 
 SPHERE_FOR_SHEET <- "World"
+# df_parsing_more_info <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>% select(sha1, sphere) %>% distinct()
+# write_csv(df_parsing_more_info, paste0("../data/2-analysing/", SPHERE_FOR_SHEET, "/sites-with-comment-traces-form-tags.csv"))
 
 df_counted_attrs_with <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%
   group_by(name) %>%
