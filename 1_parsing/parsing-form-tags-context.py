@@ -31,6 +31,7 @@ def extract_info(elem):
                 attr.append(element + str(list_counter))
                 value.append(sub_element)
         else:
+            # print(element)
             attr.append(element)
             value.append(temp_attrs[element])
     parent_info = []
@@ -50,8 +51,8 @@ def iterarte_tags (all_form_tags):
     # print("iterate tags")
     for elem in all_form_tags:
 
-        if(type(elem) != bs4.element.NavigableString and type(elem) != bs4.element.Comment and type(elem) != bs4.element.Script and type(elem)!= bs4.element.Stylesheet):
-        # if(len(list(elem.children))> 0):
+        # if(type(elem) != bs4.element.NavigableString and type(elem) != bs4.element.Comment and type(elem) != bs4.element.Script and type(elem)!= bs4.element.Stylesheet and type(elem) != bs4.element.TemplateString):
+        if(type(elem)== bs4.Tag):
             if(len(elem.contents)> 0):
                 extract_info(elem)
                 # print("es gibt noch kinder")
@@ -68,7 +69,7 @@ def iterate_files():
 
     for index, row in files_to_analyse.iterrows():
         html_file = row["sha1"] + ".html"
-        # html_file = "01f54b0451211022117efe16d8232c6f93c355fb.html"
+    # html_file = "7a7680601a641ca3f1ad02053e6aa35fe53c111e.html"
         print(html_file)
         html_file = PATH_TO_FILES + html_file
         with open(html_file) as fp:
@@ -79,7 +80,7 @@ def iterate_files():
             # try: 
             contents = re.sub("\n", '', contents)
             page = BeautifulSoup(contents, "lxml")
-            page.smooth()
+            # page.smooth()
             page.prettify()
             all_form_tags= page.find_all("form")
 
@@ -93,8 +94,9 @@ def iterate_files():
                 item["context_of"] = "form"
                 item["sphere"] = CURRENT_SPHERE
                 df = pd.DataFrame(item)
-                with eng.connect() as conn:
-                    df.to_sql("tags_context", con=conn, if_exists='append', index=False)
+                df.to_csv("../data/1-parsing/tags-context/"+ CURRENT_SPHERE +"/tags-context.csv", mode="a", header=False)
+                # with eng.connect() as conn:
+                #     df.to_sql("tags_context", con=conn, if_exists='append', index=False)
                     
                     # except(RecursionError):
                     #     print(row["sha1"])
