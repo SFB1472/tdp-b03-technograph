@@ -1,4 +1,3 @@
-
 library(tidyverse)
 library(lubridate)
 library(urltools)
@@ -11,10 +10,11 @@ library(cli)
 library(BAMMtools)
 library(scales)
 library(digest)
+library(dbx)
 
+source("config/config-secret.R")
 
-SPHERE_FOR_SHEET <- "German"
-
+SPHERE_FOR_SHEET <- "Dutch"
 
 con <- dbConnect(RPostgres::Postgres(), 
                  dbname = dsn_database,
@@ -24,64 +24,45 @@ con <- dbConnect(RPostgres::Postgres(),
                  password = dsn_pwd
 )
 
-# AND tc.site LIKE '00012777602a9a99e667f0e4b5416440a9d0f081' 
-
 # creating a group_id for all form tags  ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-df_form_groups <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sphere,s.sha1, tc.group, tc.name FROM sites s INNER JOIN tags_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE '", SPHERE_FOR_SHEET, "' ORDER BY s.sha1, tc.group")) %>% 
-  group_by(sha1, name) %>% 
-  mutate(is_form = ifelse(name == "form", 1, 0)) %>% 
-  ungroup() %>% 
-  group_by(sha1, is_form) %>% 
+df_form_groups <- dbGetQuery(conn = con, paste0("SELECT DISTINCT tc.sphere, tc.site, tc.group, tc.name FROM tag_context tc WHERE tc.sphere LIKE '", SPHERE_FOR_SHEET, "' ORDER BY tc.site, tc.group")) %>% 
+  mutate(is_form = ifelse(name == "form", 1, 0), .by = c(site, name)) %>% 
   mutate(form_group = row_number(),
-         form_group = ifelse(is_form == 0, NA, form_group)) %>% 
-  ungroup() %>%
-  group_by(sha1) %>% 
+         form_group = ifelse(is_form == 0, NA, form_group), .by = c(site, is_form)) %>% 
+  group_by(site) %>% 
   fill(form_group) %>% 
-  mutate(id_sha1_form_group = paste0(sha1, "_", form_group))
+  mutate(id_sha1_form_group = paste0(site, "_", form_group)) %>% 
+  ungroup()
 
-# appling this id to all elements nested in the form tags no whether if there are traces of commenting or not ----------------------------------------------------------------------------------------------
+# applying this id to all elements nested in the form tags if there are traces of commenting or not ----------------------------------------------------------------------------------------------
 
-df_all_context_form_tags <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sphere, s.site, s.url, s.sha1, tc.parent_path_str, tc.group, tc.name, tc.value, tc.text FROM sites s INNER JOIN tags_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE '", SPHERE_FOR_SHEET, "'  ORDER BY s.sha1, tc.group" )) %>% 
-  mutate(archive_url = paste0("http://web.archive.org/web/", crawl_date, "/", url),
-         path_form = str_extract(parent_path_str, "form;.*$")) %>% 
-  left_join(., df_form_groups) %>% 
-  group_by(sha1, form_group) %>% 
-  fill(path_form, .direction = "up") 
+db_form_groups <- df_form_groups %>% select(site, group, name, sphere, id_sha1_form_group) %>% distinct()
 
-# fetching all forms with comment traces and appling the form ids to it ------------------------------------------------------------------------------------------------------------------------
+dbxUpdate(con, "tag_context", db_form_groups, where_cols = c("site", "group", "name", "sphere"))
 
-df_form_context <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sphere, s.site, s.url, tc.site as sha1, tc.parent_path_str, tc.group, regexp_matches(tc.value, '", COMMENTS_IN_TAGS, "') as matches FROM sites s INNER JOIN tags_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE '", SPHERE_FOR_SHEET, "'  ORDER BY sha1, tc.group" ))  %>% 
-  left_join(., df_form_groups) 
+# test <- dbGetQuery(conn = con, paste0("SELECT tc.id_sha1_form_group, tc.site, tc.group, tc.name FROM tag_context tc WHERE tc.sphere LIKE 'German'"))
 
-# extracting all those ids with comment traces  ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-ids_to_look_at <- df_form_context %>% select(id_sha1_form_group) %>% distinct() %>% pull(.)
+# filter the big df down to only those forms with comment traces and all elements nestes  ------------------------------------------------------------------------------------------------------------------------
 
-# filter the big df down to only thoses forms with comment traces and all elements nestes  ------------------------------------------------------------------------------------------------------------------------
+df_form_context_full <- dbGetQuery(conn = con, paste0("SELECT DISTINCT tc.sphere, tc.site, tc.id_sha1_form_group, tc.group, tc.name, tc.attr, tc.value, tc.text FROM tag_context tc WHERE tc.id_sha1_form_group IN (SELECT DISTINCT tc.id_sha1_form_group FROM tag_context tc WHERE tc.sphere LIKE '", SPHERE_FOR_SHEET, "' AND tc.name LIKE 'form' AND tc.value ~ '", COMMENTS_IN_TAGS,"') ORDER BY tc.site, tc.group")) %>% 
+  filter(attr != "action")
 
-df_form_context_full <- df_all_context_form_tags %>% 
-  filter(id_sha1_form_group %in% ids_to_look_at)
-  
+# df_form_context_full %>% select(id_sha1_form_group) %>% distinct() %>% nrow()
+
 # hashing all form tags with nested elements for better checking on changes  ------------------------------------------------------------------------------------------------------------------------
 
 df_hashed_forms <- df_form_context_full %>% 
-  select(crawl_date, site, sha1, id_sha1_form_group, parent_path_str, group, name, value, text, form_group) %>% 
-  # filter(sha1 == "000e2ca1dfa73ba2f57b64a8dd25701f3c68f49c") %>% 
-  # group_by(id_site_form_group) %>% 
-  mutate(hashed_forms = digest::sha1(c(parent_path_str, group, name, value, text, form_group), serialize = F),
-         sphere = SPHERE_FOR_SHEET) %>% 
-  ungroup() %>% 
-  select(sha1, id_sha1_form_group, hashed_forms, sphere) %>% 
-  distinct() #%>% View()
-
-df_hashed_forms %>% select(sha1) %>% distinct() %>% nrow()
-
-df_hashed_forms %>% select(hashed_forms) %>% distinct() %>% nrow()
+  select(id_sha1_form_group, name, attr, value, text) %>% 
+  reframe(hashed_forms = digest::sha1(c(name, attr, value, text), serialize = F), .by = id_sha1_form_group) %>% #,
+  mutate(sphere = SPHERE_FOR_SHEET,
+         sha1 = str_remove(id_sha1_form_group, "_\\d{1,}$"))
 
 # write new table of hashes to db ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-dbCreateTable(conn = con, name = "findings_hashed", fields = df_hashed_forms)
+# dbCreateTable(conn = con, name = "findings_hashed", fields = df_hashed_forms)
+dbWriteTable(conn = con, name = "findings_hashed", value = df_hashed_forms, append = TRUE)
 
-
+dbDisconnect(con)
 
   
