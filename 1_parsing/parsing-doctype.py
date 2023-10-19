@@ -8,9 +8,9 @@ import pathlib
 
 CURRENT_SPHERE = "Dutch"
 
-PATH_TO_FILES = "../data/0-preprocessing/" + CURRENT_SPHERE + "/"
+PATH_TO_FILES = "../data/0-preprocessing/" + CURRENT_SPHERE + "-2/"
 PATH_TO_SAVE_AT = "../data/1-parsing/doctype/" + CURRENT_SPHERE + "/"
-NAME_TO_SAVE = "doctype.csv"
+NAME_TO_SAVE = "doctype-2.csv"
 
 
 

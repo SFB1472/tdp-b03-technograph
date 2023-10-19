@@ -13,7 +13,7 @@ save_site <- function(x, pos){
     current <- tibble(...) %>% 
       select(sha1, filename, content)
     
-    save_name <- paste0("data/0-preprocessing/", CURRENT_SPHERE,"/", current$sha1, ".html")
+    save_name <- paste0("data/0-preprocessing/", CURRENT_SPHERE,"-2/", current$sha1, ".html")
     
     if(!file.exists(save_name)){
       write_file(current$content, save_name)

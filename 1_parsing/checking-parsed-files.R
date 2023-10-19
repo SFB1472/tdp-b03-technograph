@@ -12,22 +12,41 @@ source("config/config.R")
 
 # prepare form and script tag data for db ----------------------------------------------
 
-clean_form_script_tag_data <-  function(tag, sphere){
-  df_tags <- read_csv(paste0("data/1-parsing/tags/", sphere, "/", tag ,"-raw.csv")) %>% distinct()
+clean_form_script_tag_data <-  function(tag, sphere, export){
+  df_tags <- read_csv(paste0("data/1-parsing/tags/", sphere, "/", tag ,"-raw-", export,".csv")) %>% distinct()
   df_tags_checked <- df_tags %>% 
     filter(is.na(missing) | missing =="no tags found" | missing == "unvalid html site") %>% 
-    mutate(sphere = sphere)
+    mutate(sphere = sphere,
+           length_sha1 = nchar(site),
+           unwanted_chars = str_detect(site, "[\\\\.\\\\;\\\\-\\\\/\\\\_\\\\=\\\\-]")) %>% 
+    filter(length_sha1 == 40 | !unwanted_chars) %>% 
+    select(-length_sha1, -unwanted_chars) #%>% 
+    # distinct()
     
-  write_csv(df_tags_checked, paste0("data/1-parsing/tags/", sphere, "/", tag ,"-checked.csv"))
+  write_csv(df_tags_checked, paste0("data/1-parsing/tags/", sphere, "/", tag,"-checked-", export,".csv"))
 }
 
-clean_form_script_tag_data("form", "German")
-clean_form_script_tag_data("script", "German")
-clean_form_script_tag_data("form", "Dutch")
-clean_form_script_tag_data("script", "Dutch")
-clean_form_script_tag_data("form", "World")
-clean_form_script_tag_data("script", "World")
+clean_form_script_tag_data("form", "German","2")
+# df_form_de %>%
+#   filter(length_sha1 != 40 | unwanted_chars) %>% View()
 
+# df_script_de_2 <- 
+clean_form_script_tag_data("script", "German", "2")
+# df_script_de_2 %>% filter(length_sha1 != 40 | unwanted_chars) %>% View()
+clean_form_script_tag_data("form", "Dutch", "2")
+clean_form_script_tag_data("script", "Dutch", "2")
+clean_form_script_tag_data("form", "World", "2")
+clean_form_script_tag_data("script", "World", "2")
+
+clean_form_script_tag_data("form", "German","1")
+clean_form_script_tag_data("script", "German", "1")
+clean_form_script_tag_data("form", "Dutch", "1")
+clean_form_script_tag_data("script", "Dutch", "1")
+clean_form_script_tag_data("form", "World", "1")
+clean_form_script_tag_data("script", "World", "1")
+df_script_world %>% filter(length_sha1 != 40 | unwanted_chars) %>% View()
+
+nchar("4691bb4474f8c4c41e71e19e9e8b5592183b77609fe")
 
 ### keine probleme bei script-tags in german
 ### script dutch ca 580 fehlgeparste
@@ -37,12 +56,12 @@ clean_form_script_tag_data("script", "World")
 
 # prepare doctype data for db -------------------------------------------
 
-clean_doctype_data <- function(sphere){
+clean_doctype_data <- function(sphere, export){
 
-  df <- read_csv(paste0("data/1-parsing/doctype/", sphere, "/doctype.csv")) %>% distinct()
+  df <- read_csv(paste0("data/1-parsing/doctype/", sphere, "/doctype-", export, ".csv")) %>% distinct()
   df_cleaned <- df %>% 
     select(-`...1`) %>% 
-    rename("name" = "doctye") %>% 
+    rename("name" = "doctype") %>% 
     mutate(tag = "doctype",
            attr = NA,
            search_date = "2023-03-02",
@@ -50,13 +69,16 @@ clean_doctype_data <- function(sphere){
            missing = NA,
            sphere = sphere) %>% 
     select(site, tag, search_date, name, attr, group, missing, sphere)
-  write_csv(df_cleaned, paste0("data/1-parsing/tags/", sphere, "/doctype-checked.csv"))
+  write_csv(df_cleaned, paste0("data/1-parsing/tags/", sphere, "/doctype-checked-", export, ".csv"))
 }
 
-clean_doctype_data("German")
-clean_doctype_data("Dutch")
-clean_doctype_data("World")
+clean_doctype_data("German", "1")
+clean_doctype_data("Dutch", "1")
+clean_doctype_data("World", "1")
 
+clean_doctype_data("German", "2")
+clean_doctype_data("Dutch", "2")
+clean_doctype_data("World", "2")
 
 
 #### following rows only as reminder for maybe coming back to the early thoughts on embedded scripts in websites

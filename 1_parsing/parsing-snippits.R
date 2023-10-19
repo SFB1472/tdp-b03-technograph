@@ -8,7 +8,7 @@ source("config/config.R")
 future::plan(multisession)
 
 search_date <- lubridate::today()
-file_list <- list.files(paste0("data/0-preprocessing/", CURRENT_SPHERE, "/"))
+file_list <- list.files(paste0("data/0-preprocessing/", CURRENT_SPHERE, "-2/"))
 
 snippets_to_search_for <- read_csv("data/helper/23-01-13-Commenting-system-detection-patterns.csv") %>% 
   select("system" = `Commenting system`, "snippet" = Snippet) %>% 
@@ -18,7 +18,7 @@ df_snippet_detected <- future_walk(file_list, function(j){
   # print(j)
   # j = "349474870c5d6c02312506f702c5430c25f0e259.html"
   
-  site <- read_file(paste0("data/0-preprocessing/", CURRENT_SPHERE, "/", j))
+  site <- read_file(paste0("data/0-preprocessing/", CURRENT_SPHERE, "-2/", j))
   
   snippets <- map_df(snippets_to_search_for, function(i){
     # print(i)
@@ -33,12 +33,12 @@ df_snippet_detected <- future_walk(file_list, function(j){
 
   },.progress = TRUE)
 
-  write_csv(snippets, paste0("data/1-parsing/snippet-detection/", CURRENT_SPHERE,"/snippets.csv"), append = TRUE)
+  write_csv(snippets, paste0("data/1-parsing/snippet-detection/", CURRENT_SPHERE,"/snippets-2.csv"), append = TRUE)
 })
 
 #2d83cf0072d3868f5aa4e725d734f24861393483
 
-already_parsed_sites <- read_csv(paste0("data/1-parsing/snippet-detection/", CURRENT_SPHERE,"/snippets.csv"), col_select = c("site")) %>% #select(site) %>%
+already_parsed_sites <- read_csv(paste0("data/1-parsing/snippet-detection/", CURRENT_SPHERE,"/snippets-2.csv"), col_select = c("site")) %>% #select(site) %>%
   distinct() %>% mutate(site = paste0(site, ".html")) %>%  pull()
 
 file_list <- setdiff(file_list, already_parsed_sites)
