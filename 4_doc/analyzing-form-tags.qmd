@@ -1,7 +1,6 @@
 ---
 title: "Analyzing form tags"
 format: html
-
 ---
 
 ```{r echo=FALSE, message=FALSE, error=FALSE}
@@ -66,7 +65,7 @@ get_sites_per_day <- function(sphere){
 
 get_form_info <- function(sphere, tag){
   
-  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.group, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'", sphere, "' AND t.tag LIKE '", tag, "'")) %>% 
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.group, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "'")) %>% 
   group_by(crawl_date) %>% 
   summarise(nr_tags = n()) %>% 
   left_join(., get_sites_per_day(sphere)) %>% 
@@ -94,13 +93,11 @@ get_form_info <- function(sphere, tag){
 
 Damit User auf einer Website Kommentare schreiben können, sind Eingabefelder notwendig. In HTML-Seiten werden diese Eingegabefelder häufig über Formulare zur Verfügung gestellt, der entsprechende Tag dafür heißt `<form>`. Auf diese Weise können Kommentarmöglichkeiten in solchen Seiten gefunden werden, die direkt eine Kommentierung erlauben. Kommentarmöglichkeiten, die einen Klick entfernt sind, weil sie beispielsweise erst eine Anmeldung erfordern oder auf eigenen Kommentarseiten ausgelagert sind, werden durch diese Analyse nicht erfasst.
 
-
 ## Wie verbreitet sind die form-Tags?
 
 Der Datensatz ist sehr ungleich aufgebaut. Aus manchen Jahren bzw. Monaten gibt es sehr viele Seite, aus manchen kaum welche. Um aus der folgenden Grafik tatsächlich herauslesen zu können, wie verbreitet die Verwendung von form-tags ist, wurde der Wert normalisiert, heißt duch die Anzahl der verfügbaren Seiten geteilt.
 
 ::: panel-tabset
-
 ### German
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
@@ -130,7 +127,6 @@ get_form_info("World", "form") %>%
   geom_col()
 
 ```
-
 :::
 
 ## Zeitverlauf Seiten ohne form tags
@@ -143,11 +139,12 @@ Im Fall der deutschprachigen Websphere sind es tatsächlich nur zwei HTML-Seiten
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_german_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sha1, s.site FROM sites s WHERE s.sphere LIKE 'German'"))
-df_german_sites_with_form <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag FROM tags t WHERE t.tag LIKE 'form' AND t.sphere LIKE 'German'"))
+df_german_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sha1, s.site FROM sites s WHERE s.sphere = 'German'"))
+df_german_sites_with_form <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag FROM tags_2 t WHERE t.tag = 'form' AND t.sphere = 'German'"))
 
 df <- df_german_sites %>% 
-  left_join(., df_german_sites_with_form, by =c("sha1" = "site")) %>% filter(is.na(tag)) %>% 
+  left_join(., df_german_sites_with_form, by =c("sha1" = "site")) %>% 
+  filter(is.na(tag)) %>% 
   left_join(., df_domains_to_analyse ) %>% 
   filter(!is.na(Name)) 
 
@@ -168,10 +165,10 @@ df %>%
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_german_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sha1, s.site FROM sites s WHERE s.sphere LIKE 'Dutch'"))
+df_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sha1, s.site FROM sites s WHERE s.sphere LIKE 'Dutch'"))
 df_german_sites_with_form <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag FROM tags t WHERE t.tag LIKE 'form' AND t.sphere LIKE 'Dutch'"))
 
-df <- df_german_sites %>% 
+df <- df_sites %>% 
   left_join(., df_german_sites_with_form, by =c("sha1" = "site")) %>% filter(is.na(tag)) %>% 
   left_join(., df_domains_to_analyse ) %>% 
   filter(!is.na(Name)) 
@@ -213,8 +210,6 @@ df %>%
   geom_col()
 
 ```
-
-
 :::
 
 ## Welche Scripttypen werden über form tags aufgerufen?
@@ -228,7 +223,7 @@ Ob uns das in der Analyse zu den Kommentar(systemen) weiterhilft, kann ich noch 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
 get_form_attr_info <- function(sphere, tag, attr){
-  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sphere, t.attr, t.group FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'", sphere, "' AND t.tag LIKE '", tag, "' AND t.name LIKE '", attr, "'")) 
+  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sphere, t.attr, t.group FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere = '", sphere, "' AND t.tag = '", tag, "' AND t.name = '", attr, "'")) 
     
 }
 
@@ -260,7 +255,6 @@ df_form_world_actions <- get_form_attr_info("World", "form", "action") %>%
 ```
 
 ::: panel-tabset
-
 ### German
 
 ```{r message=FALSE, error=FALSE, warning=FALSE}
@@ -301,22 +295,25 @@ df_form_world_actions %>%
 
 
 ```
-
-
 :::
-
-
-
 
 ## Was sind diese vielen NAs?
 
-Die folgende Tabelle soll zeigen, wie die URLs aussehen, die in der oberen Grafik den Balken dunkel färben. Es sind zu viele Daten, um die Tabellen vollständig zu zeigen, deswegen werden nur die jeweils ersten 100 Zeilen angezeigt. 
+Die folgende Tabelle soll zeigen, wie die URLs aussehen, die in der oberen Grafik den Balken dunkel färben. Es sind zu viele Daten, um die Tabellen vollständig zu zeigen, deswegen werden nur die jeweils ersten 100 Zeilen angezeigt.
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+get_first_lines_of_NAs <- function(sphere_){
+  get_form_attr_info(sphere_, "form", "action") %>%
+  mutate(script_detected = re2_match(attr, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>%
+  filter(is.na(script_detected)) %>% select(crawl_date, "attr" = "name", "value" = "attr", group, site) %>% head(100)
+}
+
+```
+
 
 ::: panel-tabset
-
 ### German
-
-
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
@@ -338,12 +335,8 @@ Die folgende Tabelle soll zeigen, wie die URLs aussehen, die in der oberen Grafi
 
 # DT::datatable(df_form_tags_without_action)
 
-# 
-df_unfound_scripts_in_action <- get_form_attr_info("German", "form", "action") %>%
-  mutate(script_detected = re2_match(attr, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>%
-  filter(is.na(script_detected)) %>% select(crawl_date, "attr" = "name", "value" = "attr", group, site)
-
-DT::datatable(df_unfound_scripts_in_action %>% head(100))
+df_unfound_scripts_in_action <- get_first_lines_of_NAs("German")
+DT::datatable(df_unfound_scripts_in_action)
 
 ```
 
@@ -353,11 +346,9 @@ Im deutschen Datensatz haben `r df_unfound_scripts_in_action %>% nrow()` der for
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_unfound_scripts_in_action <- get_form_attr_info("Dutch", "form", "action") %>%
-  mutate(script_detected = re2_match(attr, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>%
-  filter(is.na(script_detected)) %>% select(crawl_date, "attr" = "name", "value" = "attr", group, site)
+df_unfound_scripts_in_action <- get_first_lines_of_NAs("Dutch")
 
-DT::datatable(df_unfound_scripts_in_action %>% head(100))
+DT::datatable(df_unfound_scripts_in_action)
 
 ```
 
@@ -367,17 +358,12 @@ Im niederländischen Datensatz haben `r df_unfound_scripts_in_action %>% nrow()`
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_unfound_scripts_in_action <- get_form_attr_info("World", "form", "action") %>%
-  mutate(script_detected = re2_match(attr, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>%
-  filter(is.na(script_detected)) %>% 
-  select(crawl_date, "attr" = "name", "value" = "attr", group, site)
+df_unfound_scripts_in_action <- get_first_lines_of_NAs("World")
+DT::datatable(df_unfound_scripts_in_action)
 
-
-DT::datatable(df_unfound_scripts_in_action%>% head(100))
 ```
 
 Im internationalen Datensatz haben `r df_unfound_scripts_in_action %>% nrow()` der form-tags keine URL mit script-Endung.
-
 :::
 
 ## Welche Seiten haben form tags mit Kommentarhinweisen?
@@ -388,63 +374,50 @@ Jetzt wird es konkret, hier wird innerhalb der form-tags nach generischen Wort(t
 
 get_form_with_comment <- function(sphere_, tag){
   # print(sphere_)
-  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, t.site as sha1, s.url, s.sphere, t.tag, s.site, t.name, t.attr, t.group, regexp_matches(t.attr, '", COMMENTS_IN_TAGS, "') as matches FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE '", sphere_, "' AND t.tag LIKE '", tag, "'"))%>%
+  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, t.site as sha1, s.url, s.sphere, t.tag, s.site, t.name, t.attr, t.group, regexp_matches(t.attr, '", COMMENTS_IN_TAGS, "') as matches FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere = '", sphere_, "' AND t.tag = '", tag, "' AND s.export = 2"))%>%
     mutate(year = year(crawl_date))
 }
-# 
-# SPHERE_FOR_SHEET <- "Dutch"
-# 
-# test <- get_form_with_comment(SPHERE_FOR_SHEET, "form")
-# df_current_sphere_with_comment <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%# View()
-#     group_by(year, site) %>% 
-#     summarise(counted = n()) %>% #View()
-#     left_join(., df_domains_to_analyse) %>% #View()
-#     filter(!is.na(Name), sphere == SPHERE_FOR_SHEET)
-# 
-# jenks_color_breaks <- getJenksBreaks(df_current_sphere_with_comment %>% select(counted) %>% pull(.), 4)
-# jenks_color_breaks <- c(jenks_color_breaks, 2) %>% sort(.)
 
+get_tags_printing <- function(sphere){
+  df_counted_attrs_with <- get_form_with_comment(sphere, "form") %>%
+  group_by(name) %>%
+  summarise(with_comments = n())
+
+  df_counted_attrs <- dbGetQuery(conn = con, paste0("SELECT t.name, COUNT(s.sha1) as counted_attrs FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere = '", sphere, "'AND t.tag = 'form' GROUP BY t.name"))
+  
+  df_counted_attrs %>%
+    left_join(., df_counted_attrs_with) %>% #View()
+    filter(counted_attrs > 100) %>%
+    arrange(desc(counted_attrs)) %>%
+    mutate(with_comments = ifelse(is.na(with_comments), 0, with_comments) %>% as.numeric(),
+      without_comments = (counted_attrs - with_comments) %>% as.numeric(),
+           order = row_number()) %>% #View()
+    pivot_longer(cols = "with_comments":"without_comments", names_to = "cat", values_to = "value") %>%
+    mutate(cat = ordered(cat, levels = c("without_comments", "with_comments"))) %>% 
+  ggplot(., aes(x = value, y = reorder(name, desc(order)), fill = cat, label = value)) +
+  geom_col() +
+  geom_text(position = "stack", hjust = 0, color = "black", family = typo_sfb_mono) +
+  scale_x_continuous(labels = label_number(), expand = c(0, NA)) +
+  coord_cartesian(clip = "off") +
+  theme_b03_base + theme_b03_legend_discrete
+}
+
+# SPHERE_FOR_SHEET <- "World"
 
 ## saving df for futher parsing
 # df_parsing_more_info <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>% select(sha1, sphere) %>% distinct()
-# write_csv(df_parsing_more_info, paste0("../data/2-analysing/", SPHERE_FOR_SHEET, "/sites-with-comment-traces-form-tags.csv"))
+# write_csv(df_parsing_more_info, paste0("../data/2-analysing/", SPHERE_FOR_SHEET, "/sites-with-comment-traces-form-tags-2.csv"))
 
 ```
 
 ## Welche Attribute kommen in den form-tags vor und wie hoch ist jeweils der Anteil an Kommentarhinweisen?
 
 ::: panel-tabset
-
 ### German
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.height=7.5}
 
-SPHERE_FOR_SHEET <- "German"
-# df_parsing_more_info <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>% select(sha1, sphere) %>% distinct()
-# write_csv(df_parsing_more_info, paste0("../data/2-analysing/", SPHERE_FOR_SHEET, "/sites-with-comment-traces-form-tags.csv"))
-
-df_counted_attrs_with <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%
-  group_by(name) %>%
-  summarise(with_comments = n())
-
-df_counted_attrs <- dbGetQuery(conn = con, paste0("SELECT t.name, COUNT(s.sha1) as counted_attrs FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE '", SPHERE_FOR_SHEET, "'AND t.tag LIKE 'form' GROUP BY t.name"))
-
-df_c <- df_counted_attrs %>%
-  left_join(., df_counted_attrs_with) %>% #View()
-  filter(counted_attrs > 100) %>%
-  arrange(desc(counted_attrs)) %>%
-  mutate(with_comments = ifelse(is.na(with_comments), 0, with_comments) %>% as.numeric(),
-    without_comments = (counted_attrs - with_comments) %>% as.numeric(),
-         order = row_number()) %>% #View()
-  pivot_longer(cols = "with_comments":"without_comments", names_to = "cat", values_to = "value") %>%
-  mutate(cat = ordered(cat, levels = c("without_comments", "with_comments"))) #%>%
-
-df_c %>% ggplot(., aes(x = value, y = reorder(name, desc(order)), fill = cat, label = value)) +
-  geom_col() +
-  geom_text(position = "stack", hjust = 0, color = "black", family = typo_sfb_mono) +
-  scale_x_continuous(labels = label_number(), expand = c(0, NA)) +
-  coord_cartesian(clip = "off") +
-  theme_b03_base + theme_b03_legend_discrete
+get_tags_printing("German") 
 
 ```
 
@@ -452,32 +425,7 @@ df_c %>% ggplot(., aes(x = value, y = reorder(name, desc(order)), fill = cat, la
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.height=7.5}
 
-SPHERE_FOR_SHEET <- "Dutch"
-# df_parsing_more_info <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>% select(sha1, sphere) %>% distinct()
-# write_csv(df_parsing_more_info, paste0("../data/2-analysing/", SPHERE_FOR_SHEET, "/sites-with-comment-traces-form-tags.csv"))
-
-df_counted_attrs_with <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%
-  group_by(name) %>%
-  summarise(with_comments = n())
-
-df_counted_attrs <- dbGetQuery(conn = con, paste0("SELECT t.name, COUNT(s.sha1) as counted_attrs FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE '", SPHERE_FOR_SHEET, "'AND t.tag LIKE 'form' GROUP BY t.name"))
-
-df_c <- df_counted_attrs %>%
-  left_join(., df_counted_attrs_with) %>% #View()
-  filter(counted_attrs > 100) %>%
-  arrange(desc(counted_attrs)) %>%
-  mutate(with_comments = ifelse(is.na(with_comments), 0, with_comments) %>% as.numeric(),
-    without_comments = (counted_attrs - with_comments) %>% as.numeric(),
-         order = row_number()) %>% #View()
-  pivot_longer(cols = "with_comments":"without_comments", names_to = "cat", values_to = "value") %>%
-  mutate(cat = ordered(cat, levels = c("without_comments", "with_comments"))) #%>%
-
-df_c %>% ggplot(., aes(x = value, y = reorder(name, desc(order)), fill = cat, label = value)) +
-  geom_col() +
-  geom_text(position = "stack", hjust = 0, color = "black", family = typo_sfb_mono) +
-  scale_x_continuous(labels = label_number(), expand = c(0, NA)) +
-  coord_cartesian(clip = "off") +
-  theme_b03_base + theme_b03_legend_discrete
+get_tags_printing("Dutch")
 
 ```
 
@@ -485,54 +433,21 @@ df_c %>% ggplot(., aes(x = value, y = reorder(name, desc(order)), fill = cat, la
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.height=7.5}
 
-SPHERE_FOR_SHEET <- "World"
-# df_parsing_more_info <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>% select(sha1, sphere) %>% distinct()
-# write_csv(df_parsing_more_info, paste0("../data/2-analysing/", SPHERE_FOR_SHEET, "/sites-with-comment-traces-form-tags.csv"))
-
-df_counted_attrs_with <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%
-  group_by(name) %>%
-  summarise(with_comments = n())
-
-df_counted_attrs <- dbGetQuery(conn = con, paste0("SELECT t.name, COUNT(s.sha1) as counted_attrs FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE '", SPHERE_FOR_SHEET, "'AND t.tag LIKE 'form' GROUP BY t.name"))
-
-df_c <- df_counted_attrs %>%
-  left_join(., df_counted_attrs_with) %>% #View()
-  filter(counted_attrs > 100) %>%
-  arrange(desc(counted_attrs)) %>%
-  mutate(with_comments = ifelse(is.na(with_comments), 0, with_comments) %>% as.numeric(),
-    without_comments = (counted_attrs - with_comments) %>% as.numeric(),
-         order = row_number()) %>% #View()
-  pivot_longer(cols = "with_comments":"without_comments", names_to = "cat", values_to = "value") %>%
-  mutate(cat = ordered(cat, levels = c("without_comments", "with_comments"))) #%>%
-
-df_c %>% ggplot(., aes(x = value, y = reorder(name, desc(order)), fill = cat, label = value)) +
-  geom_col() +
-  geom_text(position = "stack", hjust = 0, color = "black", family = typo_sfb_mono) +
-  scale_x_continuous(labels = label_number(), expand = c(0, NA)) +
-  coord_cartesian(clip = "off") +
-  theme_b03_base + theme_b03_legend_discrete
+get_tags_printing("World") 
 
 ```
-
-
 :::
 
 ### Wie viel wird gefunden
 
-::: panel-tabset
-
-### German
-
-
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-SPHERE_FOR_SHEET <- "German"
-
-df_current_sphere_with_comment <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%# View()
+get_print <-  function(sphere_){
+  df_current_sphere_with_comment <- get_form_with_comment(sphere_, "form") %>%# View()
     group_by(year, site) %>%
     summarise(counted = n()) %>% #View()
     left_join(., df_domains_to_analyse) %>% #View()
-    filter(!is.na(Name), sphere == SPHERE_FOR_SHEET)
+    filter(!is.na(Name), sphere == sphere_)
 
 jenks_color_breaks <- getJenksBreaks(df_current_sphere_with_comment %>% select(counted) %>% pull(.), 4)
 jenks_color_breaks <- c(jenks_color_breaks, 2) %>% sort(.)
@@ -542,89 +457,47 @@ df_current_sphere_with_comment %>%
                             breaks = jenks_color_breaks,
                             include.lowest = TRUE,
                             right = TRUE,
-                            ordered_result = FALSE)) %>% #View()
+                            ordered_result = FALSE)) %>% 
   ggplot(., aes(x = year, y = Name, fill = color_breaks, tooltip = paste0(counted, "\nsite: ", Name))) +
   geom_tile_interactive() +
   scale_fill_manual(values = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "traces of commenting possibilities" ) +
   theme_b03_base + theme_b03_heatmap + theme_b03_facets  + theme(plot.margin = margin(0, .4, 0, 0, "in")) +
-  guides(fill = guide_coloursteps(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines"))) #+
+  guides(fill = guide_coloursteps(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
+}
+
+```
 
 
+::: panel-tabset
+### German
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+get_print("German")  #+
 # ggiraph(ggobj = plot)
 
 ```
 
 ### Dutch
 
-
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-SPHERE_FOR_SHEET <- "Dutch"
-
-df_current_sphere_with_comment <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%# View()
-    group_by(year, site) %>%
-    summarise(counted = n()) %>% #View()
-    left_join(., df_domains_to_analyse) %>% #View()
-    filter(!is.na(Name), sphere == SPHERE_FOR_SHEET)
-
-jenks_color_breaks <- getJenksBreaks(df_current_sphere_with_comment %>% select(counted) %>% pull(.), 4)
-jenks_color_breaks <- c(jenks_color_breaks, 2) %>% sort(.)
-
-df_current_sphere_with_comment %>%
-  mutate(color_breaks = cut(counted,
-                            breaks = jenks_color_breaks,
-                            include.lowest = TRUE,
-                            right = TRUE,
-                            ordered_result = FALSE)) %>% #View()
-  ggplot(., aes(x = year, y = Name, fill = color_breaks, tooltip = paste0(counted, "\nsite: ", Name))) +
-  geom_tile_interactive() +
-  scale_fill_manual(values = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "traces of commenting possibilities" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets  + theme(plot.margin = margin(0, .4, 0, 0, "in")) +
-  guides(fill = guide_coloursteps(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines"))) #+
-
-
-# ggiraph(ggobj = plot)
+get_print("Dutch") 
 
 ```
 
-### International 
-
+### International
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-SPHERE_FOR_SHEET <- "World"
-
-df_current_sphere_with_comment <- get_form_with_comment(SPHERE_FOR_SHEET, "form") %>%# View()
-    group_by(year, site) %>%
-    summarise(counted = n()) %>% #View()
-    left_join(., df_domains_to_analyse) %>% #View()
-    filter(!is.na(Name), sphere == SPHERE_FOR_SHEET)
-
-jenks_color_breaks <- getJenksBreaks(df_current_sphere_with_comment %>% select(counted) %>% pull(.), 4)
-jenks_color_breaks <- c(jenks_color_breaks, 2) %>% sort(.)
-
-df_current_sphere_with_comment %>%
-  mutate(color_breaks = cut(counted,
-                            breaks = jenks_color_breaks,
-                            include.lowest = TRUE,
-                            right = TRUE,
-                            ordered_result = FALSE)) %>% #View()
-  ggplot(., aes(x = year, y = Name, fill = color_breaks, tooltip = paste0(counted, "\nsite: ", Name))) +
-  geom_tile_interactive() +
-  scale_fill_manual(values = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "traces of commenting possibilities" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets  + theme(plot.margin = margin(0, .4, 0, 0, "in")) +
-  guides(fill = guide_coloursteps(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines"))) #+
-
-
-# ggiraph(ggobj = plot)
+get_print("World")
 
 ```
-
 :::
 
-### Ist etwas da , ja oder nein?
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+### Ist etwas da , ja oder nein?
 
 # df_timespan_year <- seq(ymd("1996-01-01"), ymd("2021-06-01"), by = "year") %>% as_tibble()
 # 
@@ -643,38 +516,37 @@ df_current_sphere_with_comment %>%
 
 ### In welchen attributen wird etwas gefunden?
 
-::: panel-tabset
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+## wie oft werden in einem form-tag mehrere spuren gefunden?
 
+
+get_df <- function(sphere_){
+  df_all_form_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sphere, s.site, t.site as sha1, s.url, t.tag, t.name, t.attr, t.group FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'", sphere_, "' AND t.tag LIKE 'form'"))
+
+  df_form_comments <- get_form_with_comment(sphere_, "form")
+  
+  df_all_forms_with_finding <- df_all_form_tags %>%
+    left_join(., df_form_comments) %>%
+    mutate(found = ifelse(!is.na(matches), 1, NA)) %>%
+    group_by(sha1, group) %>%
+    arrange(found) %>%
+    fill(found) %>%
+    filter(!is.na(found)) %>%
+    ungroup() %>%
+    filter(!is.na(matches)) %>%
+    group_by(name) %>%
+    summarise(counted = n()) %>%
+    arrange(desc(counted))#%>% View()
+}
+```
+
+
+::: panel-tabset
 ### German
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-## wie oft werden in einem form-tag mehrere spuren gefunden?
-
-SPHERE_FOR_SHEET <- "German"
-
-# df_all_form_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sphere, s.site, t.site as sha1, s.url, t.tag, t.name, t.attr, t.group FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'", SPHERE_FOR_SHEET, "' AND t.tag LIKE 'form'")) 
-# 
-# df_form_comments <- get_form_with_comment(SPHERE_FOR_SHEET, "form")
-# 
-# df_all_forms_with_finding <- df_all_form_tags %>% 
-#   left_join(., df_form_comments) %>% 
-#   mutate(found = ifelse(!is.na(matches), 1, NA)) %>% 
-#   group_by(sha1, group) %>% 
-#   arrange(found) %>% 
-#   fill(found) %>% 
-#   filter(!is.na(found))
-# 
-# 
-# DT::datatable(
-#   df_all_forms_with_finding %>% 
-#     ungroup() %>% 
-#     filter(!is.na(matches)) %>% 
-#     group_by(name) %>% 
-#     summarise(counted = n()) %>% 
-#     arrange(desc(counted))#%>% View()
-# )
-
+DT::datatable(get_df("German"))
 
 ```
 
@@ -682,68 +554,17 @@ SPHERE_FOR_SHEET <- "German"
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-## wie oft werden in einem form-tag mehrere spuren gefunden?
-
-SPHERE_FOR_SHEET <- "Dutch"
-
-df_all_form_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sphere, s.site, t.site as sha1, s.url, t.tag, t.name, t.attr, t.group FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'", SPHERE_FOR_SHEET, "' AND t.tag LIKE 'form'"))
-
-df_form_comments <- get_form_with_comment(SPHERE_FOR_SHEET, "form")
-
-df_all_forms_with_finding <- df_all_form_tags %>%
-  left_join(., df_form_comments) %>%
-  mutate(found = ifelse(!is.na(matches), 1, NA)) %>%
-  group_by(sha1, group) %>%
-  arrange(found) %>%
-  fill(found) %>%
-  filter(!is.na(found))
-
-
-DT::datatable(
-  df_all_forms_with_finding %>%
-    ungroup() %>%
-    filter(!is.na(matches)) %>%
-    group_by(name) %>%
-    summarise(counted = n()) %>%
-    arrange(desc(counted))#%>% View()
-)
-
+DT::datatable(get_df("Dutch"))
 
 ```
 
-### International 
+### International
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-## wie oft werden in einem form-tag mehrere spuren gefunden?
-
-SPHERE_FOR_SHEET <- "World"
-
-df_all_form_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sphere, s.site, t.site as sha1, s.url, t.tag, t.name, t.attr, t.group FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'", SPHERE_FOR_SHEET, "' AND t.tag LIKE 'form'"))
-
-df_form_comments <- get_form_with_comment(SPHERE_FOR_SHEET, "form")
-
-df_all_forms_with_finding <- df_all_form_tags %>%
-  left_join(., df_form_comments) %>%
-  mutate(found = ifelse(!is.na(matches), 1, NA)) %>%
-  group_by(sha1, group) %>%
-  arrange(found) %>%
-  fill(found) %>%
-  filter(!is.na(found))
-
-
-DT::datatable(
-  df_all_forms_with_finding %>%
-    ungroup() %>%
-    filter(!is.na(matches)) %>%
-    group_by(name) %>%
-    summarise(counted = n()) %>%
-    arrange(desc(counted))#%>% View()
-)
-
+DT::datatable(get_df("World"))
 
 ```
-
 :::
 
 ## Überlappungen von form-tags und snippets found
@@ -784,7 +605,5 @@ Beispiel dafür ist die Süddeutsche: Bis Ende 2014 finden sich Spuren in den fo
 ## to do: parsing von form-children überlegen
 
 ```
-
-## Updates von form-tags zu Kommentarsystemen ...
 
 

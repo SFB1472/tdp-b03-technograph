@@ -2,7 +2,6 @@
 title: "Matching script files to html pages"
 ---
 
-
 ```{r echo=FALSE, message=FALSE, error=FALSE}
 library(tidyverse)
 library(lubridate)
@@ -52,33 +51,29 @@ df_script_csv_world <- read_csv(file = "../data/raw/World/js-file-information.cs
 
 ```
 
-
 ## Why analysing archived scripts?
 
-Die Datenlieferung umfasste unterschiedliche Tabellen, mit unterschiedlich archivierten Datentypen. Alle bisherige Analysen basieren auf den Tabellen, die die HTML-Seiten enthalten. Um die Einbettung der Kommentarsysteme besser verstehen zu können, ist aber noch eine andere Tabelle interessant. Nämlich diejenige, die archivierte javascript-Dateien enthält. 
+Die Datenlieferung umfasste unterschiedliche Tabellen, mit unterschiedlich archivierten Datentypen. Alle bisherige Analysen basieren auf den Tabellen, die die HTML-Seiten enthalten. Um die Einbettung der Kommentarsysteme besser verstehen zu können, ist aber noch eine andere Tabelle interessant. Nämlich diejenige, die archivierte javascript-Dateien enthält.
 
-Wären in dieser Tabelle alle Script-Dateien enthalten, die von den HTML-Seiten referenziert werden, wäre das für das Projekt eine große Bereicherung. 
+Wären in dieser Tabelle alle Script-Dateien enthalten, die von den HTML-Seiten referenziert werden, wäre das für das Projekt eine große Bereicherung.
 
 ## Umfang der jeweiligen archivierten Datentypen
 
-Für die letzte Spalte wurden nur solche Referenzen gezählt, die via `source`-Attribute eingebunden wurden. 
+Für die letzte Spalte wurden nur solche Referenzen gezählt, die via `source`-Attribute eingebunden wurden.
 
-|Sphere         | unique HTLM pages | unique script files | counted script references in HTML |
-|:--------------|------------------:| -------------------:|-------------------:|
-| German        | `r get_nr_unique_sites("German") %>% pull(count) %>% as.character(.)` | `r df_script_csv_de %>% select(sha1) %>% distinct() %>% nrow()` | `r get_nr_unique_script_tags("German") %>% nrow() %>% as.character()` |
-| Dutch         | `r get_nr_unique_sites("Dutch") %>% pull(count) %>% as.character(.)` | `r df_script_csv_nl %>% select(sha1) %>% distinct() %>% nrow()` | `r get_nr_unique_script_tags("Dutch") %>% nrow() %>% as.character()` |
-| International | `r get_nr_unique_sites("World") %>% pull(count) %>% as.character(.)` | `r df_script_csv_world %>% select(sha1) %>% distinct() %>% nrow()` | `r get_nr_unique_script_tags("World") %>% nrow() %>% as.character()` |
-
+| Sphere        |                                                     unique HTLM pages |                                                unique script files |                                     counted script references in HTML |
+|:----------------|-----------------:|------------------:|------------------:|
+| German        | `r get_nr_unique_sites("German") %>% pull(count) %>% as.character(.)` |    `r df_script_csv_de %>% select(sha1) %>% distinct() %>% nrow()` | `r get_nr_unique_script_tags("German") %>% nrow() %>% as.character()` |
+| Dutch         |  `r get_nr_unique_sites("Dutch") %>% pull(count) %>% as.character(.)` |    `r df_script_csv_nl %>% select(sha1) %>% distinct() %>% nrow()` |  `r get_nr_unique_script_tags("Dutch") %>% nrow() %>% as.character()` |
+| International |  `r get_nr_unique_sites("World") %>% pull(count) %>% as.character(.)` | `r df_script_csv_world %>% select(sha1) %>% distinct() %>% nrow()` |  `r get_nr_unique_script_tags("World") %>% nrow() %>% as.character()` |
 
 ## Umfang der übereinstimmenden Script-URLs
 
-Die nachfolgenden Tabellen zeigen, welche Script-Dateien archiviert wurden, die auch in den HTML-Seiten referenziert wurden. 
-Am Ende der Tabelle steht, wie viele Einträge sie insgesamt enthält. 
+Die nachfolgenden Tabellen zeigen, welche Script-Dateien archiviert wurden, die auch in den HTML-Seiten referenziert wurden. Am Ende der Tabelle steht, wie viele Einträge sie insgesamt enthält.
 
-In den Tabellen der archivierten javascript-Dateien sind die URLs der ursprünglichen Scripte enthalten. Diese Information kombiniert mit den URLs aus den `script`-tags der HTML-Dateien, gibt Auskunft über den Umfang der Überlappungen. 
+In den Tabellen der archivierten javascript-Dateien sind die URLs der ursprünglichen Scripte enthalten. Diese Information kombiniert mit den URLs aus den `script`-tags der HTML-Dateien, gibt Auskunft über den Umfang der Überlappungen.
 
 ::: panel-tabset
-
 ### German
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
@@ -114,7 +109,6 @@ DT::datatable(df_joined_scripts %>% filter(!is.na(sha1)) %>% select(attr) %>% di
 
 ```
 
-
 ### International
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
@@ -135,17 +129,15 @@ DT::datatable(df_joined_scripts %>% filter(!is.na(sha1)) %>% select(attr) %>% di
 
 
 ```
-
 :::
 
 ## Script URLs from HTML pages without matching from archived scripts
 
-Sind womöglich relative Pfadangaben schuld an der geringen Überlappung zwischen den Archiven? 
+Sind womöglich relative Pfadangaben schuld an der geringen Überlappung zwischen den Archiven?
 
 Hier wird gezählt wie viele absolute bzw. relative Pfadangaben aus den HTML-Seiten extrahiert wurden.
 
 ::: panel-tabset
-
 ### German
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
@@ -202,7 +194,4 @@ DT::datatable(df_joined_scripts %>% select(attr) %>% distinct() %>% #nrow()
   summarise(count = n()))
 
 ```
-
 :::
-
-

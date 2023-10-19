@@ -44,7 +44,6 @@ Unter der Annahme, dass für alle abgefragten Domains zu allen Zeitpunkten im ge
 
 Das wäre der Idealzustand, der Datensatz, der momentan vorliegt enthält auch Seiten, nach denen nicht gefragt wurde bzw fehlen auch solche, die eigentlich dabei sein könnten, weil zwar Archive angelegt wurden, aber nicht im Export enthalten sind.
 
-
 ## Struktur der Daten
 
 Im Forschungsprojekt liegen bereits Daten aus dem Internet Archive vor. Für eine möglichst breites Spektrum im Forschungsprozess wurden drei Webspheres definiert, die sich niederschlagen in drei unterschiedlichen Datensätzen. Hauptsächlich unterscheiden sie sich über die Sprache: englisch, deutsch und niederländisch. Der englischsprachige Datensatz umfasst internationale Newswebsites, so dass auch Entwicklungen außerhalb der westlichen Hemisphäre sichtbar werden können.
@@ -61,14 +60,13 @@ Für jede Websphere gibt es unterschiedliche Datensätze: - html-file-informatio
 
 -   plain-text-file-information.csv: erschließt sich nicht, was hier enthalten sein könnte.
 
-
 ## Abgedeckter Zeitraum der Daten
 
 Im Forschungsantrag steht beschrieben, dass der Zeitraum von 1996 bis heute (bzw. möglichst aktuell) untersucht wird. Die folgende Grafik zeigt, dass in dem ersten Datendump Aufzeichnungen erst ab 2007 starten und das auch nur für sehr wenige Domains. So richtig startet die Aufzeichnung erst 2008.
 
 ```{r message=FALSE, error=FALSE, echo=FALSE, warning=FALSE}
 
-df_sites <- dbGetQuery(conn = con, "SELECT * FROM sites") %>% 
+df_sites <- dbGetQuery(conn = con, "SELECT * FROM sites_first_export") %>% 
   mutate(year = ymd(crawl_date) %>% year(),
              site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
 
@@ -96,3 +94,43 @@ df_sites %>%
 
 ```
 
+## Zweiter Datensatz: wie viel Seiten sind hier mehr enthalten?
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df_sites_2th_export <- dbGetQuery(conn = con, "SELECT * FROM sites WHERE export = 2") %>% 
+  mutate(year = ymd(crawl_date) %>% year(),
+             site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
+
+
+df_sites_2th_export %>% 
+  group_by(year, sphere) %>% 
+  summarise(counted_sites = n()) %>% 
+  ungroup() %>% 
+  ggplot(., aes(x = year, y = sphere, fill = counted_sites)) +
+  geom_tile() +
+  scale_x_continuous(breaks = year_breaks_for_plotting, limits = c(min(year_breaks_for_plotting), max(year_breaks_for_plotting)), expand = c(0, NA), name = "crawl_year") +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+  scale_y_discrete(expand = c(0, NA)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) + theme_b03_base + theme_b03_heatmap + theme_b03_facets  + 
+  guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
+
+
+```
+
+## Um welche Uhrzeit wurden die jeweiligen Seiten gecrawlt?
+
+```{r}
+df_sites_timestamp <- dbGetQuery(conn = con, "SELECT s.crawl_timestamp, s.sha1, s.sphere FROM sites s") 
+
+df_sites_timestamp %>% 
+  mutate(hour = hour(crawl_timestamp)) %>% 
+  reframe(., counted = n(), .by = c(hour,sphere)) %>%
+  ggplot(., aes(x = hour, y = sphere, fill = counted)) +
+  geom_tile() +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+  scale_y_discrete(expand = c(0, NA)) +
+  theme(axis.text.x = element_text( hjust = 1)) + theme_b03_base + theme_b03_heatmap + theme_b03_facets  + 
+  guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
+
+```

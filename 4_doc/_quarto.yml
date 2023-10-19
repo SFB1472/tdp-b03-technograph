@@ -13,21 +13,24 @@ website:
             file: datengrundlage.qmd
           - text: "Data cleaning"
             file: data-cleaning.qmd
+          - text: "Data cleaning - second export"
+            file: data-cleaning-2.qmd
           - text: "Matching scripts files to html pages"
             file: script-files-to-html-pages.qmd
       - section: "Parsing: How to find commenting possibilities in HTML?"
         contents:
           - text: "Different approaches how to interpret HTML"
             file: approaches.qmd
-          - text: "Learning about infrastructure: Analysing doctype"
+          - text: "Learning about infrastructure: Analyzing doctype"
             file: analyzing-doctypes.qmd
-          - text: "Analysing form tags"
+          - text: "Analyzing form tags"
             file: analyzing-form-tags.qmd
-       - section: "Analyzing"
-        contents: 
           - text: "Context of form tags"
             file: form-context.qmd
-
+          - text: "Analyzing script tags"
+            file: analyzing-script-tags.qmd
+          - text: "Analyzing iframes"
+            file: analyzing-iframes.qmd
 
 format:
   html:

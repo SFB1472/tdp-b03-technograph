@@ -1,0 +1,563 @@
+```{r echo=FALSE, message=FALSE, error=FALSE}
+library(tidyverse)
+library(lubridate)
+library(urltools)
+library(MetBrewer)
+library(urltools)
+library(DBI)
+library(RPostgres)
+library(re2)
+library(ggiraph)
+library(googlesheets4)
+library(dbx)
+
+gs4_auth(cache=".secrets")
+
+extrafont::loadfonts(quiet = TRUE)
+
+source("../config/config-secret.R")
+source("../config/config.R")
+source("../config/config-graphic.R")
+
+con <- dbConnect(RPostgres::Postgres(),
+                 dbname = dsn_database,
+                 host = dsn_hostname,
+                 port = dsn_port,
+                 user = dsn_uid,
+                 password = dsn_pwd
+)
+
+```
+
+# Zweiter Datenexport
+
+Die "Rohdaten" für das Projekt werden vom Internet Archive zur Verfügung gestellt. Sie stehen via ARCH-Portal zum download zur Verfügung. Nach einer definierten sampling-Methode (to do: link einfügen), extrahiert das Archive in Person von Helge Holzmann für uns aus den archivierten WARC-Files die CSV-Dateien, die die Rohdaten für die Analyse sind. Bei der Extraktion gab es aber einen Fehler, was u.a. dazu führte, dass in den CSV-Daten erst Websites ab 2008 enthalten waren. Der Fehler wurde gefixt, die CSV-Dateien sind jetzt umfangreicher.
+
+## Messiness of the data
+
+Wieviel messiness steckt in der zweiten Lieferung?
+
+Als nächstes folgt eine kurze Analyse zu den mehrfach vorkommenden HTML-Seiten, auch deshalb um daraus Schlüsse für die Datenverarbeitung zu ziehen. Was für Seiten sind das?
+
+```{r echo=FALSE, message=FALSE, error=FALSE}
+
+
+
+get_messy_sites <- function(sphere){
+  df_sites_messy <- read_csv(paste0("../data/raw/", sphere, "/2nd/html-file-information.csv"), col_select = c("crawl_date", "url", "sha1", "md5"), col_types = c("c", "c", "c", "c")) %>%  
+    mutate(year = ymd_hms(crawl_date) %>% year(),
+               site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
+  
+  file_list <- list.files(paste0("../data/0-preprocessing/", sphere, "/")) %>% 
+    enframe() %>% 
+    mutate(sha1 = str_remove(value, ".html"))
+  
+  df_sites_messy %>% filter(!sha1 %in% file_list$sha1) %>% select(sha1) %>% distinct() %>% nrow()
+  
+  df_sites_messy_ <- df_sites_messy %>% 
+    filter(!sha1 %in% file_list$sha1) %>% #select(sha1) %>% distinct()
+    mutate(site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.),
+           site = ifelse(re2_detect(url, SUBDOMAINS_TO_INKLUDE), re2_match(url, SUBDOMAINS_TO_INKLUDE), site)
+           ) %>% 
+    group_by(crawl_date, sha1) %>% 
+    mutate(same_content_day = row_number()) %>% #View()
+    ungroup() %>% 
+    group_by(sha1) %>% 
+    mutate(same_content = row_number()) %>% 
+    ungroup() %>% 
+    group_by(site, sha1) %>% 
+    mutate(same_domain = row_number()) %>% 
+    ungroup() 
+}
+
+# write_csv(df_sites_messy_, paste0("../data/raw/", sphere, "/2nd/diff.csv"))
+
+
+
+# duplicated_html_files <- df_sites_messy_counted %>% filter(counted_sha1 > 1) %>% ungroup() %>% select(sha1) %>% pull(.)
+
+
+```
+
+::: panel-tabset
+### German
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+sphere <- "German"
+df_messy_sites_de <- get_messy_sites(sphere)
+df_sites_messy_counted_de <- df_messy_sites_de %>% 
+  group_by(sha1) %>% 
+  summarise(counted_sha1 = n()) %>% 
+  filter(counted_sha1 > 1)
+```
+
+Insgesamt `r df_sites_messy_counted_de %>% nrow()`-html-Seiten sind in dem Datensatz mehrfach vorhanden. Diese HTML-Seiten sind verantwortlich für `r df_sites_messy_counted_de %>% summarise(sum = sum(counted_sha1)) %>% pull(.)` Dateneinträge.
+
+### Dutch
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+sphere <- "Dutch"
+
+df_messy_sites_nl <- get_messy_sites(sphere)
+df_sites_messy_counted_nl <- df_messy_sites_nl %>% 
+  group_by(sha1) %>% 
+  summarise(counted_sha1 = n()) %>% 
+  filter(counted_sha1 > 1)
+```
+
+Insgesamt `r df_sites_messy_counted_nl %>% nrow()`-html-Seiten sind in dem Datensatz mehrfach vorhanden. Diese HTML-Seiten sind verantwortlich für `r df_sites_messy_counted_nl %>% summarise(sum = sum(counted_sha1)) %>% pull(.)` Dateneinträge.
+
+### International
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+sphere <- "World"
+df_messy_sites_world <- get_messy_sites(sphere)
+
+df_sites_messy_counted_world <- df_messy_sites_world %>% 
+  group_by(sha1) %>% 
+  summarise(counted_sha1 = n()) %>% 
+  filter(counted_sha1 > 1)
+
+```
+
+Insgesamt `r df_sites_messy_counted_world %>% nrow()`-html-Seiten sind in dem Datensatz mehrfach vorhanden. Diese HTML-Seiten sind verantwortlich für `r df_sites_messy_counted_world %>% summarise(sum = sum(counted_sha1)) %>% pull(.)` Dateneinträge.
+:::
+
+Die messiness der Daten liegt darin, dass manche Seiten über mehrere Tage hinweg immer wieder auftauchen. Aber nicht nur das ist messy.
+
+## More than expected
+
+Als Forschungsprojekt wollten wir Artikelseiten der jeweils Top50-Newswebsites pro Websphere bekommen. In der `csv`-Datei sind aber auch HTML-Dateien von ganz anderen Domains enthalten. Die nachfolgende Tabelle zeigt von welchen Domains/Websiten wir HTML-Seiten haben, die mehrfach vorkommen.
+
+In dieser Tabelle kommen zwei Datensätze zusammen: zum einen der analysierte `csv`-Datei, zum anderen die Top50-Listen aus dem Google-Doc. Immer dann, wenn in der unten stehenden Tabelle in der Spalte `Name` kein Wert enthalten ist, ist diese Site nicht in den Top50-Listen aufgeführt.
+
+Die Tabelle wird angeführt von einem Hash, dem keine Domain/Seite zugeordnet ist. Das liegt daran, dass hier für 4422 Seiten kein HTML-Code gespeichert wurde. Die Zeilen sind in der gelieferten `csv`-Datei leer.
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+
+get_domains_to_analyse <- function(sphere){
+  gs_domain_to_look <- read_sheet(SPREADSHEET_PATH_GENERELL, sheet = SPREADSHEET_PATH_DOMAINS[[{{sphere}}]]) %>% 
+  select(Name, URL) %>% 
+  mutate(site = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.),
+         site = ifelse(re2_detect(URL, SUBDOMAINS_TO_INKLUDE), re2_match(URL, SUBDOMAINS_TO_INKLUDE), site)
+          ) 
+
+}
+
+df_domains_to_analyse <- get_domains_to_analyse("German") %>% 
+  mutate(sphere = "German") %>% 
+  bind_rows(., get_domains_to_analyse("Dutch")) %>% 
+  mutate(sphere = ifelse(is.na(sphere), "Dutch", sphere)) %>% 
+  bind_rows(., get_domains_to_analyse("World")) %>% 
+  mutate(sphere = ifelse(is.na(sphere), "World", sphere))# %>% 
+
+
+```
+
+::: panel-tabset
+### German
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df_check_type_duplicate_de <- df_messy_sites_de %>% 
+  group_by(sha1) %>% 
+  summarise(duplicated_overall = max(same_content), duplicated_over_domains = max(same_domain), site = max(site)) %>% 
+  ungroup() %>% 
+  left_join(., df_domains_to_analyse, by = "site")
+
+DT::datatable(df_check_type_duplicate_de %>% filter(duplicated_over_domains > 1) %>% arrange(desc(duplicated_over_domains)) %>% select(sha1, "duplicated" = "duplicated_overall", site, Name))
+
+```
+
+### Dutch
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df_check_type_duplicate_nl <- df_messy_sites_nl %>% 
+  group_by(sha1) %>% 
+  summarise(duplicated_overall = max(same_content), duplicated_over_domains = max(same_domain), site = max(site)) %>% 
+  ungroup() %>% 
+  left_join(., df_domains_to_analyse, by = "site")
+
+DT::datatable(df_check_type_duplicate_nl %>% filter(duplicated_over_domains > 1) %>% arrange(desc(duplicated_over_domains)) %>% select(sha1, "duplicated" = "duplicated_overall", site, Name))
+
+```
+
+### World
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df_check_type_duplicate_world <- df_messy_sites_world %>% 
+  group_by(sha1) %>% 
+  summarise(duplicated_overall = max(same_content), duplicated_over_domains = max(same_domain), site = max(site)) %>% 
+  ungroup() %>% 
+  left_join(., df_domains_to_analyse, by = "site")
+
+DT::datatable(df_check_type_duplicate_world %>% filter(duplicated_over_domains > 1) %>% arrange(desc(duplicated_over_domains)) %>% select(sha1, "duplicated" = "duplicated_overall", site, Name))
+
+```
+:::
+
+## Decision for cleaning the data dump
+
+### HTML-Seiten von Domains außerhalb der Top-Listen
+
+:::panel-tabset
+
+### German
+
+Es sind `r df_check_type_duplicate_de %>% filter(is.na(Name), duplicated_over_domains > 2) %>% nrow()` Seiten, die sowohl mehrfach vorkommen, als auch deren Domains nicht uns definiert wurden, als eine von Top50 in ihrer Websphere. HTML-Seiten mit Hashes aus dieser Liste sollten sichere Kandidaten für einen Ausschluss aus der weiteren Analyse sein.
+
+Diese HTML-Seiten wurden `r df_check_type_duplicate_de %>% filter(is.na(Name), duplicated_over_domains > 2) %>% summarise(sum = sum(duplicated_over_domains)) %>% pull(.)` mal archiviert.
+
+### Dutch
+
+Es sind `r df_check_type_duplicate_nl %>% filter(is.na(Name), duplicated_over_domains > 2) %>% nrow()` Seiten, die sowohl mehrfach vorkommen, als auch deren Domains nicht uns definiert wurden, als eine von Top50 in ihrer Websphere. HTML-Seiten mit Hashes aus dieser Liste sollten sichere Kandidaten für einen Ausschluss aus der weiteren Analyse sein.
+
+Diese HTML-Seiten wurden `r df_check_type_duplicate_nl %>% filter(is.na(Name), duplicated_over_domains > 2) %>% summarise(sum = sum(duplicated_over_domains)) %>% pull(.)` mal archiviert.
+
+### International
+
+Es sind `r df_check_type_duplicate_world %>% filter(is.na(Name), duplicated_over_domains > 2) %>% nrow()` Seiten, die sowohl mehrfach vorkommen, als auch deren Domains nicht uns definiert wurden, als eine von Top50 in ihrer Websphere. HTML-Seiten mit Hashes aus dieser Liste sollten sichere Kandidaten für einen Ausschluss aus der weiteren Analyse sein.
+
+Diese HTML-Seiten wurden `r df_check_type_duplicate_world %>% filter(is.na(Name), duplicated_over_domains > 2) %>% summarise(sum = sum(duplicated_over_domains)) %>% pull(.)` mal archiviert.
+
+:::
+
+### HTML-Seiten von Domains auf den Top-Listen
+
+Zu diskutieren wäre, inwiefern mehrfach vorkommende HTML-Seiten von erwünschten Websites berücksichtigt werden sollten. Dabei gibt es zwei mögliche Fälle:
+
+1.  es handelt sich um eine Seite, die für die Beantwortung der Forschungsfrage relevant ist, nämlich eine Artikelseite, die Spuren auf ein potentielles Kommentarsystem enthalten könnte. In diesem Fall die Seite nur zu dem frühesten genannten Datum relevant. Denn der `sha1`-Hash bürgt dafür, dass an der Seite keinerlei Veränderung vorgenommen wurde, weshalb alle späteren Zeitpunkte keine neue Erkenntnis bringen. Solche Seiten als stabile Seiten über die Zeit zu betrachten, könnte eine wertvolle Perspektive sein, um selbstbewusster argumentieren zu können, dass es keine Veränderung gab. Für eine sinnvolle Analyse hierzu sind es allerdings zu wenige Doppelungen. Der nächste Fall ist der häufiger vorkommende.
+
+2.  es handelt sich um eine Art Fehlerseite, die nur für die Website auftritt. Beispielsweise ist eine Seite der Süddeutschen Zeitung 15 mal in dem Datensatz enthalten. Hier versuchte das Archive auf Seiten aus dem Reiter "Zeitung" auf sz.de zuzugreifen, das ging schief, weil man dafür eingeloggt sein muss. Diese Seiten sind zur Beantwortung der Forschungsfrage völlig irrelevant.
+
+::: panel-tabset
+
+### German
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+DT::datatable(df_check_type_duplicate_de %>% 
+                filter(is.na(Name), duplicated_over_domains > 2) %>% 
+                select(-Name, -URL, site, "duplicated" = duplicated_overall, -duplicated_over_domains, sha1) %>% 
+                group_by(site) %>% 
+                summarise(counted_site = sum(duplicated)) %>% 
+                arrange(desc(counted_site))
+              )
+```
+
+### Dutch
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+DT::datatable(df_check_type_duplicate_nl %>% 
+                filter(is.na(Name), duplicated_over_domains > 2) %>% 
+                select(-Name, -URL, site, "duplicated" = duplicated_overall, -duplicated_over_domains, sha1) %>% 
+                group_by(site) %>% 
+                summarise(counted_site = sum(duplicated)) %>% 
+                arrange(desc(counted_site))
+              )
+```
+
+### World
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+DT::datatable(df_check_type_duplicate_world %>% 
+                filter(is.na(Name), duplicated_over_domains > 2) %>% 
+                select(-Name, -URL, site, "duplicated" = duplicated_overall, -duplicated_over_domains, sha1) %>% 
+                group_by(site) %>% 
+                summarise(counted_site = sum(duplicated)) %>% 
+                arrange(desc(counted_site))
+              )
+```
+:::
+
+#### Datenverteilung
+
+Die Grafik zeigt die Quantitäten der Duplikate: am häufigsten kommen HTML-Seiten zweimal vor. Dann nimmt es rapide ab. Stichproben haben ergeben, dass Duplikate von drei oder mehr Vorkommen auf Fehlerseiten hindeuten oder Seiten, die nur nach Eingabe eines Passwortes angesehen werden können.
+
+::: panel-tabset
+##### German
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+ plot <- df_check_type_duplicate_de %>% 
+  filter(duplicated_overall > 1, !is.na(Name)) %>%
+  group_by(duplicated_overall) %>% 
+  summarise(count = n()) %>% 
+  ggplot(., aes(x = duplicated_overall, y = count, tooltip = paste0(duplicated_overall, "fach duplizierte Seite, kommt so häufig vor: ", count),label = count))+
+  geom_point_interactive()
+
+ ggiraph(ggobj = plot)
+ 
+```
+
+##### Dutch
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+ plot <- df_check_type_duplicate_nl %>% 
+  filter(duplicated_overall > 1, !is.na(Name)) %>%
+  group_by(duplicated_overall) %>% 
+  summarise(count = n()) %>% 
+  ggplot(., aes(x = duplicated_overall, y = count, tooltip = paste0(duplicated_overall, "fach duplizierte Seite, kommt so häufig vor: ", count),label = count))+
+  geom_point_interactive()
+
+ ggiraph(ggobj = plot)
+ 
+```
+
+##### International
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+ plot <- df_check_type_duplicate_world %>% 
+  filter(duplicated_overall > 1, !is.na(Name)) %>%
+  group_by(duplicated_overall) %>% 
+  summarise(count = n()) %>% 
+  ggplot(., aes(x = duplicated_overall, y = count, tooltip = paste0(duplicated_overall, "fach duplizierte Seite, kommt so häufig vor: ", count),label = count))+
+  geom_point_interactive()
+
+ ggiraph(ggobj = plot)
+ 
+```
+:::
+
+## Schlussfolgerung
+
+Es werden HTML-Seiten aus der Analyse ausgeschlossen, wenn:
+
+1)  sie mehrfach im Datensatz vorhanden sind und die Domain **nicht** über die Top-Listen definiert wurde.
+
+2)  die Domain einer solchen Seite zwar über eine der Top-Listen definiert ist, sie aber dreimal oder öfter in dem Datensatz enthalten ist.
+
+3)  kommt eine HTML-Seite zweimal vor und die Domain ist über die Top-Liste genannt, wird die jüngere gedoppelte Seite ausgeschlossen.
+
+::: panel-tabset
+### German
+
+zu 1) Das betrifft `r df_check_type_duplicate_de %>% filter(duplicated_overall > 1, is.na(Name)) %>% nrow()` Seiten und `r df_check_type_duplicate_de %>% filter(duplicated_overall > 1, is.na(Name)) %>% summarise(sum=sum(duplicated_overall)) %>% pull()` Datensätze.
+
+zu 2) Das betrifft `r df_check_type_duplicate_de %>% filter(duplicated_overall > 2, !is.na(Name)) %>% nrow()` und `r df_check_type_duplicate_de %>% filter(duplicated_overall > 2, !is.na(Name)) %>% summarise(sum=sum(duplicated_overall))` Datensätze
+
+zu 3) Das betrifft die 2249 Datensätze (in der Grafik zu sehen), von denen bleibt die Hälfte übrig.
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+# sphere_ <- "German"
+# 
+# ## Updating site information from first export
+# 
+# df_sites <- dbGetQuery(conn = con, "SELECT * FROM sites") 
+# 
+# df_sites_local_de <- read_csv(paste0("../data/raw/", sphere_, "/2nd/html-file-information.csv"), col_select = c("crawl_date", "url", "sha1", "md5"), col_types = c("c", "c", "c", "c")) %>%  
+#     mutate(crawl_timestamp = ymd_hms(crawl_date),
+#            crawl_date = as_date(crawl_timestamp))
+# 
+# df_sites_de_remote_update <- df_sites %>% 
+#   filter(sphere == sphere_) %>% 
+#   left_join(., df_sites_local_de) %>% 
+#   mutate(export = 1) %>% 
+#   select(-md5)
+# 
+# dbxUpdate(con, "sites", df_sites_de_remote_update, where_cols = c("archive_id", "crawl_date", "sha1", "url", "sphere", "site"))
+# 
+# # df_sites_update <- dbGetQuery(conn = con, "SELECT * FROM sites WHERE sphere='German'") 
+# # rm(df_sites_update)
+# 
+# ## cleaning data and writing it into a new table in the database
+# 
+# vec_undefined_domain_duplicates_de <- df_check_type_duplicate_de %>% filter(duplicated_overall > 1, is.na(Name)) %>% select(sha1) %>% pull(.)# %>% shQuote(.) %>% toString(.) #%>% clipr::write_clip()
+# 
+# save(vec_undefined_domain_duplicates_de, file = "../data/2-analysing/German/vec_undefined_domain_duplicates_de.RData")
+# 
+# 
+# vec_wanted_domains_duplicated_de_3 <- df_check_type_duplicate_de %>% filter(duplicated_overall > 2, !is.na(Name))%>% select(sha1) %>% pull(.)             
+# 
+# id_offset_de <- df_sites_de_remote_update %>% 
+#   select(archive_id) %>% 
+#   mutate(offset = str_remove(archive_id, paste0(sphere_, "_")) %>% as.numeric(.)) %>% 
+#   arrange(desc(offset)) %>% head(1) %>% pull(offset)
+# 
+# duplicated_sites_de <- c("b562b4b17367e051f587ba2e22afe2252d7fe62b", "364784fe426731f5fad006b9890f71299c61861b")
+# 
+# df_sites_cleaned_de <- df_messy_sites_de %>% 
+#   filter(!sha1 %in% vec_undefined_domain_duplicates_de, !sha1 %in% vec_wanted_domains_duplicated_de_3, !sha1 %in% duplicated_sites_de) %>% 
+#   mutate(
+#     crawl_timestamp = ymd_hms(crawl_date),
+#     crawl_date = as_date(crawl_timestamp),
+#     export = 2
+#          ) %>% # head(10) %>% View()
+#   arrange(crawl_timestamp) %>% 
+#   group_by(sha1) %>% 
+#   mutate(duplicates = row_number(),
+#          sphere = sphere_) %>% 
+#   filter(duplicates == 1) %>% 
+#   ungroup() %>% 
+#   group_by(sphere) %>% 
+#   arrange(crawl_date) %>% 
+#   mutate(archive_id = paste0(sphere_,"_", (row_number()+id_offset_de))) %>% 
+#   ungroup() %>% 
+#   select(archive_id, crawl_date, sha1, url, site, sphere, crawl_timestamp, export)
+#        
+# dbAppendTable(conn = con, name =  "sites", value = df_sites_cleaned_de)
+                                                               
+```
+
+### Dutch
+
+zu 1) Das betrifft `r df_check_type_duplicate_nl %>% filter(duplicated_overall > 1, is.na(Name)) %>% nrow()` Seiten und `r df_check_type_duplicate_nl %>% filter(duplicated_overall > 1, is.na(Name)) %>% summarise(sum=sum(duplicated_overall)) %>% pull()` Datensätze.
+
+zu 2) Das betrifft `r df_check_type_duplicate_nl %>% filter(duplicated_overall > 2, !is.na(Name)) %>% nrow()` und `r df_check_type_duplicate_nl %>% filter(duplicated_overall > 2, !is.na(Name)) %>% summarise(sum=sum(duplicated_overall))` Datensätze
+
+zu 3) Das betrifft die 2249 Datensätze (in der Grafik zu sehen), von denen bleibt die Hälfte übrig.
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+# sphere_ <- "Dutch"
+# 
+# ## Updating site information from first export
+# 
+# # df_sites <- dbGetQuery(conn = con, "SELECT * FROM sites") 
+# 
+# df_sites_local_nl <- read_csv(paste0("../data/raw/", sphere_, "/2nd/html-file-information.csv"), col_select = c("crawl_date", "url", "sha1", "md5"), col_types = c("c", "c", "c", "c")) %>%  
+#     mutate(crawl_timestamp = ymd_hms(crawl_date),
+#            crawl_date = as_date(crawl_timestamp))
+# 
+# df_sites_nl_remote_update <- df_sites %>% 
+#   filter(sphere == sphere_) %>% 
+#   left_join(., df_sites_local_nl) %>% 
+#   mutate(export = 1) %>% 
+#   select(-md5)
+# 
+# dbxUpdate(con, "sites", df_sites_nl_remote_update, where_cols = c("archive_id", "crawl_date", "sha1", "url", "sphere"))
+# 
+# 
+# 
+# ## cleaning data and writing it into a new table in the database
+# 
+# vec_undefined_domain_duplicates_nl <- df_check_type_duplicate_nl %>% filter(duplicated_overall > 1, is.na(Name)) %>% select(sha1) %>% pull(.)# %>% shQuote(.) %>% toString(.) #%>% clipr::write_clip()
+# 
+# save(vec_undefined_domain_duplicates_nl, file = "../data/2-analysing/World/vec_undefined_domain_duplicates_nl.RData")
+# 
+# 
+# vec_wanted_domains_duplicated_3_nl <- df_check_type_duplicate_nl %>% filter(duplicated_overall > 2, !is.na(Name))%>% select(sha1) %>% pull(.)             
+# 
+# id_offset_nl <- df_sites_nl_remote_update %>% 
+#   select(archive_id) %>% 
+#   mutate(offset = str_remove(archive_id, paste0(sphere_, "_")) %>% as.numeric(.)) %>% 
+#   arrange(desc(offset)) %>% head(1) %>% pull(offset)
+
+duplicated_sites_nl <- c("43965511c96addd59e8fa0bfc1c838b2d4fd731b", "a5bb55542c86a2daff93a2b9cad926caf2427109", "db7ac7c2f14166ccb1e9ae0d9f6ca8e2533a3878", "f4430e01ae23dcd2412521d0bc668cf64494e4df", "3e148ce4f6d39f3e05d1b269905e8d38fc2e1a48", "af2f10b67884a01183bef17542b2977bf3848d0a", "1c94109ddf58444103915bf18419274002bd7484", "4b5d8403147983f5409ea60bdd871f941cf38fec", "ba7d87430f055b14ba8413769ed05b1db9fcd66b", "9c9a6538b19901be014a376d33dff96dcca94187", "cdd62252a8c1f85b76f5ee25b32ba9410f697cba", "e95f1a7aa866253018b56b18a8eae578bf019ad5", "fb1f65fff8857228b3d0995d5a3fd6a64634ef5d", "008fc65b5f32ef050e135e3dfc207073c9252473")
+
+# df_sites_cleaned_nl <- df_messy_sites_nl %>% 
+#   filter(!sha1 %in% vec_undefined_domain_duplicates_nl, !sha1 %in% vec_wanted_domains_duplicated_3_nl, !sha1 %in% duplicated_sites_nl) %>% 
+#   mutate(
+#     crawl_timestamp = ymd_hms(crawl_date),
+#     crawl_date = as_date(crawl_timestamp),
+#     export = 2) %>% 
+#   arrange(crawl_timestamp) %>% 
+#   group_by(sha1) %>% 
+#   mutate(duplicates = row_number(),
+#          sphere = sphere_) %>% 
+#   filter(duplicates == 1) %>% 
+#   ungroup() %>% 
+#   group_by(sphere) %>% 
+#   arrange(crawl_date) %>% 
+#   mutate(archive_id = paste0(sphere_,"_", (row_number()+id_offset_nl))) %>% 
+#   ungroup() %>% 
+#   select(archive_id, crawl_date, sha1, url, site, sphere, crawl_timestamp, export)
+       
+# dbAppendTable(conn = con, name =  "sites", value = df_sites_cleaned_nl)
+                                                               
+```
+
+### World
+
+zu 1) Das betrifft `r df_check_type_duplicate_world %>% filter(duplicated_overall > 1, is.na(Name)) %>% nrow()` Seiten und `r df_check_type_duplicate_world %>% filter(duplicated_overall > 1, is.na(Name)) %>% summarise(sum=sum(duplicated_overall)) %>% pull()` Datensätze.
+
+zu 2) Das betrifft `r df_check_type_duplicate_world %>% filter(duplicated_overall > 2, !is.na(Name)) %>% nrow()` und `r df_check_type_duplicate_world %>% filter(duplicated_overall > 2, !is.na(Name)) %>% summarise(sum=sum(duplicated_overall))` Datensätze
+
+zu 3) Das betrifft die 2249 Datensätze (in der Grafik zu sehen), von denen bleibt die Hälfte übrig.
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+# sphere_ <- "World"
+# 
+# ## Updating site information from first export
+# 
+# # df_sites <- dbGetQuery(conn = con, "SELECT * FROM sites") 
+# 
+# df_sites_local_world <- read_csv(paste0("../data/raw/", sphere_, "/2nd/html-file-information.csv"), col_select = c("crawl_date", "url", "sha1"), col_types = c("c", "c", "c")) %>%  
+#     mutate(crawl_timestamp = ymd_hms(crawl_date),
+#            crawl_date = as_date(crawl_timestamp))
+# 
+# df_sites_world_remote_update <- df_sites %>% 
+#   filter(sphere == sphere_) %>% 
+#   left_join(., df_sites_local_world) %>% 
+#   mutate(export = 1)
+# 
+# dbxUpdate(con, "sites", df_sites_world_remote_update, where_cols = c("archive_id", "crawl_date", "sha1", "url", "sphere"))
+# 
+# 
+# 
+# ## cleaning data and writing it into a new table in the database
+# 
+# vec_undefined_domain_duplicates_world <- df_check_type_duplicate_world %>% filter(duplicated_overall > 1, is.na(Name)) %>% select(sha1) %>% pull(.)# %>% shQuote(.) %>% toString(.) #%>% clipr::write_clip()
+# 
+# save(vec_undefined_domain_duplicates_world, file = "../data/2-analysing/World/vec_undefined_domain_duplicates_world.RData")
+# 
+# 
+# vec_wanted_domains_duplicated_world_3 <- df_check_type_duplicate_world %>% filter(duplicated_overall > 2, !is.na(Name))%>% select(sha1) %>% pull(.)             
+# 
+# # sphere <- "World"
+# 
+# id_offset_world <- df_sites_world_remote_update %>% 
+#   select(archive_id) %>% 
+#   mutate(offset = str_remove(archive_id, paste0(sphere_, "_")) %>% as.numeric(.)) %>% 
+#   arrange(desc(offset)) %>% head(1) %>% pull(offset)
+# 
+# duplicates_to_ignore <- c("48ddbc87878a63872636bd7188adea4076215989", "da6a398b5265df86a1bc482d234d4833485bdcea", "08d19979c9159a59870b954d4c0dd09663873ff4", "af2eaa296d92bb92742095ac43a729fa4858de46", "17426cebf9a8a68e2939302812bccabbbe577e81")
+# 
+# world_failed <- list.files(paste0("../data/0-preprocessing/World-fail/")) %>% enframe(.) %>% 
+#   mutate(value = str_remove(value, ".html")) %>% pull(value)
+# 
+# # View(world_failed)
+# 
+# df_sites_cleaned_world <- df_messy_sites_world %>% 
+#   filter(!sha1 %in% vec_undefined_domain_duplicates_world, !sha1 %in% vec_wanted_domains_duplicated_world_3, !sha1 %in% duplicates_to_ignore, !sha1 %in% world_failed) %>% 
+#   mutate(
+#     crawl_timestamp = ymd_hms(crawl_date),
+#     crawl_date = as_date(crawl_timestamp),
+#     export = 2) %>% 
+#   arrange(crawl_timestamp) %>% 
+#   group_by(sha1) %>% 
+#   mutate(duplicates = row_number(),
+#          sphere = sphere_) %>% 
+#   filter(duplicates == 1) %>% 
+#   ungroup() %>% 
+#   group_by(sphere) %>% 
+#   arrange(crawl_timestamp) %>% 
+#   mutate(archive_id = paste0(sphere_,"_", (row_number()+id_offset_world))) %>% 
+#   ungroup() %>% 
+#   select(archive_id, crawl_date, sha1, url, site, sphere, crawl_timestamp, export)
+       
+# dbAppendTable(conn = con, name =  "sites", value = df_sites_cleaned_world)
+# df_sites <- dbGetQuery(conn = con, "SELECT * FROM sites WHERE sphere ='World' AND export = '2'")
+
+                                                           
+```
+:::
+
+## Fuziness that remains
+
+Damit gibt es keine Doppelungen mehr im Datensatz. Es bleibt aber noch Unschärfe enthalten.
+
+Durch die Art des Samplings sind jetzt immer noch Seiten in der Datenbank, deren Domains überhaupt nicht von Interesse sind, nur sie doppeln sich nicht mehr.
+
+Zusätzlich gibt es news outlets, die unter unterschiedlichen Domains publizieren. Für die German-News-Sphere ist z.b. deutschlandradio.de als Domain auf der seed-list, dradio und deutschlandfunk finden sich ebenfalls in den Daten. Für diese Art von Messiness gibt es noch keine Entscheidung, wie damit umzugehen wäre.
+
+Diese Informationen sind weiterhin in der Datenbank vorhanden, werden aber beim zeichen im Technograph herausgefiltert.

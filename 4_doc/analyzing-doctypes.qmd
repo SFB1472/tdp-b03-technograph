@@ -1,5 +1,5 @@
 ---
-title: "analyzing-doctypes"
+title: "Analyzing Doctypes"
 ---
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
@@ -21,59 +21,23 @@ con <- dbConnect(RPostgres::Postgres(),
 )
 
 
-df_doctype_legend <- dbGetQuery(conn = con, paste0("SELECT DISTINCT(name) FROM tags WHERE tag LIKE 'doctype'")) %>% 
-  mutate(doctype_cleaned = str_extract(name, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\sX?HTML\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?\\/\\/\\w{2}"),
+df_doctype_legend <- dbGetQuery(conn = con, paste0("SELECT DISTINCT(name) FROM tags_2 WHERE tag LIKE 'doctype'")) %>% 
+  mutate(doctype_cleaned = 
+           # str_extract(name, "(HTML|html|HTM|htm)\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?(transitional|strict|frameset|final)?(TRANSITIONAL|STRICT|FRAMESET|FINAL)?\\s{0,}?(\\/\\/\\w{2})?$"))  #,
+           str_extract(name, "-\\/\\/?(W2C|W30|W3C|wc3|IETF|IEFT|w3c|ietf)?\\/\\/?(DTD|dtd|Dtd)\\s(W3\\s)?(X|x)?(HTML|html|HTM|htm)\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?(transitional|strict|frameset|final)?(TRANSITIONAL|STRICT|FRAMESET|FINAL)?\\s{0,}?(\\/\\/\\w{2})?"),
          doctype_cleaned = ifelse(str_detect(name, "^html$|^HTML$"), str_extract(name, "^html$|^HTML$"), doctype_cleaned),
          doctype_cleaned = ifelse(str_detect(name,"html SYSTEM"), name, doctype_cleaned),
          doctype_cleaned = str_remove(doctype_cleaned, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\s"),
          doctype_cluster = str_extract(doctype_cleaned, "X?(HTML|html)\\s?(\\d{1}\\.\\d{1,})?"),
-         doctype_cluster = ifelse(str_detect(doctype_cluster,"html\\s{0,}"), trimws(str_to_upper(doctype_cluster)), doctype_cluster)) %>% 
-  select(doctype_cleaned, doctype_cluster) %>% 
-  distinct() %>% 
-  group_by(doctype_cluster) %>% 
-  mutate(group = row_number())
-
-
-# df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'German' AND t.tag LIKE 'doctype'")) 
-
-df_sites_per_day <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, COUNT(s.sha1) as sites_per_day FROM sites s  WHERE s.sphere LIKE '", "German", "' GROUP BY s.crawl_date")) %>% 
-  mutate(crawl_date = ymd(crawl_date),
-    month = month(crawl_date),
-    year = year(crawl_date)) %>% 
-  group_by(month, year) %>% 
-  summarise(sites_per_month = sum(sites_per_day)) %>% 
-  mutate(date = paste0(year, "- ",month, "-01") %>% ymd(.))
-
-
-df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'", "German", "' AND t.tag LIKE '", "doctype", "'")) %>% 
-  mutate(doctype_cleaned = str_extract(name, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\sX?HTML\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?\\/\\/\\w{2}"),
-         doctype_cleaned = ifelse(str_detect(name, "^html$|^HTML$"), str_extract(name, "^html$|^HTML$"), doctype_cleaned),
-         doctype_cleaned = ifelse(str_detect(name,"html SYSTEM"), name, doctype_cleaned),
-         doctype_cleaned = str_remove(doctype_cleaned, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\s"),
-         doctype_cluster = str_extract(doctype_cleaned, "X?(HTML|html)\\s?(\\d{1}\\.\\d{1,})?"),
-         doctype_cluster = ifelse(str_detect(doctype_cluster,"html\\s{0,}"), trimws(str_to_upper(doctype_cluster)), doctype_cluster),
-         crawl_date = ymd(crawl_date)) %>% 
-  mutate(month = month(crawl_date),
-         year = year(crawl_date)) %>% 
-  group_by(month, year, doctype_cleaned, doctype_cluster) %>% 
-  summarise(sites_per_month_counted = n()) %>% 
-  mutate(date = paste0(year, "- ",month, "-01") %>% ymd(.)) %>% 
-  ungroup() %>% 
-  left_join(., df_sites_per_day) %>% 
-  mutate(normalized = sites_per_month_counted/sites_per_month) 
-
+         doctype_cluster = ifelse(str_detect(doctype_cluster,"html\\s{0,}"), trimws(str_to_upper(doctype_cluster)), doctype_cluster)) %>%
+  
+  select(name,doctype_cleaned, doctype_cluster) #%>% 
+  # distinct() %>% 
+  # group_by(doctype_cluster) %>% 
+  # mutate(group = row_number())
 
 get_doctype_info <- function(sphere, tag){
-  df_sites_per_day <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, COUNT(s.sha1) as sites_per_day FROM sites s  WHERE s.sphere LIKE '", sphere, "' GROUP BY s.crawl_date")) %>% 
-    mutate(crawl_date = ymd(crawl_date),
-           month = month(crawl_date),
-           year = year(crawl_date)) %>% 
-    group_by(month, year) %>% 
-    summarise(sites_per_month = sum(sites_per_day)) %>% 
-    mutate(date = paste0(year, "- ",month, "-01") %>% ymd(.)) %>% 
-    ungroup()
-  
-  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'", sphere, "' AND t.tag LIKE '", tag, "'")) %>% 
+  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere LIKE'", sphere, "' AND t.tag LIKE '", tag, "'")) %>% 
     mutate(doctype_cleaned = str_extract(name, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\sX?HTML\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?\\/\\/\\w{2}"),
            doctype_cleaned = ifelse(str_detect(name, "^html$|^HTML$"), str_extract(name, "^html$|^HTML$"), doctype_cleaned),
            doctype_cleaned = ifelse(str_detect(name,"html SYSTEM"), name, doctype_cleaned),
@@ -83,9 +47,35 @@ get_doctype_info <- function(sphere, tag){
            crawl_date = ymd(crawl_date), 
            month = month(crawl_date),
            year = year(crawl_date)) %>% 
-    group_by(month, year, doctype_cluster) %>% 
+    group_by(year, doctype_cluster) %>% 
     summarise(sites_per_month_counted = n()) %>% 
-    mutate(date = paste0(year, "- ",month, "-01") %>% ymd(.)) %>% 
+    # mutate(date = paste0(year, "- ",month, "-01") %>% ymd(.)) %>% 
+    ungroup()
+}
+
+get_doctype_info_relative <- function(sphere, tag){
+  df_sites_per_day <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, COUNT(s.sha1) as sites_per_day FROM sites s  WHERE s.sphere = '", sphere, "' GROUP BY s.crawl_date")) %>% 
+    mutate(crawl_date = ymd(crawl_date),
+           month = month(crawl_date),
+           year = year(crawl_date)) %>% 
+    group_by(year) %>% 
+    summarise(sites_per_month = sum(sites_per_day)) %>% 
+    # mutate(date = paste0(year, "- ",month, "-01") %>% ymd(.)) %>% 
+    ungroup()
+  
+  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "'")) %>% 
+    mutate(doctype_cleaned = str_extract(name, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\sX?HTML\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?\\/\\/\\w{2}"),
+           doctype_cleaned = ifelse(str_detect(name, "^html$|^HTML$"), str_extract(name, "^html$|^HTML$"), doctype_cleaned),
+           doctype_cleaned = ifelse(str_detect(name,"html SYSTEM"), name, doctype_cleaned),
+           doctype_cleaned = str_remove(doctype_cleaned, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\s"),
+           doctype_cluster = str_extract(doctype_cleaned, "X?(HTML|html)\\s?(\\d{1}\\.\\d{1,})?"),
+           doctype_cluster = ifelse(str_detect(doctype_cluster,"html\\s{0,}"), trimws(str_to_upper(doctype_cluster)), doctype_cluster),
+           crawl_date = ymd(crawl_date), 
+           month = month(crawl_date),
+           year = year(crawl_date)) %>% 
+    group_by(year, doctype_cluster) %>% 
+    summarise(sites_per_month_counted = n()) %>% 
+    # mutate(date = paste0(year, "- ",month, "-01") %>% ymd(.)) %>% 
     ungroup() %>% 
     left_join(., df_sites_per_day) %>% 
     mutate(normalized = sites_per_month_counted/sites_per_month) 
@@ -94,78 +84,159 @@ get_doctype_info <- function(sphere, tag){
 ```
 
 ## To Do: Why looking at doctypes?
+
 they do not tell a thing about commenting systems, but speaking of the standards in place when the website was published (crawled?).
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
+# doc_colors <- met.brewer("Renoir", n = 12, type = "discrete") %>% enframe()
 
-
-doc_colors <- met.brewer("Renoir", n = 6, type = "discrete") %>% enframe()
-
-# test_colors <- df_doctype_legend %>% 
-#   select(doctype_cluster) %>% 
+# test_colors <- df_doctype_legend %>%
+#   select(doctype_cluster) %>%
 #   distinct() %>% #View()
-#   filter(!is.na(doctype_cluster)) %>% 
-#   arrange(doctype_cluster) %>% 
-#   bind_cols(.,doc_colors) %>% 
+#   filter(!is.na(doctype_cluster)) %>%
+#   arrange(doctype_cluster) %>%
+#   bind_cols(.,doc_colors) %>%
 #   select(-name) #%>% deframe()
 # 
-# write_csv(test_colors, "../data/helper/doctype-colors.csv")
-doc_colors_legend <- read_csv("../data/helper/doctype-colors.csv") %>% deframe()
-
+# write_csv(test_colors, "../data/helper/doctype-colors-2.csv")
+doc_colors_legend <- read_csv("../data/helper/doctype-colors-2.csv")# %>% deframe()
+# rm(get_doctype_info_relative)
+df_doctype_de <- get_doctype_info_relative("German", "doctype")
+df_doctype_de_abs <- get_doctype_info("German", "doctype")
 
 ```
 
-## Standards of the German websphere
+## Standards of the webspheres
 
+Die folgenden Grafiken zeigen die anteilig genannten doctypes in den Dokumenten. Vorsichtig lässt sich sagen, dass man hier die Entwicklung der Standards ablesen kann. Zu Beginn noch kaum Standards, die sich dann langsam durchsetzen und die Weiterentwicklung der Sprache auch hier zu sehen ist. 
+
+Großes ABER siehe die Grafiken darunter.
+
+:::panel-tabset
+
+### German
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
-df_doctype_de <- get_doctype_info("German", "doctype")
+
+# rm(df_doctype_de)
+colors_ <- doc_colors_legend %>% select(-group) %>% deframe(.)
 
 df_doctype_de %>% 
-  ggplot(., aes(x = date, y = normalized, fill = doctype_cluster)) +
-  geom_col(width = 28) +
-  scale_fill_manual(values = doc_colors_legend, na.value = "#d2d2d2") +
+  ggplot(., aes(x = year, y = normalized, fill = doctype_cluster)) +
+  geom_col() +
+  scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
   ylim(0,1.05) + 
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
-  labs(title = "Doctype Definition in the German Websphere")
+  scale_x_continuous(limits = c(1996, 2021)) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete 
+
 ```
 
-
-## Standards of the Dutch websphere 
+### Dutch
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
-df_doctype_nl <- get_doctype_info("Dutch", "doctype")
+df_doctype_nl <- get_doctype_info_relative("Dutch", "doctype")
 
 df_doctype_nl %>% 
-  group_by(date) %>% 
-  summarise(sum(normalized)) %>% View()
-
-
-df_doctype_nl %>% 
-  ggplot(., aes(x = date, y = normalized, fill = doctype_cluster)) +
-  geom_col(width = 28) +
-  scale_fill_manual(values = doc_colors_legend, na.value = "#d2d2d2") +
+  ggplot(., aes(x = year, y = normalized, fill = doctype_cluster)) +
+  geom_col() +
+  scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
   ylim(0,1.05) + 
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
-  labs(title = "Doctype Definition in the Dutch Websphere")
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete 
+
 ```
 
-## ... and of the International websphere
+### International
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
-df_doctype_world <- get_doctype_info("World", "doctype")
+df_doctype_world <- get_doctype_info_relative("World", "doctype")
 
-  
+df_doctype_world %>% 
+  ggplot(., aes(x = year, y = normalized, fill = doctype_cluster)) +
+  geom_col() +
+  scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
+  ylim(0,1.05) + 
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete 
 
-df_doctype_world  %>% 
-  # left_join(., doc_colors_legend_2) %>% #View()
-  ggplot(., aes(x = date, y = normalized, fill = doctype_cluster)) +
-  geom_col(width = 28) +
-  scale_fill_manual(values = doc_colors_legend, na.value = "#d2d2d2") +
+
+```
+:::
+
+## Absolut numbers of different HTML Standards distribution
+
+Die Verteilung der absoluten Zahlen zeigt, dass die obere Aussage zwar logisch scheint, aber mit viel Unsicherheit behaftet ist. Wir haben aus der frühen Zeit nur sehr wenige Daten. 
+
+
+:::panel-tabset
+
+### German
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+# rm(df_doctype_de)
+
+df_doctype_de_abs_counted <- df_doctype_de_abs %>% 
+  reframe(., counted = sum(sites_per_month_counted), .by = "doctype_cluster")
+
+df_doctype_de_abs %>% 
+  left_join(., doc_colors_legend) %>% #View()
+  filter(!group %in% c("1","2")) %>% #View()
+  ggplot(., aes(x = year, y = sites_per_month_counted, fill = doctype_cluster)) +
+  geom_col() +
+  scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
+  # ylim(0,1.05) + 
   theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
-  labs(title = "Doctype Definition in the\nInternational Websphere")
-  # guides(fill = guide_coloursteps(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
+  facet_wrap(~group)
 
 ```
 
+Der Standard HTML kam so selten vor, dass in diesem Diagramm keine Balken zu sehen sind. Konkret sind es `r df_doctype_de_abs_counted$counted[[ match("HTML 2.0", df_doctype_de_abs_counted$doctype_cluster)]]` Seiten in dem deutschsprachigen Datensatz.
+
+
+
+### Dutch
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+df_doctype_nl_abs <- get_doctype_info("Dutch", "doctype")
+
+df_doctype_nl_abs_counted <- df_doctype_nl_abs %>% 
+  reframe(., counted = sum(sites_per_month_counted), .by = "doctype_cluster")
+
+df_doctype_nl_abs %>% 
+  left_join(., doc_colors_legend) %>% #View()
+  filter(!group %in% c("1","2")) %>% #View()
+  ggplot(., aes(x = year, y = sites_per_month_counted, fill = doctype_cluster)) +
+  geom_col() +
+  scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
+  # ylim(0,1.05) + 
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
+  facet_wrap(~group)
+```
+
+Der Standard HTML 2.0 kam so selten vor, dass in diesem Diagramm keine Balken zu sehen sind. Konkret sind es `r df_doctype_nl_abs_counted$counted[[ match("HTML 2.0", df_doctype_nl_abs_counted$doctype_cluster)]]` Seiten in dem niederländischen Datensatz.
+
+### International
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+df_doctype_world_abs <- get_doctype_info("World", "doctype")
+
+df_doctype_world_abs_counted <- df_doctype_de_abs %>% 
+  reframe(., counted = sum(sites_per_month_counted), .by = "doctype_cluster")
+
+# str(df_doctype_de_abs_counted)
+
+df_doctype_world_abs %>% 
+  left_join(., doc_colors_legend) %>% #View()
+  filter(!group %in% c("1","2")) %>% #View()
+  ggplot(., aes(x = year, y = sites_per_month_counted, fill = doctype_cluster)) +
+  geom_col() +
+  scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
+  # ylim(0,1.05) + 
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
+  facet_wrap(~group)
+
+```
+
+Der Standard HTML 2.0 kam so selten vor, dass in diesem Diagramm keine Balken zu sehen wären. Konkret sind es `r df_doctype_world_abs_counted$counted[[ match("HTML 2.0", df_doctype_world_abs_counted$doctype_cluster)]]` Seiten in dem internationalen Datensatz.
+
+:::
