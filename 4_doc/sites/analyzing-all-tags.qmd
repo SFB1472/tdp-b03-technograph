@@ -1,0 +1,166 @@
+---
+title: "Analyzing all tags"
+---
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+library(googlesheets4)
+library(MetBrewer)
+source("../config/config.R")
+source("../config/config-graphic.R")
+source("../config/config-secret.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+SPHERE_FOR_SHEET <- "German"
+
+df_domains_to_analyse <- read_csv(file = "../data/helper/22-09-21-Top News Websites [AU - public].xlsx - German news.csv") %>% 
+  mutate(cleaned_urls = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.),)
+
+df_wanted_sites <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, COUNT(s.sha1) as sites_per_day FROM sites s GROUP BY (s.crawl_date, s.site)")) %>% 
+  filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
+  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% #View()
+  reframe(counted_sites = sum(sites_per_day), .by = c("year_month", "site"))
+
+df_iframe <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.tag ='iframe' AND t.sphere = '", SPHERE_FOR_SHEET, "'"))
+
+```
+
+# Finding snippets in all tags
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+
+
+df_googletag <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~ 'googletag' AND t.sphere ='", SPHERE_FOR_SHEET,"'"))
+
+df_civey <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~ 'civey' AND t.sphere ='", SPHERE_FOR_SHEET,"'"))
+
+df_opinary <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~ 'pressekompass|opinary' AND t.sphere ='", SPHERE_FOR_SHEET,"'"))
+
+df_facebook <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~ 'facebook' AND t.sphere ='", SPHERE_FOR_SHEET,"'"))
+
+```
+
+## Opinary
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 8
+#| fig-width: 9
+
+# tag_colors <- met.brewer("Cross", n = 4, type = "discrete")
+tag_colors <- c("iframe" = "#c969a1", "script" = "#ee8577", "form" = "#ffbb44", "div" = "#62929a")
+
+
+df_opinary %>% 
+  filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
+  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% 
+  reframe(counted = n(), .by = c(year_month, site, tag)) %>% #View()
+  # mutate(normalized = counted_iframes/sites_per_month) %>% 
+  left_join(., df_wanted_sites) %>% 
+  mutate(normalized = counted/counted_sites) %>% 
+  ggplot(., aes(x = year_month, y = tag, fill = tag)) +#, alpha = normalized)) +
+  geom_tile() +
+  facet_wrap(~ site, ncol = 2) +
+  scale_x_date(date_labels = "%Y") +
+  scale_fill_manual(values = tag_colors)+
+    theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme(axis.text.y = element_blank())
+
+```
+
+## Civey
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 4
+#| fig-width: 9
+#| 
+df_civey %>% 
+  filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
+  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% 
+  reframe(counted = n(), .by = c(year_month, site, tag)) %>% #View()
+  # mutate(normalized = counted_iframes/sites_per_month) %>% 
+  left_join(., df_wanted_sites) %>% 
+  mutate(normalized = counted/counted_sites) %>% 
+  ggplot(., aes(x = year_month, y = tag, fill = tag)) +#, alpha = normalized)) +
+  geom_tile() +
+  facet_wrap(~ site, ncol = 2) +
+  scale_x_date(date_labels = "%Y") +
+  scale_fill_manual(values = tag_colors)+
+    theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme(axis.text.y = element_blank())
+
+```
+
+## Googletag
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 15
+#| fig-width: 9
+#| 
+df_googletag %>% 
+  filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
+  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% 
+  reframe(counted = n(), .by = c(year_month, site, tag)) %>% #View()
+  # mutate(normalized = counted_iframes/sites_per_month) %>% 
+  left_join(., df_wanted_sites) %>% 
+  mutate(normalized = counted/counted_sites) %>% 
+  ggplot(., aes(x = year_month, y = tag, fill = tag))+#, alpha = normalized)) +
+  geom_tile() +
+  facet_wrap(~ site, ncol = 2) +
+  scale_x_date(date_labels = "%Y") +
+  scale_fill_manual(values = tag_colors)+
+    theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme(axis.text.y = element_blank())
+
+```
+
+## Facebook
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 20
+#| fig-width: 9
+#| 
+df_facebook %>% 
+  filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
+  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% 
+  reframe(counted = n(), .by = c(year_month, site, tag)) %>% #View()
+  # mutate(normalized = counted_iframes/sites_per_month) %>% 
+  left_join(., df_wanted_sites) %>% 
+  mutate(normalized = counted/counted_sites) %>% 
+  ggplot(., aes(x = year_month, y = tag, fill = tag)) +#, alpha = normalized)) +
+  geom_tile() +
+  facet_wrap(~ site, ncol = 2) +
+  scale_x_date(date_labels = "%Y") +
+  scale_fill_manual(values = tag_colors)+
+    theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme(axis.text.y = element_blank())
+
+```

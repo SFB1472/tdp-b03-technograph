@@ -10,27 +10,29 @@ website:
       - section: "Basics: data export from the internet archive"
         contents:
           - text: "Data basis: sampling and structure"
-            file: datengrundlage.qmd
+            file: sites/datengrundlage.qmd
           - text: "Data cleaning"
-            file: data-cleaning.qmd
+            file: sites/data-cleaning.qmd
           - text: "Data cleaning - second export"
-            file: data-cleaning-2.qmd
+            file: sites/data-cleaning-2.qmd
           - text: "Matching scripts files to html pages"
-            file: script-files-to-html-pages.qmd
+            file: sites/script-files-to-html-pages.qmd
       - section: "Parsing: How to find commenting possibilities in HTML?"
         contents:
           - text: "Different approaches how to interpret HTML"
-            file: approaches.qmd
+            file: sites/approaches.qmd
           - text: "Learning about infrastructure: Analyzing doctype"
-            file: analyzing-doctypes.qmd
+            file: sites/analyzing-doctypes.qmd
           - text: "Analyzing form tags"
-            file: analyzing-form-tags.qmd
+            file: sites/analyzing-form-tags.qmd
           - text: "Context of form tags"
-            file: form-context.qmd
+            file: sites/form-context.qmd
           - text: "Analyzing script tags"
-            file: analyzing-script-tags.qmd
+            file: sites/analyzing-script-tags.qmd
           - text: "Analyzing iframes"
-            file: analyzing-iframes.qmd
+            file: sites/analyzing-iframes.qmd
+          - text: "Analyzing specific snippets"
+            file: sites/analyzing-all-tags.qmd
 
 format:
   html:
@@ -38,5 +40,4 @@ format:
     css: styles.css
     toc: true
 
-editor: visual
 

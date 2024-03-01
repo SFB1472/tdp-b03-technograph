@@ -1,0 +1,280 @@
+---
+title: "Auswertung"
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(urltools)
+library(DBI)
+library(RPostgres)
+
+```
+
+## Websites
+
+### Bildzeitung
+
+Für die Bildzeitung haben wir Daten ab ca 2009. Ab diesem Zeitpunkt haben auch Hinweise auf Kommentarfunktionen. 
+
+Die Kommentare starten am 2009-01-16, wir haben 19 Aufzeichnungen dieses Kommentarsbereichs. 
+http://www.bild.de:80/BILD/dschungelcamp/2009/01/15/peter-bond/groesstes-weichei-im-dschungelcamp.html
+Beispielscreenshot: ()("img/Bildschirmfoto 2023-12-07 um 16.38.23.png")
+
+Ab 2010-01-03 haben wir Aufzeichnungen dazu, dass die Bildzeitung Facebook als Anmeldeoption anbietet. In den Websiten ist nicht mehr zu sehen, wie der Bereich aussah. Die Inhalte stecken in  `<noscript>`-tags und werden deshalb nicht mehr angezeigt, sind aber mittels unserer Methode zu finden. 
+Seite 27070ac83d4eb5b8d96ea53cd092c1d92c9d12c8 mit Script nachladen.
+
+Ab 2012-02-01 gibt es Hinweise darauf, dass die Bildzeitung auf eigenes Community-building setzt. In den Seiten wird neben dem Facebook-Login dazu aufgefordet sich der Bild-Community anzuschließen.
+Außerdem ist zu sehen, dass Kommentare geliket werden können. Aus der Perspektive alleine ist nicht zu erkennen, ob es sich um ein Facebook-Script handelt oder nicht. Der Button sieht dem von Facebook sehr ähnlich. 
+
+Für dieses Kommentarsystem haben wir Aufzeichnungen bis August 2012.
+
+Ab 2012-08-21 ändert sich nicht viel, nur die Standardsortierung der Kommentare ist nicht mehr auf neueste Kommentare voreingestellt, sondern auf beliebste zuerst.
+
+Die aufgeführte Dedektion von disqus auf bild.de ist ein Fehlalarm. Hier wurde in einem Artikel über "das neue iPhone 5" auf die Kommentarsektion eines Blogs verlinkt, der Disqus nutzt. So kam das Snippet in unsere Findings.
+
+
+### Süddeutsche Zeitung
+
+ID 18 
+2012-10-13 erste Spur in der Daten auf Kommentieroption bei der SZ. 
+http://web.archive.org/web/20121013234031/http://www.sueddeutsche.de/politik/urteil-in-moskau-chodorkowskij-stunde-der-abrechnung-1.1041617
+Frühere Archivierungen der Seite zeigen, dass es auch schon Anfang Februar 2011 auf der Seite gab, dass die Funktionalität aber übernacht und am Wochenende deaktiviert war. Aus dem Screenshot ist abzulesen, dass es der Kommentarbereich mit Userbildern ausgestattet war, es die Option gab Kommentare zu "petzen". Und, obwohl das im Screenshot nicht mehr erkennbar ist, über den Quellcode wird es deutlich: Es war möglich einen Kommentar als wertvoll oder weniger wertvoll zu markieren. 
+
+Die SZ hat 
+
+Mit dieser konkreten Struktur hat die SZ nur für zwei Monate gearbeitet, am 2012-11-22 haben wir die letzte Aufzeichnung dieser Kommentieroption.
+
+ID 19 
+Ab dem 2013-01-01 bis 2014-08-11 wurde das bisherige Kommentarsystem geringfügig angepasst eingesetzt. Der Bereich zum Abschicken des Kommentars wurde optisch angepasst. 
+http://web.archive.org/web/20130101205252/http://www.sueddeutsche.de/bayern/aufschrei-des-landesschuelerrats-als-potenzielle-nazis-stigmatisiert-1.1561774
+
+ID 21
+Beispiel: http://web.archive.org/web/20140814165523/http://www.sueddeutsche.de/digital/software-konzern-microsoft-chef-nadella-baut-fuehrungsteam-um-1.1926526
+
+Ab dem 2014-08-18 gibt es ein paar wenige Spuren, dass aus dem Kommentarbereich die Option verschwindet, über die es bisher möglich war den eigenen Kommentar auch auf Facebook zu posten.
+
+
+
+ID 22 und 23 schon disqus, in form-tag zur empfehlung an freunde wird komment(ieren) gefunden, deswegen false positive. 
+
+
+Manuelle Stichprobenrecherche: 
+https://web.archive.org/web/20030404031126/http://sueddeutsche.de/index.php?url=/ausland/weltspiegel/63810&datei=index.php
+2003 gab es Artikel unter denen sehr klein Buttons zu sehen sind, beschriftet mit: "Diesen Artikel, drucken, versenden, kommentieren"
+Es gibt aber keine weiteren Hinweise darauf, ob es Kommentare zu dem Artikel gibt, noch kann man direkt darunter tippen.
+
+Der Button "kommentieren" für weiter auf eine neue Seite, die so aussah:
+https://web.archive.org/web/20030429173428/http://www.sueddeutsche.de/index.php?url=/sz/kommentar&datei=index.php&email=auto-online@sueddeutsche.de&ressort=auto&urlalt=auto/service/64133&dateialt=index.php
+
+Umfrage in einem Sportartikel:
+https://web.archive.org/web/20030415031711/http://www.sueddeutsche.de/index.php?url=/sport/sportmix/content/64266&datei=index.php
+
+Diskussionsforen gab es auch schon einmal: 2003
+Beispiel: 
+https://web.archive.org/web/20030402004826/http://www.sueddeutsche.de/index.php?url=/sz/foren&datei=index.php&myRessort=muenchen&relink=muenchen
+
+Zwei Monate später gab es einen Relaunch, da wurden die "aktuellen Fragen" und "Diskussionsforen" unter dem Menüpunkt "Services" zusammengefasst, nun auf der linken Seite des Artikels. Die Möglichkeit zu kommentieren verschwindet allerdings in diesem Zuge.
+https://web.archive.org/web/20030603185515/http://www.sueddeutsche.de/panorama/artikel/863/11852/
+
+Der Link auf die Diskussionsforen führte auf ein echtes Forum 
+https://web.archive.org/web/20030604214101/http://www.sueddeutsche.de/app/service/forum/
+
+
+In einem Kulturartikel Links zu den Single- und Albumcharts in Deutschland und den USA
+https://web.archive.org/web/20060217161626/http://www.sueddeutsche.de/,kulm1/kultur/artikel/374/69305/
+
+Bis Januar 2007 erneuter Umbau der Seite, noch keine Kommentare wieder sichtbar.
+Keine Kommentare, aber die Leiste "Drucken, Versenden, Kontakt" kommt, modizfiziert durch den letzten Eintrag zurück.
+https://web.archive.org/web/20070127085300/http://www.sueddeutsche.de/%2Cwirl5/wirtschaft/artikel/634/96538/
+"Leser empfehlen" taucht erstmals auf.
+
+2007-06-18 erste Kommentare unter Artikeln
+https://web.archive.org/web/20070618140929/http://www.sueddeutsche.de/,ra10l1/muenchen/artikel/456/108348/
+
+Ein Name für das Forum: Südcafe
+https://web.archive.org/web/20070615175544/http://suedcafe.sueddeutsche.de/
+
+2008 eingefrorene Kommentare abends und übers Wochenende:
+https://web.archive.org/web/20080103055739/http://www.sueddeutsche.de/,ra9l1/finanzen/artikel/687/150316/
+
+### Zeit
+
+2003 keine Spur von Kommentaren
+https://web.archive.org/web/20050131231237/http://www.zeit.de/feuilleton/kulturbrief/kulturbrief_17012003
+
+2004 ebenfalls nicht
+https://web.archive.org/web/20040620034844/http://www.zeit.de/2004/13/KA-Lit_Leben
+
+2005 noch nichts
+https://web.archive.org/web/20050417131141/http://www.zeit.de/2005/05/israel_deutschland
+Es gibt Buttons zum drucken, pdf erzeugen und versenden des Artikels
+
+2006 die ersten Spuren auf Kommentare
+https://web.archive.org/web/20060206212011/http://www.zeit.de/leben/leben_hat_uns/simon_35
+2007 wie 2006 
+https://web.archive.org/web/20070103102423/http://www.zeit.de/2007/01/Traum-Magdalena-Kozena
+
+
+2008 zwischenzeitlich wieder verschwunden
+https://web.archive.org/web/20080116051948/http://www.zeit.de/online/2007/01/rund-Sprachforschung
+
+2008 Relaunch 
+Kommentare nur noch unterhalb des Artikels verlinkt, aber immer noch nicht unter dem Artikel sichtbar
+https://web.archive.org/web/20080203091720/http://www.zeit.de/2008/06/Kenia-Konflikt
+
+2008 Communitybereich - Forum
+https://web.archive.org/web/20080215230822/http://kommentare.zeit.de/
+Früheste Aufzeichnung durch das Internet Archive Mai 2007:
+https://web.archive.org/web/20070516091211/http://kommentare.zeit.de/
+Mit dem Relaunch im September 2009 wird aus kommentare.zeit.de community.zeit.de
+https://web.archive.org/web/20090926135041/http://community.zeit.de/
+
+2015 - Wie hinter den Kulissen mit Kommentaren umgegangen wird
+https://web.archive.org/web/20221129005823/https://blog.zeit.de/fragen/2015/12/22/wir-testen-eine-neue-funktion-in-der-community/
+
+2009
+ein winziger Button unterhalb des Artikels ist zusätzlich hinzugekommen
+https://web.archive.org/web/20090207222451/http://www.zeit.de/online/2007/52/bg-film-happyend
+
+2009, September, großer Relaunch 
+"Kommentare gehören zum Text dazu"- 
+https://web.archive.org/web/20090909142221/http://community.zeit.de/user/die-redaktion/beitrag/2009/09/05/eigener-sache-die-neuerungen-im-kommentarbereich
+
+Allgemeiner zum Relaunch 2009 
+https://web.archive.org/web/20091023003411/http://www.zeit.de/administratives/2009-09/relaunch
+
+2010
+https://web.archive.org/web/20100130031053/http://www.zeit.de/online/2008/01/Montagskolumne-Joschka-Fischer
+
+2013
+https://web.archive.org/web/20130929113625/http://www.zeit.de/sport/2012-02/fussball-laenderspiel-frankreich-deutschland
+
+
+2013-05-28
+http://web.archive.org/web/20130528191227/http://www.zeit.de/politik/deutschland/2013-04/bundestagswahlen-cdu-migranten
+
+2015, relaunch, leichte Modifikation 
+https://web.archive.org/web/20151224003633/http://www.zeit.de/politik/ausland/2015-12/helmand-taliban-afghanistan-grossbritannien#comments
+
+Beschreibungen des Chefredakteurs zum Relaunch:
+https://web.archive.org/web/20151014125150/http://blog.zeit.de/fragen/2015/09/14/allesneu-der-relaunch-von-zeit-online/
+
+2016
+http://web.archive.org/web/20161009191951/http://www.zeit.de/reisen/2012-04/australien-ureinwohner
+
+
+2017 Im Blog der Entwicklungsredation - Wie man ein Moderationstool baut
+https://web.archive.org/web/20171027174805/http://blog.zeit.de/dev/design-thinking/
+
+2018 Im Glashaus-Blog - Wie wir Leserkommentare moderieren
+https://web.archive.org/web/20180316092817/https://blog.zeit.de/glashaus/2018/03/02/wie-wir-leserkommentare-moderieren/
+
+2023 - In eigener Sache - Überarbeiteter Kommentarbereich
+https://web.archive.org/web/20230405111042/https://www.zeit.de/administratives/2023-04/kommentarbereich-design-struktur-emojis
+
+
+### Spiegel online
+
+#### Spiegel Forum
+
+1997-06-15 Spiegel Online hatte schon sehr früh ein Forum
+https://web.archive.org/web/19970615022041/http://www.spiegel.de/forum/
+Es gibt verschiedene URLs für das Forum, ab 2001 existiert es auch unter einer eigenen Subdomain
+https://web.archive.org/web/20010410213032/http://forum.spiegel.de/cgi-bin/WebX
+und ab Mitte 2005 
+https://web.archive.org/web/20050629223147/http://forum.spiegel.de/
+
+2001-06-02 Leserbriefveröffentlichungen: Leser:innen schreiben Reaktionen auf Printartikel an die Redaktion, die veröffentlich diese (auch?) im Netz
+https://web.archive.org/web/20010602203210/http://www.spiegel.de/service/0,1518,119150,00.html
+
+2014-05-01 mit Auflistung über die meistdiskutierten Themen
+https://web.archive.org/web/20140501071432/http://forum.spiegel.de/
+
+#### Kommentare
+
+2000 keine Kommentarspuren
+aber Tarifrechner in der Seite ;-)
+https://web.archive.org/web/20000815054906/http://www.spiegel.de/netzwelt/politik/0,1518,89081,00.html
+Gleicher Artikel im Jahr 2006 archiviert: abgeschnitten und erwerbar für 50 cent.
+
+2010-03-04 gib es unter dem Artikel einen Bereich, der sich Diskussion nennt. Dort werden kurze Kommentare angezeigt. Möchte man selbst diskutieren führen die Links ins Forum
+http://web.archive.org/web/20100304045925/http://www.spiegel.de/netzwelt/gadgets/0,1518,674791,00.html
+
+
+2010-06-10 zeigt der Technograf nur eine einzige Spur auf eine Kommentarmöglichkeit unter einem Artikel
+http://web.archive.org/web/20100610063753/http://www.spiegel.de/netzwelt/gadgets/0,1518,674791,00.html
+Hat der Spiegel die Kommentarfunktion eventuell auch über Nacht deaktiviert? Gleiche Seite ist zu unterschiedlichen Zeit gecrawlt worden, einmal ist ein Formularfeld enthalten, einmal nicht.
+
+
+
+Unterhalb des Artikel kann man diesen auch versenden. Der Link führt auf eine neue Seite. Unterhalb des Formulares zum versenden, werden die meistgeteilten Artikel der Leserinnen gelistet:
+http://web.archive.org/web/20100408071729/http://www.spiegel.de/netzwelt/gadgets/0,1518,versand-674791,00.html
+
+2016-09-28 keine Kommentare im Memento angezeigt
+https://web.archive.org/web/20160928081621/http://www.spiegel.de/karriere/bueroalltag-intuitive-entscheidungen-treffen-a-940428.html
+kein Memento von 2013 vorhanden, aber Kommentare mit Zeitstempel 2013 ?!?
+Überschrift "Forum" oberhalb der Kommentare ist verlinkt, führt zu dieser Seite:
+https://web.archive.org/web/20150512174203/http://www.spiegel.de/forum/karriere/bueroalltag-intuition-ist-besser-als-ihr-ruf-thread-109520-1.html
+
+2014-01-14 Kommentare unterhalb eines Artikels
+https://web.archive.org/web/20140114144756/http://www.spiegel.de/kultur/tv/jan-boehmermann-portraet-vom-neo-magazin-moderator-a-939862.html
+
+2014-08-18 Kommentare werden auch am Artikelanfang in Marginalspalte links angezeigt
+https://web.archive.org/web/20140818033329/http://www.spiegel.de/sport/fussball/champions-league-atletico-madrid-gewinnt-gegen-chelsea-a-967088.html
+
+2015 meta: so wollen wir debattieren
+https://web.archive.org/web/20150514013626/http://www.spiegel.de/extra/spon-forum-so-wollen-wir-debattieren-a-1032920.html
+Nettikette 2010
+https://web.archive.org/web/20150518042906/http://www.spiegel.de/meinspiegel/artikel/a-703602.html#b_forum
+
+2018-02-14 Redesign, keine Marginalspalte mehr, keine Kommentaranzeige im first screen, aber kommentare unterhalb des Artikels
+https://web.archive.org/web/20180214125931/http://www.spiegel.de/politik/deutschland/volker-kauder-warnt-tsipras-vor-ende-des-griechischen-sparkurses-a-1016139.html
+Interessantes Feature: Kommentare werden gekürtzt, sind mit einem roten Plus aufklappbar
+https://web.archive.org/web/20170607221147/http://www.spiegel.de/wirtschaft/unternehmen/snapchat-fast-eine-halbe-milliarde-dollar-von-investoren-a-1010932.html
+
+2018-11-11 Button für "kommentieren" unterhalb des Artikelbildes
+https://web.archive.org/web/20181111114937/http://www.spiegel.de/auto/aktuell/diesel-fahrverbote-das-muessen-autofahrer-jetzt-wissen-a-1195780.html
+
+2018-09-30 Diskussionen sind auch geschlossen worden
+https://web.archive.org/web/20180930162333/http://www.spiegel.de/lebenundlernen/schule/sachsen-buergermeister-regt-sich-ueber-elterntaxis-vor-kita-auf-a-1205499.html
+
+
+2021-12-02 Irgendwann zwischen 2019 und 2021 gibt es einen Relaunch. Jetzt ist im first screen eine Sprechblase abgebildet, unterhalb keine Kommentare mehr eingeblendet. Nur noch ein Link, beschriftet mit "Diskutieren Sie mit"
+https://web.archive.org/web/20211202203515/https://www.spiegel.de/wirtschaft/unternehmen/deutsche-bahn-warum-ronald-pofalla-nicht-auf-ruediger-grube-folgen-sollte-a-1132398.html
+Ein klick darauf, öffnet rechts ein Overlay, das zum einloggen aufruft.
+
+### New York Times
+
+Die New York Times ist unglaublich schwer zu untersuchen. Nur von der Home im Internet Archive auszugehen stellt sich als unglaublich schwierig heraus. Schon nach dem ersten Klick von der HP weg wird zur Anmeldung aufgerufen.
+Der einzige Weg Artikel sehen zu können ist, von den archivierten Seiten auszugehen. Das ist schade, weil wir erst ab 2009 Daten haben.
+
+2009-03-21 Es gibt Kommentare unterhalb von Artikel. Eigenartig: die subdomains
+https://web.archive.org/web/20090321143730/http://roomfordebate.blogs.nytimes.com/2009/03/17/when-bonus-contracts-can-be-broken/#comments
+
+2010-02-06 Kommentare sind nicht mehr unterhalb der Artikel zu sehen. Es wird aber angezeigt, dass es Kommentare gibt. Ein Klick darauf führt auf eine subdomain, community.nytimes.com. Einen eigenen Community-Bereich, der über die Navigation erreichbar wäre, ist nicht zu sehen.
+https://web.archive.org/web/20100206062634/http://community.nytimes.com/comments/www.nytimes.com/2010/02/01/opinion/01mon1.html
+
+2012-01-01 Bei weitem nicht in allen Artikeln finden sich Kommentare. 
+https://web.archive.org/web/20120101010549/http://www.nytimes.com/2012/01/01/opinion/sunday/as-good-as-it-gets-for-the-economy.html
+
+2013-02-02 keine Kommentare, aber neue social-Buttons kommen hinzu
+https://web.archive.org/web/20130202064637/http://www.nytimes.com/2013/02/03/fashion/stepping-out-from-behind-the-e-mail.html
+
+2013-05-31 Auf der Opinion-seite gibt es einen Menüpunkt "Letters"
+2013-08-29 Auf der Opinion-Seite werden auch Briefe von Leser:innen veröffentlicht. 
+https://web.archive.org/web/20130829184345/http://www.nytimes.com/2013/08/29/opinion/i-have-a-dream-then-and-now.html?ref=opinion
+2013-05-31 Als Kontakt für Leserbriefe gibt es 2013 eine kurze Seite mit Erläuterungen
+https://web.archive.org/web/20130531033246/http://www.nytimes.com/content/help/site/editorial/letters/letters.html
+
+
+2019-09-30 Hier sehe ich Kommentare, obwohl die gleiche Seite von 2013 keine erkennbaren Kommentare enthält. Wurde da Technik verwendet, die nachläd und das funktioniert einfahc nicht mehr via wayback machine? 
+Zu diesem Datum öffnet sich nach dem Klick auf die Sprechblase ein Fenster rechts. Die gelisteten Kommentare haben einen Zeitstempel von 2013. 
+https://web.archive.org/web/20190930155705/https://wheels.blogs.nytimes.com/2013/03/28/a-rebooted-scion-tc-not-so-worthy-of-fanfare/
+
+
+2015-03-01 Sharing options 
+https://web.archive.org/web/20150301040643/http://www.nytimes.com/2015/03/01/business/hyundai-recalls-vehicles-over-power-steering-loss.html
+
+2015-04-01 erste Spuren auf Kommentarfunktionalität gefunden, wie auch um 2019 herum. Hier im Blog von the upshot
+http://www.nytimes.com/2015/04/01/upshot/why-more-education-wont-fix-economic-inequality.html
