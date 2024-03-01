@@ -28,15 +28,20 @@ vignettes/*.pdf
 .Renviron
 .DS_Store
 *.Rproj
+**.code-workspace
 
 4_doc/_site/*
+notes/*
+images/*
+*/img/
+*/_deprecated
 
 data/*
 !data/index/
 
-config/config-secret.R
-*.svg
-*.ai
+**/config-secret.R
+**.svg
+**.ai
 
 .secrets
 
