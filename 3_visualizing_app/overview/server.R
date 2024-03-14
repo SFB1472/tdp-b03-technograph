@@ -3,21 +3,15 @@ needs(shiny, tidyverse, ggiraph, MetBrewer, googlesheets4, ggtext, patchwork, lu
 source("config/config.R")
 source("config/config-graphic.R")
 
-
-
-# load(file = paste0("data/", CURRENT_SPHERE,"/df_systems_per_year.Rdata"))
-# load(file = paste0("3_visualizing_app/data/", CURRENT_SPHERE,"/df_sites_per_year.RData"))
-# load(file = paste0("3_visualizing_app/data/", CURRENT_SPHERE,"/gs_domain_to_look.RData"))
 load(file = "data/df_snippets_per_month_domain.RData")
-# load(file = "data/df_heatmaps_availability.RData")
 load(file = "data/df_system_lifetime.RData")
 
 ## https://stackoverflow.com/questions/62898726/how-to-refresh-rdata-objects-in-shiny-app
 
 df_systems_color_legend <- read_csv(file = "data/colors-systems.csv")
 
-df_timespan_month <- seq(ymd("2007-01-01"), ymd("2021-06-01"), by = "month") %>% as_tibble()
-df_timespan_year <- seq(ymd("2007-01-01"), ymd("2021-06-01"), by = "year") %>% as_tibble()
+df_timespan_month <- seq(ymd("1997-01-01"), ymd("2021-06-01"), by = "month") %>% as_tibble()
+df_timespan_year <- seq(ymd("1997-01-01"), ymd("2021-06-01"), by = "year") %>% as_tibble()
 
 year_breaks_for_plotting <- df_timespan_year %>% 
   mutate(years = year(value)) %>% 
@@ -107,20 +101,11 @@ get_domains_over_time <- function(df_systems_per_year, df_sites_per_year, gs_dom
     ungroup()
   
   systems_found <- df_joined_automated %>% select(system) %>% distinct() %>% pull(.)
-  # nr_systems_found <- df_joined_automated %>% select(system) %>% distinct() %>% nrow()
   color_values <- df_systems_color_legend %>% filter(system %in% systems_found) %>% deframe()
-  
-  # system <- df_joined_automated %>% filter(system != "forms parsed")
-  # forms <- df_joined_automated %>% filter(system == "forms parsed")
-  
-  # data_plot_snippets <- df_systems_per_year %>%
-  # View(df_na_archived_domains)
   
   plot_snippets <- ggplot() +
     geom_tile(data = df_na_archived_domains, aes(x = year, y = Name), fill = "grey90") +
-    # geom_tile(data = forms, aes(x = year, y = Name), fill = "grey90") +
     geom_point_interactive(data = df_joined_automated, aes(x = year_printing, y = Name, fill = system, shape = type, tooltip = paste0("site: ", site, "\nyear: ", year, "\nsystem: ", system)), width = .2, height = 0, na.rm = TRUE, size = 5, color = "black", alpha = .8) +
-    # geom_tile_interactive(data = df_na_archived_domains, aes(x = year, y = site, tooltip = paste0("year: ", year, "\nsite: ", site, "\nno sites archived")), fill = "grey90") +
     geom_point_interactive(data = gs_annotation, aes(x = year, y = Name, fill = technology, tooltip = paste0("site: ", site, "\nyear: ", year, "\ncomment: ", tooltip_info, "\nsystem: ", technology), shape = type), size = 5, color = "black", alpha = .8, position = position_nudge(x = -.3)) +
     scale_fill_manual(values = color_values, na.value = NA, name = "type of system") +
     scale_shape_manual(values = c(21, 23), breaks = c("automated", "manual"), name = "type of observation")+
@@ -253,9 +238,7 @@ In case those findings are verified by an interview partner, fields are colored 
     labs(subtitle = "In case of any qualitative research findings, it's sometimes necessary to comment on the concrete finding. It's noted in this column of the graphic.")+
     theme_b03_base + theme_b03_heatmap_details + theme(axis.text.x = element_blank()) +
     coord_cartesian(clip = 'off')
-  
-  # print("hi")
-  
+
   plots <- plot_details + plot_text
   plots
 }
@@ -286,7 +269,7 @@ get_snippets_over_time <- function(df_systems_per_year){
     summarise(counted_years = sum(present, na.rm = TRUE)) %>%
     mutate(counted_years = ifelse(counted_years == 1, as.character(counted_years), NA)) %>% 
     ungroup()
-  
+
   ggplot() +
     geom_tile(data = df_system_lifetime_filtered, aes(x = check_years, y = name, color = counted_years), fill = "white", alpha = 0.7) +
     scale_color_manual(values = c("1" = "darkgreen"), na.value = NA) + 
