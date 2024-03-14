@@ -1,13 +1,13 @@
 library(DT)
 
-findingsTableUI <- function(id) {
+formFindingsTableUI <- function(id) {
   ns <- NS(id)
   tagList(
     DT::dataTableOutput(ns("tableFindings"))
   )
 }
 
-findingsTableServer <- function(id, tab_, site_to_load) {
+formFindingsTableServer <- function(id, tab_, site_to_load) {
   
   stopifnot(is.reactive(site_to_load))
   
