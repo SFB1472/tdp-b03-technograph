@@ -7,7 +7,7 @@ typo_sfb_mono <- "GTAmericaMonoLC-Rg"
 register_gfont("Roboto Mono")
 
 typo_sfb_mono_remote <- "Roboto Mono"
-typo_sfb_mono_bold_remote <- "GT America Mono Rg"
+typo_sfb_mono_bold_remote <- "Roboto Mono"
 
 # systemfonts::register_font(typo_sfb_mono_remote)
 # systemfonts::register_font(typo_sfb_mono_bold_remote)
