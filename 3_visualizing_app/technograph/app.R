@@ -15,7 +15,8 @@ source("modules/tab_1_modTracesFound.R")
 source("modules/tab_1_modArchivedSites.R")
 source("modules/tab_2_modCrawlTime.R")
 source("modules/tab_2_findingsViz.R")
-source("modules/tab_2_findingsTable.R")
+source("modules/tab_2_formFindingsTable.R")
+source("modules/tab_2_snippetFindingsTable.R")
 source("modules/tab_3_modVizSystemsFound.R")
 source("modules/tab_3_modSystemsLifetime.R")
 
@@ -75,7 +76,10 @@ ui <- fluidPage(
                               hr(),
                               h3("Traces of commenting possiblities in form tags"),
                               p("Die Tabelle zeigt zusätzliche Informationen zu den 'traces via form tags'. Alle tags die innerhalb des gefundenen formtags genestet sind, werden hier gezeigt. Die Spalte 'text' enthält immer auch den Text aller nachfolgenden tags, d.h. um zu wissen, was die User der Seite textlich von dem form-tag wahrnehmen, ist alles schon im form-tag abzulesen."),
-                              findingsTableUI("tableFindingsMod_sec_tab")
+                              formFindingsTableUI("tableFindingsMod_sec_tab"),
+                              h3("Traces of commenting systems"),
+                              p("Die Tabelle zeigt zusätzliche Informationen zu den 'traces via snippets'."),
+                              snippetFindingsTableUI("tableSnippetFindingsMod_sec_tab")
                        )
                      )
                ),
@@ -129,7 +133,8 @@ server <- function(input, output, session) {
   # 
   findingsVizServer("headerFindingsVis_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite), reactive(sphere_to_load_tab_2$selectSphere))
   modCrawlTimeServer("crawl_time_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite))
-  findingsTableServer("tableFindingsMod_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite))
+  formFindingsTableServer("tableFindingsMod_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite))
+  snippetFindingsTableServer("tableSnippetFindingsMod_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite))
 
   # Tab "perspective on systems" ----------------------------------
   sphere_to_load_tab_3 <- selectSphereModServer("sphere_to_load_3_tab")
