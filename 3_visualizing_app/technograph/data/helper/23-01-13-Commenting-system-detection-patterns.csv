@@ -1,0 +1,50 @@
+Commenting system,Snippet,Regex,Target
+Disqus,data-disqus-identifier,(?i)data-disqus-identifier,https://help.disqus.com/en/articles/1717082-what-is-a-disqus-identifier
+Disqus,disqus.com/embed.js,(?i)disqus\.com\/embed\.js,Disqus embed code
+Disqus,disqus_thread,(?i)disqus_thread,Comment thread
+Coral,coral_talk_stream,(?i)coral_talk_stream,
+Coral,talk-embed-stream,(?i)talk-embed-stream,
+Coral,coralcomments.url,(?i)coralcomments\.url,
+Coral,coral_thread,(?i)coral_thread,
+Cackle,cackle.me/widget.js,(?i)cackle\.me\/widget\.js,
+Facebook Comments,fbComments,(?i)fbComments,
+Facebook Comments,fb-comments,(?i)fb-comments,
+Facebook Comments,fb:comments,(?i)fb:comments,
+Insticator Commenting,insticator-commenting,(?i)insticator-commenting,
+Livefyre,cdn.livefyre.com/Livefyre.js,(?i)cdn\.livefyre\.com\/Livefyre\.js,
+ViaFoura,viafoura,(?i)viafoura,Name
+ViaFoura,viafouraComments,(?i)viafouraComments,
+ViaFoura,livecomments.viafoura.co,(?i)livecomments\.viafoura\.co,
+ViaFoura,viafoura-comments,(?i)viafoura-comments,
+Vuukle,vuukle-comments,(?i)vuukle-comments,
+Vuukle,js-vuukle,(?i)js-vuukle,
+Vuukle,vuukle ,(?i)vuukle,Name
+OpenWeb,data-spotim-module,(?i)data-spotim-module,
+OpenWeb,spotim-launcher,(?i)spotim-launcher,
+OpenWeb,launcher.spot.im,(?i)launcher\.spot\.im,
+Commentics,cmtx_comments,(?i)cmtx_comments,
+Echo JS-Kit Haloscan,js-kit.com/comments.js,(?i)js-kit\.com\/comments\.js,
+Echo JS-Kit Haloscan,www.haloscan.com/comments,(?i)www\.haloscan\.com\/comments,
+Hyvor Talk,talk.hyvor.com,(?i)talk\.hyvor\.com,
+Hyvor Talk,hyvor-talk,(?i)hyvor-talk,
+Muut,muut.com/i/*/comments,(?i)muut\.com\/i\/*\/comments,
+Commento,commento.js,(?i)commento\.js,
+Gigya,gigyaComments,(?i)gigyaComments,Comment section wrapper
+Gigya,gigya-comment,(?i)gigya-comment,
+Facebook Comments,facebook_comment,(?i)facebook_comment,tag id variable
+Facebook Comments,fb-comment,(?i)fb-comment,tag class variable
+Echo JS-Kit Haloscan,echo_container_pb_comments,(?i)echo_container_pb_comments,
+Echo JS-Kit Haloscan,echo-counter,(?i)echo-counter,comment counter
+Livefyre,fyre-comment-stream,(?i)fyre-comment-stream,Comment stream
+Livefyre,fyre-comment-count,(?i)fyre-comment-count,comment counter
+Gigya,ind.gigya.comments,(?i)ind.gigya.comments,Javascript variable
+Gigya,useGigyaCommenting,(?i)useGigyaCommenting,Javascript variable
+Echo JS-Kit Haloscan,js-kit-comments,(?i)js-kit-comments,Class variable
+Echo JS-Kit Haloscan,js-kit.com/comments-data.js,(?i)js-kit\.com\/comments-data\.js,Javascript source
+Livefyre,livefyre-commentcount,(?i)livefyre-commentcount,comment counter class
+Livefyre,livefyre.com/api,(?i)livefyre\.com\/api,API import
+Livefyre,livefyre-comment,(?i)livefyre-comment,Class variable
+Pluck(mirror),pluck/comments/comments.js,(?i)pluck\/comments\/comments\.js,javascript embed
+Gigya,gigyaCommentPlugin,(?i)gigyaCommentPlugin,tag id variable
+Gigya,gigya.com/js/gigya.js,(?i)gigya\.com\/js\/gigya\.js,Javascript embed
+Facebook Comments,FacebookComments,(?i)FacebookComments,tag id variable
