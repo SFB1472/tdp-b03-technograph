@@ -3,7 +3,6 @@ library(ggiraph, googlesheets4, "MetBrewer")
 findingsVizUI <- function(id) {
   ns <- NS(id)
   tagList(
-    # plotOutput(ns("selectedSite"))
     addGFontHtmlDependency(family = c("Roboto Mono")),
     girafeOutput(ns("selectedSite"))
   )
@@ -71,11 +70,11 @@ findingsVizServer <- function(id, site_to_load, sphere) {
       ### snippets data --------------------------------------------------------
       
       get_snippet_traces_data <- function(){
-        db_sites <- tbl(pool, "sites")
-        db_snippet_traces <- tbl(pool, "snippets")
+        # db_sites <- tbl(pool, "sites")
+        # db_snippet_traces <- tbl(pool, "snippets_2")
         
-        df_return <- db_sites %>% 
-          inner_join(., db_snippet_traces, by = c("sha1" = "site")) %>% 
+        df_return <- tbl(pool, "sites") %>% 
+          inner_join(., tbl(pool, "snippets_2"), by = c("sha1" = "site")) %>% 
           filter(site == !!current_data$site_to_load, detected == 1) %>% 
           collect() %>% #View()
           mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
@@ -84,23 +83,21 @@ findingsVizServer <- function(id, site_to_load, sphere) {
                  shape_color = 8888888888,
                  shape_fill = NA_character_,
                  shape_nr = 18,
-                 tooltip_info = paste0("Snippet: ", snippet)) %>% 
-          select(crawl_date, site_subdomain, type, shape_color, shape_fill, shape_nr, tooltip_info)
-        # print("snippets")
-        # print(df_return %>% head())
-        
+                 tooltip_info = paste0("Snippet: ", snippet)) #%>% 
+
+        # View(df_return)
         return(df_return)
       }
       
       ### form data ------------------------------------------------------------
       
       get_form_finding_data <- function(){
-        db_sites <- tbl(pool, "sites")
-        db_findings_hashed <- tbl(pool, "findings_hashed")
+        # db_sites <- tbl(pool, "sites")
+        # db_findings_hashed <- tbl(pool, "findings_hashed_2")
         
-        df_return <- db_sites %>%
-          inner_join(., db_findings_hashed) %>%
-          filter(site == !!current_data$site_to_load) %>% 
+        df_return <- tbl(pool, "sites") %>%
+          inner_join(., tbl(pool, "findings_hashed_2")) %>%
+          filter(site == !!current_data$site_to_load, iteration == 2) %>% 
           collect() %>% 
           mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
                  site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.),
@@ -178,7 +175,7 @@ findingsVizServer <- function(id, site_to_load, sphere) {
           # geom_point_interactive(data = current_data$snippet_data, aes(x = crawl_date, y = site_subdomain, fill = snippet, tooltip = paste0("Snippet: ", snippet, "\nDatum: ", crawl_date)), shape = 21) +
           # geom_point_interactive(data = current_data$form_data, aes(x = crawl_date, y = site_subdomain, color = as.character(nr_unique_hashes), tooltip = paste0("formindex: ", nr_unique_hashes, "\nDatum: ", crawl_date))) +
           # geom_point_interactive(data = current_data$annotation, aes(x = crawl_date, y = site_subdomain, tooltip = tooltip_info), color = "#000000") +
-          scale_x_date(date_breaks = "year", date_labels = "%Y", limits = c(ymd("2007-01-01"), ymd("2022-02-01"))) +
+          scale_x_date(date_breaks = "year", date_labels = "%Y", limits = c(ymd("1997-01-01"), ymd("2021-01-01"))) +
           # scale_x_continuous(breaks = year_breaks_for_plotting, labels = year_breaks_for_plotting,  expand = c(0, NA), name = "crawl year") +#, limits = year_breaks) +
           scale_shape_manual(values = shape_values) +
           scale_color_manual(values = color_values) +
@@ -212,16 +209,7 @@ findingsVizServer <- function(id, site_to_load, sphere) {
         current_data$form_data = get_form_finding_data()
         current_data$height = get_height()
       })
-     
-      # output$selectedSite <- renderPlot(
-      #   ### hier höhenberechnung implementieren
-      #   # width = "100%",
-      #   height = function() current_data$height,
-      #   {
-      #   print("output selected site")
-      #   print_form_findings()
-      # })
-      # output$selectedSite <- renderPlot({print_form_findings()})
+      
       output$selectedSite <- renderGirafe({print_form_findings()})
     })
   }
