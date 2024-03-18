@@ -2,9 +2,7 @@ library(DT)
 
 formFindingsTableUI <- function(id) {
   ns <- NS(id)
-  tagList(
-    DT::dataTableOutput(ns("tableFindings"))
-  )
+  tagList(DT::dataTableOutput(ns("tableFindings")))
 }
 
 formFindingsTableServer <- function(id, tab_, site_to_load) {
@@ -23,14 +21,14 @@ formFindingsTableServer <- function(id, tab_, site_to_load) {
       }
       
       observeEvent(tab_(),{
-        print(paste0("tab 2 tabledata: tab loaded: ", tab_()))
+        # print(paste0("tab 2 tabledata: tab loaded: ", tab_()))
         if(tab_() == "tab_2"){
           rebuilt_data()
         }
       })
       
       observeEvent(site_to_load(),{
-        print(paste0("findingsTableServer ", site_to_load()))
+        # print(paste0("findingsTableServer ", site_to_load()))
         current_data$site_to_load = site_to_load()
         if(tab_() == "tab_2"){
           rebuilt_data()
@@ -104,10 +102,10 @@ formFindingsTableServer <- function(id, tab_, site_to_load) {
       })
       
       output$tableFindings <- renderDataTable({
-        
-        if (nrow(current_data$form_data) >0)
-        {
-          datatable(current_data$form_data, rownames= FALSE, filter = "top", escape=F, colnames=c("formindex", "name", "attr", "text", "archive link"),
+        # print(paste0("form findings table ", is.null((current_data$form_data)) ))
+        if (!is.null(nrow(current_data$form_data))){
+          if(nrow(current_data$form_data) > 0) {
+            datatable(current_data$form_data, rownames= FALSE, filter = "top", escape=F, colnames=c("formindex", "name", "attr", "text", "archive link"),
                     options = list(order = list(0, 'asc'))
                     ) %>%
                           formatStyle(columns = "nr_unique_hashes", 
@@ -119,6 +117,7 @@ formFindingsTableServer <- function(id, tab_, site_to_load) {
                     options = list(order = list(0, 'asc'))
           )
         }
+          }
         })
     })
   }

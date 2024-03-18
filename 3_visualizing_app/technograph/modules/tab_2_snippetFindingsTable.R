@@ -23,14 +23,14 @@ snippetFindingsTableServer <- function(id, tab_, site_to_load) {
       }
       
       observeEvent(tab_(),{
-        print(paste0("tab 2 snippet table data: tab loaded: ", tab_()))
+        # print(paste0("tab 2 snippet table data: tab loaded: ", tab_()))
         if(tab_() == "tab_2"){
           rebuilt_data()
         }
       })
       
       observeEvent(site_to_load(),{
-        print(paste0("2 tab, 4 viz, snippet findingsTableServer ", site_to_load()))
+        # print(paste0("2 tab, 4 viz, snippet findingsTableServer ", site_to_load()))
         current_data$site_to_load = site_to_load()
         if(tab_() == "tab_2"){
           rebuilt_data()
@@ -71,7 +71,7 @@ snippetFindingsTableServer <- function(id, tab_, site_to_load) {
         colors <- current_data$snippet_data %>% 
           select(snippet) %>% 
           distinct() %>% 
-          arrange(snippet) %>% 
+          # arrange(snippet) %>% 
           bind_cols(color_values) %>% #deframe()
           rename("hex" = `...2`)
         
@@ -81,19 +81,20 @@ snippetFindingsTableServer <- function(id, tab_, site_to_load) {
       
       output$tableSnippetFindings <- renderDataTable({
         
-        if (nrow(current_data$snippet_data) >0)
-        {
-          datatable(current_data$snippet_data, rownames= FALSE, filter = "top", escape=F, colnames=c("snippet found", "crawl date", "url", "archive link"),
-                    options = list(order = list(0, 'asc'))
-                    ) %>%
-                          formatStyle(columns = "snippet",
-                                      target = "cell",
-                                      backgroundColor = styleEqual(levels = current_data$colors["snippet"] %>% pull(.), values = current_data$colors["hex"] %>% pull(.))
-                          )
+        if (!is.null(current_data$snippet_data)){
+          if(nrow(current_data$snippet_data) > 0){
+            datatable(current_data$snippet_data, rownames= FALSE, filter = "top", escape=F, colnames=c("snippet found", "crawl date", "url", "archive link"),
+                      options = list(order = list(0, 'asc'))
+                      ) %>%
+                            formatStyle(columns = "snippet",
+                                        target = "cell",
+                                        backgroundColor = styleEqual(levels = current_data$colors["snippet"] %>% pull(.), values = current_data$colors["hex"] %>% pull(.))
+                            )
         } else {
           datatable(current_data$snippet_data, rownames= FALSE, filter = "top", escape=F, colnames=c("snippet found", "crawl date", "url", "archive link"),
                     options = list(order = list(0, 'asc'))
           )
+          }
         }
         })
     })
