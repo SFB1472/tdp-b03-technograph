@@ -16,7 +16,7 @@ tab_1_archivedSitesServer <- function(id, tab_, sphere) {
       
       # get all the sites with no findings found, no snippets, no comments ---------------
       get_sites <- function(){
-        print("1 tab, 2 vis, aggregating data for printing missing archived data")
+        # print("1 tab, 2 vis, aggregating data for printing missing archived data")
         
         db_sites <- tbl(pool, "sites") %>% 
           filter(sphere == !!current_data$sphere_to_load, of_interest == TRUE) %>% 
@@ -26,7 +26,8 @@ tab_1_archivedSitesServer <- function(id, tab_, sphere) {
           group_by(year, site) %>% 
           summarise(counted_sites = n()) %>% 
           ungroup() %>% 
-          collect()
+          collect() %>% 
+          mutate(counted_sites = as.numeric(counted_sites))
         
         return(db_sites)
       }
@@ -34,7 +35,7 @@ tab_1_archivedSitesServer <- function(id, tab_, sphere) {
       # get all those site with traces found, snippets and comments --------------------------
       
       get_data_snippets_found <- function(){
-        print("1 tab, 3 vis, sites archived")
+        # print("1 tab, 3 vis, sites archived")
         
         db_snippet_findings <- tbl(pool, "sites") %>%
           select(sites_id, sha1, crawl_date, sphere, site, of_interest) %>% 
@@ -54,7 +55,7 @@ tab_1_archivedSitesServer <- function(id, tab_, sphere) {
           collect()
         
         df_traces_found <- db_snippet_findings %>% 
-          bind_rows(., db_form_finings) #%>% 
+          bind_rows(., db_form_finings)# %>% 
           
         # View(df_traces_found)
         return(df_traces_found)
@@ -90,10 +91,9 @@ tab_1_archivedSitesServer <- function(id, tab_, sphere) {
       current_tab <- reactiveValues()
       
       observeEvent(tab_(),{
-        print(paste0("sites archived tab loaded: ", tab_()))
+        # print(paste0("sites archived tab loaded: ", tab_()))
         current_tab$tab = tab_()
       })
-      
       
       current_data <- reactiveValues()
       
@@ -103,14 +103,9 @@ tab_1_archivedSitesServer <- function(id, tab_, sphere) {
           current_data$sites = get_sites()
           current_data$snippet_data = get_data_snippets_found()
         }
-        else{
-          print("doing nothing")
-        }
       })
       
       output$archivedSites <- renderGirafe({get_sites_over_time()})
-    
   })
-  
 }
 

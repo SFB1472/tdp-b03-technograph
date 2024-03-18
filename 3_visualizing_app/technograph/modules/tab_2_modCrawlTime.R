@@ -12,22 +12,25 @@ modCrawlTimeServer <- function(id, tab_, site_to_load) {
     function(input, output, session) {
       
       get_site_timestamps <- function(){
-        df <- tbl(pool, "sites") %>% 
+        df_return <- tbl(pool, "sites") %>% 
           filter(site == !!current_data$site_to_load) %>% 
-          mutate(hour = hour(crawl_timestamp),
-                 year = year(crawl_date)) %>% 
+          mutate(hour = hour(crawl_timestamp) %>% as.numeric(),
+                 year = year(crawl_date) %>% as.numeric()) %>% 
           group_by(hour, year, site) %>% 
           summarise(counted = n()) %>% 
           ungroup() %>% 
-          collect() 
+          collect() %>% 
+          mutate(counted = as.numeric(counted))
+        
+        str(df_return)
 
-        return(df)
+        return(df_return)
       }
 
       print_crawl_time <- reactive({
-       print("tab 2 get data on crawl time")
-        
-        get_site_timestamps() %>% 
+       # print("tab 2 get data on crawl time")
+        # print(paste0("xxxxxxxxxxxxxxxxxxxxx tab2 crawl time heatmap ", as_tibble(current_data$site_timestamps)))
+        current_data$site_timestamps %>% 
           ggplot(., aes(x = year, y = hour, fill = counted)) +
           geom_tile() +
           scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
@@ -44,6 +47,7 @@ modCrawlTimeServer <- function(id, tab_, site_to_load) {
       
       observeEvent(site_to_load(),{
         current_data$site_to_load = site_to_load()
+        current_data$site_timestamps = get_site_timestamps()
       })
       
       output$crawlTime <- renderPlot({print_crawl_time()})
