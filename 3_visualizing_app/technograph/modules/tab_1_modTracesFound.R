@@ -29,7 +29,7 @@ tab_1_overviewTracesFoundServer <- function(id, tab_, sphere) {
       
       # get all the sites with no findings found, no snippets, no comments ---------------
       get_data_sites_na <- function(){
-        print("1 tab, 2 vis, aggregating data for printing missing archived data")
+        # print("1 tab, 2 vis, aggregating data for printing missing archived data")
         
         db_sites <- tbl(pool, "sites") %>% 
           filter(sphere == !!current_data$sphere_to_load, of_interest == TRUE) %>% 
@@ -39,7 +39,9 @@ tab_1_overviewTracesFoundServer <- function(id, tab_, sphere) {
           group_by(year, site) %>% 
           summarise(counted_site = n()) %>% 
           ungroup() %>% 
-          collect()
+          collect() %>% 
+          mutate(counted_site = as.numeric(counted_site))
+        
         
         # View(db_sites)
         
@@ -64,7 +66,7 @@ tab_1_overviewTracesFoundServer <- function(id, tab_, sphere) {
       # get all those site with traces found, snippets and comments --------------------------
       
       get_data_automated_findings <- function(){
-        print("1 tab, 2 vis, aggregating data for automated findings")
+        # print("1 tab, 2 vis, aggregating data for automated findings")
         # print(str(current_data$sites_of_interest))
         
         retranslate_snippets <- read_csv("data/helper/23-01-13-Commenting-system-detection-patterns.csv", show_col_types = FALSE) %>% 
@@ -125,16 +127,13 @@ tab_1_overviewTracesFoundServer <- function(id, tab_, sphere) {
             mutate(type = "manual",
                    date = paste0(year, "-", ifelse(is.na(month), "1", month), "-", ifelse(is.na(day), "1", day)) %>% ymd(.),
                    technology = ifelse(is.na(technology), "other", technology))
-        }
-        else{
+        } else {
           gs_annotation <- annotated_data %>%
             mutate(type = "manual",
                    technology = ifelse(is.na(technology), "other", technology))
         }
-        
         return(gs_annotation)
       }
-      
 
       # print the visualization -----------------------------------------
       
@@ -161,10 +160,6 @@ tab_1_overviewTracesFoundServer <- function(id, tab_, sphere) {
                width_svg = 15,
                height_svg = 10
         )
-        # girafe(ggobj = plot,
-        #        options = list(opts_sizing(rescale = FALSE)),
-        #        width_svg = 15,
-        #        height_svg = current_data$height)
       }
       
       # reactive value handling ---------------------------------------------------
@@ -172,10 +167,9 @@ tab_1_overviewTracesFoundServer <- function(id, tab_, sphere) {
       current_tab <- reactiveValues()
       
       observeEvent(tab_(),{
-        print(paste0("overviewTracesFound tab loaded: ", tab_()))
+        # print(paste0("overviewTracesFound tab loaded: ", tab_()))
         current_tab$tab = tab_()
       })
-      
       
       current_data <- reactiveValues()
       
@@ -187,17 +181,9 @@ tab_1_overviewTracesFoundServer <- function(id, tab_, sphere) {
           current_data$sites_na = get_data_sites_na()
           current_data$snippet_data = get_data_automated_findings()
           current_data$annotated_sites = get_annotated_data()
-          # current_data$form_data = get_form_finding_data()
-          # current_data$height = get_height()
-        }
-        else{
-          print("doing nothing")
         }
       })
       
       output$overviewTracesFound <- renderGirafe({plot_traces_found()})
-    
   })
-  
 }
-

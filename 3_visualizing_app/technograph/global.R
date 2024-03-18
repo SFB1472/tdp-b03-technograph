@@ -2,8 +2,6 @@ library(pool)
 library(RPostgres)
 source("../../shiny-conf/config-secret.R")
 
-# CURRENT_SPHERE <- "German"
-
 pool <- dbPool(
   drv = RPostgres::Postgres(),
   dbname = dsn_database,

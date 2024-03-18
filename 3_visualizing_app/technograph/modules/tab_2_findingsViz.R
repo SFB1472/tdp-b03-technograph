@@ -1,9 +1,8 @@
-library(ggiraph, googlesheets4, "MetBrewer")
+library(ggiraph, "MetBrewer")
 
 findingsVizUI <- function(id) {
   ns <- NS(id)
   tagList(
-    # plotOutput(ns("selectedSite"))
     addGFontHtmlDependency(family = c("Roboto Mono")),
     girafeOutput(ns("selectedSite"))
   )
@@ -31,7 +30,7 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
       
       get_gs_annoted_data <- function(sphere){
         
-        print(paste0("get_gs_annoted_data ", sphere, " current site to load ", current_data$site_to_load))
+        # print(paste0("get_gs_annoted_data ", sphere, " current site to load ", current_data$site_to_load))
         # googlesheets4::gs4_deauth()
         # gs_annotation_raw <- googlesheets4::read_sheet(SPREADSHEET_ANNOTATION_DATA, sheet = SPREADSHEET_ANNOTATION[[{{sphere}}]]) %>% 
         gs_annotation_raw <- read_csv(paste0("data/", SPREADSHEET_ANNOTATION[[{sphere}]]), show_col_types = FALSE) %>% 
@@ -52,7 +51,7 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
             select(crawl_date, site_subdomain, type, shape_color, shape_fill, shape_nr, tooltip_info)
         }
         else{
-          print("no annotations")
+          # print("no annotations")
           # print(gs_annotation_raw)
           gs_annotation <- gs_annotation_raw %>% 
             mutate(type = "manual research",
@@ -159,7 +158,6 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
         fill_values <- current_data$snippet_data %>% 
           select(shape_fill) %>% 
           distinct() %>% nrow()
-          
         
         df_plot  <-  current_data$form_data %>% 
           # bind_rows(., current_data$snippet_data) %>% 
@@ -204,16 +202,16 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
       }
       
       observeEvent(tab_(),{
-        print(paste0("tab 2 visualization: tab loaded: ", tab_()))
+        # print(paste0("tab 2 visualization: tab loaded: ", tab_()))
         # current_tab$tab = tab_()
         if(tab_() == "tab_2"){
-          print(paste0("init load ", initLoad))
+          # print(paste0("init load ", initLoad))
           rebuild_df()
         }
       })
       
       observeEvent(site_to_load(),{
-        print(paste0("tab 2 site to load fired ", site_to_load(), " first load? ", initLoad))
+        # print(paste0("tab 2 site to load fired ", site_to_load(), " first load? ", initLoad))
         current_data$site_to_load = site_to_load()
         if(!initLoad){
           rebuild_df()

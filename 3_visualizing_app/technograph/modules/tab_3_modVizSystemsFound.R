@@ -24,7 +24,7 @@ tab_3_modVizSystemFoundServer <- function(id, tab_, sphere) {
      # get all those site with traces found, snippets and comments --------------------------
       
       get_counted_systems <- function(){
-        print("3 tab, 1 vis, systems counted")
+        # print("3 tab, 1 vis, systems counted")
         retranslate_snippets <- read_csv("data/helper/23-01-13-Commenting-system-detection-patterns.csv", show_col_types = FALSE) %>% 
           select("system" = `Commenting system`, "snippet" = Snippet) %>% 
           filter(!is.na(system)) %>% select(snippet, system)
@@ -99,7 +99,7 @@ tab_3_modVizSystemFoundServer <- function(id, tab_, sphere) {
         current_data$height = get_height()
       }
       observeEvent(tab_(),{
-        print(paste0("3 systems found tab loaded: ", tab_()))
+        # print(paste0("3 systems found tab loaded: ", tab_()))
         if(tab_() == "tab_3"){
           rebuild_df()
         }
@@ -108,7 +108,7 @@ tab_3_modVizSystemFoundServer <- function(id, tab_, sphere) {
       current_data <- reactiveValues()
       
       observeEvent(sphere(),{
-        print("3 tab  sphere fired")
+        # print("3 tab  sphere fired")
         current_data$sphere_to_load = sphere()
         if(!initLoad_vizSystems){
           rebuild_df()

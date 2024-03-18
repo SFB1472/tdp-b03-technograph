@@ -57,7 +57,7 @@ tab_1_aggregatedBarchartServer <- function(id, tab_, sphere_) {
       }
 
       get_sites_with_traces_agg <- reactive({
-        print("1 tab, 1 vis, printing")
+        # print("1 tab, 1 vis, printing")
         
         color_breaks <- c("#e5e5e5", "#098eb7")
         
