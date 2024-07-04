@@ -6,6 +6,7 @@ title: "Analyzing iframes"
 #| echo: false
 #| warning: false
 #| error: false
+#| message: false
 
 library(tidyverse)
 library(DBI)
@@ -13,9 +14,12 @@ library(RPostgres)
 library(urltools)
 library(googlesheets4)
 library(MetBrewer)
-source("../config/config.R")
-source("../config/config-graphic.R")
+library(ggforce)
+
 source("../config/config-secret.R")
+source("../config/config-graphic.R")
+source("../config/config.R")
+
 
 con <- dbConnect(RPostgres::Postgres(), 
                  dbname = dsn_database,
@@ -25,7 +29,7 @@ con <- dbConnect(RPostgres::Postgres(),
                  password = dsn_pwd
 )
 
-SPHERE_FOR_SHEET <- "German"
+# SPHERE_FOR_SHEET <- "German"
 
 # retranslate_snippets <- snippets_to_search_for <- read_csv("../data/helper/23-01-13-Commenting-system-detection-patterns.csv") %>%   select("system" = `Commenting system`, "snippet" = Snippet) %>% 
 #   filter(!is.na(system)) %>% select(snippet, system)
@@ -38,15 +42,30 @@ SPHERE_FOR_SHEET <- "German"
 #   distinct() %>% nrow()
 #   # View()
 
-df_domains_to_analyse <- read_csv(file = "../data/helper/22-09-21-Top News Websites [AU - public].xlsx - German news.csv") %>% 
-  mutate(cleaned_urls = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.),)
+get_domain_translation <- function(sphere_){
+  df_return <- read_csv(file = paste0("../../data/helper/22-09-21-Top News Websites [AU - public] - ",sphere_," news.csv"), show_col_types = FALSE) %>% 
+    mutate(cleaned_urls = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.)) %>% 
+    select(Name, cleaned_urls)
+}
 
-df_wanted_sites <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, COUNT(s.sha1) as sites_per_day FROM sites s GROUP BY (s.crawl_date, s.site)")) %>% 
-  filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
-  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% #View()
-  reframe(counted_sites = sum(sites_per_day), .by = c("year_month", "site"))
+get_all_sites <- function(sphere_){
+  df_wanted_sites <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, COUNT(s.sha1) as sites_per_day FROM sites s WHERE s.of_interest = TRUE GROUP BY (s.crawl_date, s.site)")) %>% 
+    # filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
+    mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% #View()
+    reframe(counted_sites = sum(sites_per_day), .by = c("year_month", "site"))
+}
 
-df_iframe <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere, t.missing FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.tag ='iframe' AND t.missing IS NULL AND t.sphere = '", SPHERE_FOR_SHEET, "'"))
+get_iframe_data <- function(sphere_){
+  df_iframe <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere, t.missing FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.tag ='iframe' AND t.missing IS NULL AND t.sphere = '", sphere_, "' AND s.of_interest = TRUE"))
+}
+
+df_iframe_de <- get_iframe_data("German")
+df_iframe_world <- get_iframe_data("World")
+df_iframe_nl <- get_iframe_data("Dutch")
+
+df_all_sites_de <- get_all_sites("German")
+df_all_sites_world <- get_all_sites("World")
+df_all_sites_nl <- get_all_sites("Dutch")
 
 ```
 
@@ -54,21 +73,26 @@ df_iframe <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.cr
 
 Wann werden in welchen Seiten überhaupt iframes gefunden?
 
+:::panel-tabset
+
+### German
+
 ```{r}
 #| echo: false
 #| warning: false
 #| error: false
+#| message: false
 #| fig-height: 18
 #| fig-width: 9
 
-df_iframes_pop <- df_iframe %>% 
-  filter(site %in% df_domains_to_analyse$cleaned_urls, !is.na(group)) %>% 
+df_iframes_pop_de <- df_iframe_de %>% 
+  filter(!is.na(group)) %>% 
   mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% #View()
   reframe(counted = n(), .by=c("year_month", "site")) %>% 
-  left_join(., df_wanted_sites) %>% 
+  left_join(., df_all_sites_de) %>% 
   mutate(normalized = counted/counted_sites)
 
-df_iframes_pop %>% 
+df_iframes_pop_de %>% 
   ggplot(., aes(x = year_month, y = 0, fill = normalized)) +
   geom_tile() +
   facet_wrap(~ site, ncol = 2) +
@@ -79,11 +103,73 @@ df_iframes_pop %>%
 
 ```
 
+### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 18
+#| fig-width: 9
+
+
+df_iframes_pop_world <- df_iframe_world %>% 
+  filter(!is.na(group)) %>% 
+  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% #View()
+  reframe(counted = n(), .by=c("year_month", "site")) %>% 
+  left_join(., df_all_sites_world) %>% 
+  mutate(normalized = counted/counted_sites)
+
+df_iframes_pop_world %>% 
+  ggplot(., aes(x = year_month, y = 0, fill = normalized)) +
+  geom_tile() +
+  facet_wrap(~ site, ncol = 2) +
+  scale_x_date(date_labels = "%Y") +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme(axis.text.y = element_blank())
+
+```
+
+### Dutch
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 18
+#| fig-width: 9
+
+
+df_iframes_pop_nl <- df_iframe_nl %>% 
+  filter( !is.na(group)) %>% 
+  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% #View()
+  reframe(counted = n(), .by=c("year_month", "site")) %>% 
+  left_join(., df_all_sites_nl) %>% 
+  mutate(normalized = counted/counted_sites)
+
+df_iframes_pop_nl %>% 
+  ggplot(., aes(x = year_month, y = 0, fill = normalized)) +
+  geom_tile() +
+  facet_wrap(~ site, ncol = 2) +
+  scale_x_date(date_labels = "%Y") +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme(axis.text.y = element_blank())
+
+```
+
+:::
+
 ## Visibility of iframes
 
 iframes werden zu unterschiedlichen Zwecken genutzt, zum Beispiel um Werbetracker einzubinden. In einem solchen Fall sind die Attribute zu Höhe und/oder Breite auf 0 gesetzt. Werden iframes genutzt um beispielsweise youtube einzubinden, sind feste Größen hinterlegt.
 
 learning: Suche in den tags immer mit der Abfrage, dass das Feld `missing` in der Datenbank frei sein muss.
+
+::: panel-tabset
+
+### German
 
 ```{r}
 #| echo: false
@@ -91,9 +177,9 @@ learning: Suche in den tags immer mit der Abfrage, dass das Feld `missing` in de
 #| error: false
 #| fig-height: 20
 #| fig-width: 9
-#| 
-df_iframe_meta <- df_iframe %>% 
-  filter(site %in% df_domains_to_analyse$cleaned_urls, !is.na(group)) %>% 
+
+df_iframe_meta_de <- df_iframe_de %>% 
+  filter( !is.na(group)) %>% 
   mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd(),
          helper = ifelse(name == "height" & attr == "0", 1, NA),
          # helper = ifelse(str_detect(attr, "width: 0; height: 0;"), 1, helper),
@@ -106,16 +192,16 @@ df_iframe_meta <- df_iframe %>%
   ungroup() %>% #View()
   mutate(helper = ifelse(is.na(helper), "visible", "not visible"))
 
-df_iframe_vis <- df_iframe_meta %>% 
+df_iframe_vis_de <- df_iframe_meta_de %>% 
   reframe(counted = n(), .by = c(site, year_month, helper)) %>%
-  left_join(., df_wanted_sites) %>%
+  left_join(., df_all_sites_de) %>%
   mutate(normalized = counted/counted_sites)
   #        helper = ifelse(is.na(helper), "visible", "not visible"))
   
 # df_iframe %>% 
-  # filter(site %in% df_domains_to_analyse$cleaned_urls, is.na(missing), site == "spiegel") %>% View()
+  # filter( is.na(missing), site == "spiegel") %>% View()
 
-df_iframe_vis %>% 
+df_iframe_vis_de %>% 
   ggplot(., aes(x = year_month, y = helper, fill = helper)) +
   geom_tile() +
   facet_wrap(~ site, ncol = 2) +
@@ -126,9 +212,101 @@ df_iframe_vis %>%
 
 ```
 
-### Unsichtbar eingebundene iframes
+### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 20
+#| fig-width: 9
+
+df_iframe_meta_world <- df_iframe_world %>% 
+  filter( !is.na(group)) %>% 
+  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd(),
+         helper = ifelse(name == "height" & attr == "0", 1, NA),
+         # helper = ifelse(str_detect(attr, "width: 0; height: 0;"), 1, helper),
+         helper = ifelse(str_detect(attr, "display:none;visibility:hidden"), 1, helper)
+         # helper = ifelse(str_detect(attr, "googletagmanager"), 1, helper)
+         ) %>% #View()
+  group_by(group, sha1, crawl_date) %>% 
+  arrange(group, sha1, crawl_date) %>% 
+  fill(., helper, .direction = "downup") %>%
+  ungroup() %>% #View()
+  mutate(helper = ifelse(is.na(helper), "visible", "not visible"))
+
+df_iframe_vis_world <- df_iframe_meta_world %>% 
+  reframe(counted = n(), .by = c(site, year_month, helper)) %>%
+  left_join(., df_all_sites_world) %>%
+  mutate(normalized = counted/counted_sites)
+  #        helper = ifelse(is.na(helper), "visible", "not visible"))
+  
+# df_iframe %>% 
+  # filter( is.na(missing), site == "spiegel") %>% View()
+
+df_iframe_vis_world %>% 
+  ggplot(., aes(x = year_month, y = helper, fill = helper)) +
+  geom_tile() +
+  facet_wrap(~ site, ncol = 2) +
+  scale_x_date(date_labels = "%Y") +
+  # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme(axis.text.y = element_blank())
+
+```
+
+### Dutch
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 20
+#| fig-width: 9
+
+df_iframe_meta_nl <- df_iframe_nl %>% 
+  filter( !is.na(group)) %>% 
+  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd(),
+         helper = ifelse(name == "height" & attr == "0", 1, NA),
+         # helper = ifelse(str_detect(attr, "width: 0; height: 0;"), 1, helper),
+         helper = ifelse(str_detect(attr, "display:none;visibility:hidden"), 1, helper)
+         # helper = ifelse(str_detect(attr, "googletagmanager"), 1, helper)
+         ) %>% #View()
+  group_by(group, sha1, crawl_date) %>% 
+  arrange(group, sha1, crawl_date) %>% 
+  fill(., helper, .direction = "downup") %>%
+  ungroup() %>% #View()
+  mutate(helper = ifelse(is.na(helper), "visible", "not visible"))
+
+df_iframe_vis_nl <- df_iframe_meta_nl %>% 
+  reframe(counted = n(), .by = c(site, year_month, helper)) %>%
+  left_join(., df_all_sites_nl) %>%
+  mutate(normalized = counted/counted_sites)
+  #        helper = ifelse(is.na(helper), "visible", "not visible"))
+  
+# df_iframe %>% 
+  # filter( is.na(missing), site == "spiegel") %>% View()
+
+df_iframe_vis_nl %>% 
+  ggplot(., aes(x = year_month, y = helper, fill = helper)) +
+  geom_tile() +
+  facet_wrap(~ site, ncol = 2) +
+  scale_x_date(date_labels = "%Y") +
+  # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme(axis.text.y = element_blank())
+
+```
+
+:::
+
+## Unsichtbar eingebundene iframes
 
 In der nächsten Grafik werden die häufigsten drei URLs dargestellt, die in iframes referenziert werden.
+
+::: panel-tabset
+
+### German
 
 ```{r}
 #| echo: false
@@ -137,7 +315,7 @@ In der nächsten Grafik werden die häufigsten drei URLs dargestellt, die in ifr
 #| fig-height: 15
 #| fig-width: 9
 
-df_iframes_srcs <- df_iframe_meta %>%  
+df_iframes_srcs_de <- df_iframe_meta_de %>%  
   filter(name == "src") %>% #View()
   mutate(attr_cleaned = case_when(
     str_detect(attr, "(^//www)|(^//)") ~ str_remove(attr, "//"),
@@ -151,10 +329,10 @@ df_iframes_srcs <- df_iframe_meta %>%
          # helper = ifelse(iframe_domains == "googletagmanager", "not visible", helper)) %>% View()
   reframe(counted = n(), .by = c(site, year_month, helper, domain_subdomain))
   
-most_famous <- df_iframes_srcs %>% filter(helper == "not visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)) %>% head(3)
+most_famous_de <- df_iframes_srcs_de %>% filter(helper == "not visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)) %>% head(3)
 
-df_iframes_srcs %>%
-  filter(domain_subdomain %in% most_famous$domain_subdomain) %>% 
+df_iframes_srcs_de %>%
+  filter(domain_subdomain %in% most_famous_de$domain_subdomain) %>% 
   ggplot(., aes(x = year_month, y = domain_subdomain, fill = domain_subdomain)) +
   geom_tile() +
   facet_wrap(~ site, ncol = 2) +
@@ -165,7 +343,87 @@ df_iframes_srcs %>%
 
 ```
 
+### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 15
+#| fig-width: 9
+
+df_iframes_srcs_world <- df_iframe_meta_world %>%  
+  filter(name == "src") %>% #View()
+  mutate(attr_cleaned = case_when(
+    str_detect(attr, "(^//www)|(^//)") ~ str_remove(attr, "//"),
+    str_detect(attr, "^http(s)?://") ~ attr,
+    TRUE ~ NA_character_
+  )) %>% 
+  mutate(iframe_domain = ifelse(!is.na(attr_cleaned), domain(attr_cleaned) %>% suffix_extract(.) %>% select(domain) %>% pull(.), NA),
+         iframe_subdomain = ifelse(!is.na(attr_cleaned),domain(attr_cleaned) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.), NA),
+         domain_subdomain = paste(iframe_domain, iframe_subdomain, sep = "_")) %>% #View()
+         # helper = ifelse(is.na(helper), "visible", "not visible"),
+         # helper = ifelse(iframe_domains == "googletagmanager", "not visible", helper)) %>% View()
+  reframe(counted = n(), .by = c(site, year_month, helper, domain_subdomain))
+  
+most_famous_world <- df_iframes_srcs_de %>% filter(helper == "not visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)) %>% head(3)
+
+df_iframes_srcs_world %>%
+  filter(domain_subdomain %in% most_famous_de$domain_subdomain) %>% 
+  ggplot(., aes(x = year_month, y = domain_subdomain, fill = domain_subdomain)) +
+  geom_tile() +
+  facet_wrap(~ site, ncol = 2) +
+  scale_x_date(date_labels = "%Y") +
+  # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme(axis.text.y = element_blank())
+
+```
+
+### Dutch
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 15
+#| fig-width: 9
+
+df_iframes_srcs_nl <- df_iframe_meta_nl %>%  
+  filter(name == "src") %>% #View()
+  mutate(attr_cleaned = case_when(
+    str_detect(attr, "(^//www)|(^//)") ~ str_remove(attr, "//"),
+    str_detect(attr, "^http(s)?://") ~ attr,
+    TRUE ~ NA_character_
+  )) %>% 
+  mutate(iframe_domain = ifelse(!is.na(attr_cleaned), domain(attr_cleaned) %>% suffix_extract(.) %>% select(domain) %>% pull(.), NA),
+         iframe_subdomain = ifelse(!is.na(attr_cleaned),domain(attr_cleaned) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.), NA),
+         domain_subdomain = paste(iframe_domain, iframe_subdomain, sep = "_")) %>% #View()
+         # helper = ifelse(is.na(helper), "visible", "not visible"),
+         # helper = ifelse(iframe_domains == "googletagmanager", "not visible", helper)) %>% View()
+  reframe(counted = n(), .by = c(site, year_month, helper, domain_subdomain))
+  
+most_famous__nl <- df_iframes_srcs_nl %>% filter(helper == "not visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)) %>% head(3)
+
+df_iframes_srcs_nl %>%
+  filter(domain_subdomain %in% most_famous_de$domain_subdomain) %>% 
+  ggplot(., aes(x = year_month, y = domain_subdomain, fill = domain_subdomain)) +
+  geom_tile() +
+  facet_wrap(~ site, ncol = 2) +
+  scale_x_date(date_labels = "%Y") +
+  # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme(axis.text.y = element_blank())
+
+```
+
+:::
+
 #### Alle URLs unsichtbarer iframes
+
+::: panel-tabset
+
+#####German
 
 ```{r}
 #| echo: false
@@ -173,9 +431,35 @@ df_iframes_srcs %>%
 #| error: false
 
 
-DT::datatable(df_iframes_srcs %>% filter(helper == "not visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)))
+DT::datatable(df_iframes_srcs_de %>% filter(helper == "not visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)))
 
 ```
+
+##### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+
+
+DT::datatable(df_iframes_srcs_world %>% filter(helper == "not visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)))
+
+```
+
+#####Dutch
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+
+
+DT::datatable(df_iframes_srcs_nl %>% filter(helper == "not visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)))
+
+```
+
+:::
 
 ### Sichtbare iframes
 
@@ -183,62 +467,235 @@ Es sind so viele verschiedene URLs, dass jede Darstellung schwierig wird. Desweg
 
 #### Erste Hälfte der Seiten
 
+:::panel-tabset
+
+#### German
+
 ```{r}
 #| echo: false
 #| warning: false
 #| error: false
-#| fig-height: 40
+#| message: false
+#| fig-height: 42
 #| fig-width: 10
 
-
-most_famous_visible <- df_iframes_srcs %>% filter(helper == "visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)) %>% filter(counted > 49)
-
-most_famous_visible_for_color <- most_famous_visible %>% arrange(domain_subdomain)
-
-colors_for_urls <- met.brewer("Signac", type = "continuous", n = most_famous_visible %>% nrow()) %>% 
-  enframe() %>% 
-  bind_cols(., most_famous_visible_for_color$domain_subdomain) %>% 
-  rename("domain_subdomain" = `...3`) %>% 
+# fig-height: 42
+most_famous_visible_de <- df_iframes_srcs_de %>% filter(helper == "visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)) %>% filter(counted > 49)
+# 
+most_famous_visible_for_color <- most_famous_visible_de%>% arrange(domain_subdomain)
+# 
+colors_for_urls_de <- met.brewer("Signac", type = "continuous", n = most_famous_visible_de%>% nrow()) %>%
+  enframe() %>%
+  bind_cols(., most_famous_visible_for_color$domain_subdomain) %>%
+  rename("domain_subdomain" = `...3`) %>%
   select(domain_subdomain, value) %>% #View()
   deframe()
+ 
+split_sites_in_2_vis_de <- df_iframes_srcs_de %>% select(site, domain_subdomain) %>% reframe(counted = n(), .by = c(site, domain_subdomain)) %>% filter(domain_subdomain %in% most_famous_visible_de$domain_subdomain) %>% reframe(counted_urls = n(), .by = site) %>% arrange(desc(counted_urls)) %>% head(23) %>% pull(site)
 
-# split_sites_in_2_vis <- df_iframes_srcs %>% select(site) %>% distinct() %>% arrange(site) %>% head(23) %>% pull()
-
-split_sites_in_2_vis <- df_iframes_srcs %>% select(site, domain_subdomain) %>% reframe(counted = n(), .by = c(site, domain_subdomain)) %>% filter(domain_subdomain %in% most_famous_visible$domain_subdomain) %>% reframe(counted_urls = n(), .by = site) %>% arrange(desc(counted_urls)) %>% head(23) %>% pull(site)
-
-df_iframes_srcs %>% 
-  filter(domain_subdomain %in% most_famous_visible$domain_subdomain, site %in% split_sites_in_2_vis) %>% 
+df_iframes_srcs_de %>%
+  filter(domain_subdomain %in% most_famous_visible_de$domain_subdomain, site %in% split_sites_in_2_vis_de) %>%
   ggplot(., aes(x = year_month, y = domain_subdomain, fill = domain_subdomain)) +
   geom_tile() +
-  facet_grid(row = vars(site), scales = "free_y", space = "free_y") +
+  facet_col(vars(site), scales = "free_y", space = "free") +
   scale_x_date(date_labels = "%Y") +
-  scale_fill_manual(values = colors_for_urls) +
-  # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
+  scale_fill_manual(values = colors_for_urls_de) +
   theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none")
-  # theme(axis.text.y = element_blank()) #+ theme(legend.position = "none")
 
+```
+
+#### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 42
+#| fig-width: 10
+
+# fig-height: 42
+most_famous_visible_world <- df_iframes_srcs_world %>% filter(helper == "visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)) %>% filter(counted > 49)
+# 
+most_famous_visible_for_color <- most_famous_visible_world %>% arrange(domain_subdomain)
+# 
+colors_for_urls_world <- met.brewer("Signac", type = "continuous", n = most_famous_visible_world%>% nrow()) %>%
+  enframe() %>%
+  bind_cols(., most_famous_visible_for_color$domain_subdomain) %>%
+  rename("domain_subdomain" = `...3`) %>%
+  select(domain_subdomain, value) %>% #View()
+  deframe()
+ 
+split_sites_in_2_vis_world <- df_iframes_srcs_world %>% select(site, domain_subdomain) %>% reframe(counted = n(), .by = c(site, domain_subdomain)) %>% filter(domain_subdomain %in% most_famous_visible_world$domain_subdomain) %>% reframe(counted_urls = n(), .by = site) %>% arrange(desc(counted_urls)) %>% head(23) %>% pull(site)
+
+df_iframes_srcs_world %>%
+  filter(domain_subdomain %in% most_famous_visible_world$domain_subdomain, site %in% split_sites_in_2_vis_world) %>%
+  ggplot(., aes(x = year_month, y = domain_subdomain, fill = domain_subdomain)) +
+  geom_tile() +
+  facet_col(vars(site), scales = "free_y", space = "free") +
+  scale_x_date(date_labels = "%Y") +
+  scale_fill_manual(values = colors_for_urls_world) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none")
+
+```
+
+#### Dutch
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 42
+#| fig-width: 10
+
+# fig-height: 42
+most_famous_visible_nl <- df_iframes_srcs_nl %>% filter(helper == "visible") %>% reframe(counted = sum(counted), .by = "domain_subdomain") %>% arrange(desc(counted)) %>% filter(counted > 49)
+# 
+most_famous_visible_for_color <- most_famous_visible_nl %>% arrange(domain_subdomain)
+# 
+colors_for_urls_nl <- met.brewer("Signac", type = "continuous", n = most_famous_visible_nl%>% nrow()) %>%
+  enframe() %>%
+  bind_cols(., most_famous_visible_for_color$domain_subdomain) %>%
+  rename("domain_subdomain" = `...3`) %>%
+  select(domain_subdomain, value) %>% #View()
+  deframe()
+ 
+split_sites_in_2_vis_nl <- df_iframes_srcs_nl %>% select(site, domain_subdomain) %>% reframe(counted = n(), .by = c(site, domain_subdomain)) %>% filter(domain_subdomain %in% most_famous_visible_nl$domain_subdomain) %>% reframe(counted_urls = n(), .by = site) %>% arrange(desc(counted_urls)) %>% head(23) %>% pull(site)
+
+df_iframes_srcs_nl %>%
+  filter(domain_subdomain %in% most_famous_visible_nl$domain_subdomain, site %in% split_sites_in_2_vis_nl) %>%
+  ggplot(., aes(x = year_month, y = domain_subdomain, fill = domain_subdomain)) +
+  geom_tile() +
+  facet_col(vars(site), scales = "free_y", space = "free") +
+  scale_x_date(date_labels = "%Y") +
+  scale_fill_manual(values = colors_for_urls_nl) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none")
+
+```
+
+:::
+
+#### Zweite Hälfte der Seiten
+
+:::panel-tabset
+
+#### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 33 ## 35 ist bissi zu groß
+#| fig-width: 10
+
+df_iframes_srcs_de %>% filter(domain_subdomain %in% most_famous_visible_de$domain_subdomain, !site %in% split_sites_in_2_vis_de) %>%
+  ggplot(., aes(x = year_month, y = domain_subdomain, fill = domain_subdomain)) +
+  geom_tile() +
+  # facet_wrap(~ site, scales = "free_y", ncol = 2) +
+  facet_col(vars(site), scales = "free_y", space = "free") +
+  scale_x_date(date_labels = "%Y") +
+  scale_fill_manual(values = colors_for_urls_de) +
+  # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
+
+```
+
+#### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 33 ## 35 ist bissi zu groß
+#| fig-width: 10
+
+df_iframes_srcs_world %>% filter(domain_subdomain %in% most_famous_visible_world$domain_subdomain, !site %in% split_sites_in_2_vis_world) %>%
+  ggplot(., aes(x = year_month, y = domain_subdomain, fill = domain_subdomain)) +
+  geom_tile() +
+  # facet_wrap(~ site, scales = "free_y", ncol = 2) +
+  facet_col(vars(site), scales = "free_y", space = "free") +
+  scale_x_date(date_labels = "%Y") +
+  scale_fill_manual(values = colors_for_urls_world) +
+  # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
+
+```
+
+#### Dutch
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 33 ## 35 ist bissi zu groß
+#| fig-width: 10
+
+df_iframes_srcs_nl %>% filter(domain_subdomain %in% most_famous_visible_nl$domain_subdomain, !site %in% split_sites_in_2_vis_nl) %>%
+  ggplot(., aes(x = year_month, y = domain_subdomain, fill = domain_subdomain)) +
+  geom_tile() +
+  # facet_wrap(~ site, scales = "free_y", ncol = 2) +
+  facet_col(vars(site), scales = "free_y", space = "free") +
+  scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-06-01"))) +
+  scale_fill_manual(values = colors_for_urls_nl) +
+  # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
+  # theme(axis.text.y = element_blank()) #+ theme(legend.position = "none")
 
 
 ```
 
-#### Zweite Hälfte der Seiten
+:::
 
 ```{r}
 #| echo: false
 #| warning: false
 #| error: false
-#| fig-height: 15
-#| fig-width: 10
 
-df_iframes_srcs %>% filter(domain_subdomain %in% most_famous_visible$domain_subdomain, !site %in% split_sites_in_2_vis) %>% 
+df_ausschluss <- df_iframes_srcs_de %>% 
+  # filter(domain_subdomain %in% most_famous_visible$domain_subdomain, !site %in% split_sites_in_2_vis) %>% 
+  filter(!domain_subdomain %in% most_famous_visible_de$domain_subdomain, helper == "visible") %>% 
+  reframe(counted = sum(counted), .by = "domain_subdomain") %>% 
+  arrange(desc(counted))
+
+DT::datatable(df_ausschluss)
+
+```
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 80
+#| fig-width: 10
+#| fig-dpi: 144
+
+get_domain_translation <- function(sphere_){
+  df_return <- read_csv(file = paste0("../../data/helper/22-09-21-Top News Websites [AU - public] - ",sphere_," news.csv"), show_col_types = FALSE) %>% 
+    mutate(cleaned_urls = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.)) %>% 
+    select(Name, cleaned_urls)
+}
+
+df_retranslate_domains <- get_domain_translation("German")
+
+plot <- df_iframes_srcs_de %>% 
+  # filter(domain_subdomain %in% most_famous_visible$domain_subdomain, !site %in% split_sites_in_2_vis) %>% 
+  filter(domain_subdomain %in% most_famous_visible_de$domain_subdomain) %>% #, !site %in% split_sites_in_2_vis) %>% 
+  left_join(., df_retranslate_domains, by = c("site" = "cleaned_urls")) %>% 
   ggplot(., aes(x = year_month, y = domain_subdomain, fill = domain_subdomain)) +
   geom_tile() +
-  facet_wrap(~ site, scales = "free_y", ncol = 2) +
-  scale_x_date(date_labels = "%Y") +
-  scale_fill_manual(values = colors_for_urls) +
+  # facet_wrap(~ site, scales = "free_y", ncol = 2) +
+  facet_col(vars(Name), scales = "free", space = "free") +
+  scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-06-01"))) +
+  scale_fill_manual(values = colors_for_urls_de) +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none")
+  ggtitle(paste0("Domains referenced in iframes")) + 
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
   # theme(axis.text.y = element_blank()) #+ theme(legend.position = "none")
 
+plot
+
+# ggsave(plot, filename = "../../data/3-visualizing/poster-iframes.png", width = 10, height = 78, limitsize = FALSE, dpi = 144)
 
 ```
