@@ -9,9 +9,9 @@ library(RPostgres)
 library(urltools)
 library(googlesheets4)
 
-source("../config/config.R")
-source("../config/config-graphic.R")
 source("../config/config-secret.R")
+source("../config/config-graphic.R")
+source("../config/config.R")
 
 
 
@@ -75,19 +75,24 @@ get_hashes_3 <- function(sphere_){
 
 ```
 
-## Form findings gehasht -\> was bedeutet das?
+## What is ment by form context?
 
 Die bisherigen Verfahren suchten in den archivierten Seiten nach konkreten Spuren auf Kommentaroptionen. Entweder ganz gezielt nach Kommentarsystemen (über die Snippets) oder über die Tags, die einen Kommentar auf einer Website möglich machen. Diese Spuren geben Hinweise ob überhaupt die Möglichkeit zur Kommentieren bestand. 
 
 Dieser Ansatz wird erweitert. Denn neben der Frage, ob überhaupt etwas da war, ist es über die Kontextanalyse der Tags möglich herauszufinden, wie diese Kommentierung implementiert war. 
 
 HTML-Seiten sind hierachisch strukturiert. Etwas, das auf der Seite oben gezeigt werden soll, steht auch im HTML-Dokument oben und wenn ein Element zu einem bestimmten Abschnitt gehört, wird es von diesem Abschnitt "umschlossen". So ist es bei Formularen üblich, dass es dazu weitere Elemente gibt:
+
 - Textboxen, in die User ihren Kommentar (oder Suchbegriff) eingeben können,
+
 - Buttons, über die Text versendet wird.
+
 - Checkboxen, die angehakt werden müssen, zur Bestätigung, dass die Etikette-Vorschriften gelesen wurden
 
 Solche Elemente stehen innerhalb eines Formtags. Hier ein simples Schema: `<form><button></button></form>`
 Wenn im folgenden also von dem Kontext eines Form-tags die Rede ist, sind alle Elemente (tags) gemeint, die hierachrisch zum form-tag zu geordnet sind.
+
+## Form findings gehasht -\> was bedeutet das?
 
 Kommentarbereiche in Websites sind äußerst heterogen. Jede Redaktion entscheidet wieder neu, wie dieser Bereich auf der jeweiligen Seite aussehen soll und wie sie strukturiert ist. Das hat Auswirkungen auf den Quellcode: alle Spuren die ich finde sind unterschiedlich umfangreich und deswegen schwer zu handhaben, wenn es an die Frage geht, wann Änderungen passiert sind. Mittels des Hashes gebe ich diesen unterschiedlich umfangreichen Spuren einen Fingerabdruck, der es mir so ermöglicht unterschiedliche Seiten miteinander zu vergleichen.
 

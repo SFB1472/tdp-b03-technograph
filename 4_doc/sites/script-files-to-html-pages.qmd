@@ -9,7 +9,7 @@ library(DBI)
 library(RPostgres)
 library(urltools)
 
-source("../config/config-secret.R")
+source("../../config/config-secret.R")
 
 con <- dbConnect(RPostgres::Postgres(), 
                  dbname = dsn_database,
@@ -39,9 +39,9 @@ get_nr_unique_script_tags <- function(sphere){
 
 # get_nr_unique_sites("German")
 
-df_script_csv_de <- read_csv(file = "../data/raw/German/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
-df_script_csv_nl <- read_csv(file = "../data/raw/Dutch/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
-df_script_csv_world <- read_csv(file = "../data/raw/World/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
+df_script_csv_de <- read_csv(file = "../../data/raw/German/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
+df_script_csv_nl <- read_csv(file = "../../data/raw/Dutch/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
+df_script_csv_world <- read_csv(file = "../../data/raw/World/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
 
 # df_script_csv_de %>% select(sha1) %>% distinct() %>% nrow()
 

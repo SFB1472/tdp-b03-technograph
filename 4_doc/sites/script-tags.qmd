@@ -9,9 +9,10 @@ library(RPostgres)
 library(urltools)
 library(googlesheets4)
 
-source("../config/config.R")
-source("../config/config-graphic.R")
+
 source("../config/config-secret.R")
+source("../config/config-graphic.R")
+source("../config/config.R")
 
 # gs4_auth(cache=".secrets")
 # gs_domain_to_look <- read_sheet(SPREADSHEET_PATH_GENERELL, sheet = SPREADSHEET_PATH_DOMAINS[[{{CURRENT_SPHERE}}]]) %>% 

@@ -15,8 +15,8 @@ gs4_auth(cache=".secrets")
 extrafont::loadfonts(quiet = TRUE)
 
 source("../config/config-secret.R")
-source("../config/config.R")
 source("../config/config-graphic.R")
+source("../config/config.R")
 
 con <- dbConnect(RPostgres::Postgres(), 
                  dbname = dsn_database,

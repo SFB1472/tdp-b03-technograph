@@ -21,8 +21,8 @@ library(shiny)
 extrafont::loadfonts(quiet = TRUE)
 
 source("../config/config-secret.R")
-source("../config/config.R")
 source("../config/config-graphic.R")
+source("../config/config.R")
 
 SPHERE_FOR_SHEET <- "German"
 
@@ -135,7 +135,7 @@ get_form_info("World", "form") %>%
 
 ### German
 
-Im Fall der deutschprachigen Websphere sind es tatsächlich nur zwei HTML-Seiten, die keine from-tags enthalten. Das ist so wenig, dass das schon etwas skurril ist.
+Die deutsche Sphere unterscheidet sich hier massiv von den anderen beiden.  
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
@@ -148,7 +148,7 @@ df <- df_german_sites %>%
   left_join(., df_domains_to_analyse ) %>% 
   filter(!is.na(Name)) 
 
-DT::datatable(df)
+# DT::datatable(df)
 
 df %>% 
   mutate(crawl_date = ymd(crawl_date)) %>% 
@@ -160,6 +160,8 @@ df %>%
   geom_col()
 
 ```
+
+Nur in `r df %>% nrow()` Seiten enthalten überhaupt keine `form`-Tags enthalten.
 
 ### Dutch
 
@@ -173,7 +175,7 @@ df <- df_sites %>%
   left_join(., df_domains_to_analyse ) %>% 
   filter(!is.na(Name)) 
 
-DT::datatable(df)
+# DT::datatable(df)
 
 df %>% 
   mutate(crawl_date = ymd(crawl_date)) %>% 
@@ -185,6 +187,8 @@ df %>%
   geom_col()
 
 ```
+
+In `r df %>% nrow()` Seiten sind keine Tags enthalten.
 
 ### International
 
@@ -198,7 +202,7 @@ df <- df_german_sites %>%
   left_join(., df_domains_to_analyse ) %>% 
   filter(!is.na(Name)) 
 
-DT::datatable(df)
+# DT::datatable(df)
 
 df %>% 
   mutate(crawl_date = ymd(crawl_date)) %>% 
@@ -210,6 +214,9 @@ df %>%
   geom_col()
 
 ```
+
+In `r df %>% nrow()` Seiten sind keine Tags enthalten.
+
 :::
 
 ## Welche Scripttypen werden über form tags aufgerufen?
@@ -257,8 +264,13 @@ df_form_world_actions <- get_form_attr_info("World", "form", "action") %>%
 ::: panel-tabset
 ### German
 
-```{r message=FALSE, error=FALSE, warning=FALSE}
+```{r}
 #| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
 
 df_form_de_actions %>% 
   ggplot(., aes(x = crawl_date, y = script_detected, fill = normalised)) +
@@ -270,8 +282,12 @@ df_form_de_actions %>%
 
 ### Dutch
 
-```{r message=FALSE, error=FALSE, warning=FALSE}
+```{r}
 #| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
 
 df_form_nl_actions %>% 
   ggplot(., aes(x = crawl_date, y = script_detected, fill = normalised)) +
@@ -284,8 +300,12 @@ df_form_nl_actions %>%
 
 ### International
 
-```{r message=FALSE, error=FALSE, warning=FALSE}
+```{r}
 #| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
 
 df_form_world_actions %>% 
   ggplot(., aes(x = crawl_date, y = script_detected, fill = normalised)) +
@@ -521,13 +541,18 @@ get_print("World")
 
 
 get_df <- function(sphere_){
-  df_all_form_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sphere, s.site, t.site as sha1, s.url, t.tag, t.name, t.attr, t.group FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'", sphere_, "' AND t.tag LIKE 'form'"))
+  # sphere_ = "German"
+  
+  df_all_form_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sphere, s.site, t.site as sha1, s.url, t.tag, t.name, t.attr, t.group FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere_, "' AND t.tag = 'form'"))
 
-  df_form_comments <- get_form_with_comment(sphere_, "form")
+  # df_form_comments <- get_form_with_comment(sphere_, "form") %>% 
+  #   mutate(matches = as.character(matches),
+  #          found = ifelse(!is.na(matches), 1, NA))
   
   df_all_forms_with_finding <- df_all_form_tags %>%
-    left_join(., df_form_comments) %>%
-    mutate(found = ifelse(!is.na(matches), 1, NA)) %>%
+    mutate(matches = str_detect(attr, "comment|komment")) %>% #View()
+    # left_join(., df_form_comments, by = "sha1") %>% View()
+    mutate(found = ifelse(matches, 1, NA)) %>%
     group_by(sha1, group) %>%
     arrange(found) %>%
     fill(found) %>%

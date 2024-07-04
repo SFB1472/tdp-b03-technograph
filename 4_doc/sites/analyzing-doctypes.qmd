@@ -100,7 +100,7 @@ they do not tell a thing about commenting systems, but speaking of the standards
 #   select(-name) #%>% deframe()
 # 
 # write_csv(test_colors, "../data/helper/doctype-colors-2.csv")
-doc_colors_legend <- read_csv("../data/helper/doctype-colors-2.csv")# %>% deframe()
+doc_colors_legend <- read_csv("../../data/helper/doctype-colors-2.csv")# %>% deframe()
 # rm(get_doctype_info_relative)
 df_doctype_de <- get_doctype_info_relative("German", "doctype")
 df_doctype_de_abs <- get_doctype_info("German", "doctype")
@@ -190,7 +190,7 @@ df_doctype_de_abs %>%
 
 ```
 
-Der Standard HTML kam so selten vor, dass in diesem Diagramm keine Balken zu sehen sind. Konkret sind es `r df_doctype_de_abs_counted$counted[[ match("HTML 2.0", df_doctype_de_abs_counted$doctype_cluster)]]` Seiten in dem deutschsprachigen Datensatz.
+Der Standard HTML 2.0 kam so selten vor, dass in diesem Diagramm keine Balken zu sehen sind. Konkret sind es `r df_doctype_de_abs_counted$counted[[ match("HTML 2.0", df_doctype_de_abs_counted$doctype_cluster)]]` Seiten in dem deutschsprachigen Datensatz.
 
 
 

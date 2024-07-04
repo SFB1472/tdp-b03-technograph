@@ -15,9 +15,11 @@ gs4_auth(cache=".secrets")
 
 extrafont::loadfonts(quiet = TRUE)
 
+
 source("../config/config-secret.R")
-source("../config/config.R")
 source("../config/config-graphic.R")
+source("../config/config.R")
+
 
 con <- dbConnect(RPostgres::Postgres(),
                  dbname = dsn_database,
@@ -44,11 +46,11 @@ Als nächstes folgt eine kurze Analyse zu den mehrfach vorkommenden HTML-Seiten,
 
 
 get_messy_sites <- function(sphere){
-  df_sites_messy <- read_csv(paste0("../data/raw/", sphere, "/2nd/html-file-information.csv"), col_select = c("crawl_date", "url", "sha1", "md5"), col_types = c("c", "c", "c", "c")) %>%  
+  df_sites_messy <- read_csv(paste0("../../data/raw/", sphere, "/2nd/html-file-information.csv"), col_select = c("crawl_date", "url", "sha1", "md5"), col_types = c("c", "c", "c", "c")) %>%  
     mutate(year = ymd_hms(crawl_date) %>% year(),
                site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
   
-  file_list <- list.files(paste0("../data/0-preprocessing/", sphere, "/")) %>% 
+  file_list <- list.files(paste0("../../data/0-preprocessing/", sphere, "/")) %>% 
     enframe() %>% 
     mutate(sha1 = str_remove(value, ".html"))
   
