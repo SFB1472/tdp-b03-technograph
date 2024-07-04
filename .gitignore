@@ -29,12 +29,13 @@ vignettes/*.pdf
 .DS_Store
 *.Rproj
 **.code-workspace
+**/.quarto/
 
 4_doc/_site/*
 notes/*
 images/*
 */img/
-*/_deprecated
+**/_deprecated/
 
 data/*
 !data/index/
@@ -46,4 +47,6 @@ data/*
 .secrets
 
 */venv/*
+
+
 
