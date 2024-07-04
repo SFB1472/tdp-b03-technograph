@@ -3,16 +3,10 @@ library(tidyverse)
 library(lubridate)
 library(urltools)
 library(MetBrewer)
-library(urltools)
+# library(urltools)
 library(DBI)
 library(RPostgres)
 library(re2)
-library(ggiraph)
-library(googlesheets4)
-
-gs4_auth(cache=".secrets")
-
-extrafont::loadfonts(quiet = TRUE)
 
 source("../config/config-secret.R")
 source("../config/config.R")
@@ -72,7 +66,14 @@ df_sites <- dbGetQuery(conn = con, "SELECT * FROM sites_first_export") %>%
 
 ```
 
-```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 4
+#| fig-width: 10
+
 
 df_timespan_year <- seq(ymd("1996-01-01"), ymd("2021-06-01"), by = "year") %>% as_tibble()
 
@@ -80,33 +81,72 @@ year_breaks_for_plotting <- df_timespan_year %>%
   mutate(years = year(value)) %>% 
   select(years) %>% pull(.)
 
-df_sites %>% 
-  group_by(year, sphere) %>% 
-  summarise(counted_sites = n()) %>% 
-  ungroup() %>% 
+df_plot <- df_sites %>% 
+  summarise(counted_sites = n(), .by = c(year, sphere)) #%>% 
+
+df_plot %>% 
   ggplot(., aes(x = year, y = sphere, fill = counted_sites)) +
   geom_tile() +
   scale_x_continuous(breaks = year_breaks_for_plotting, limits = c(min(year_breaks_for_plotting), max(year_breaks_for_plotting)), expand = c(0, NA), name = "crawl_year") +
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
   scale_y_discrete(expand = c(0, NA)) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1)) + theme_b03_base + theme_b03_heatmap + theme_b03_facets  + 
-  guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
+  guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines"))) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme(axis.text.x = element_text(angle = 30, hjust = 1))
 
 ```
 
 ## Zweiter Datensatz: wie viel Seiten sind hier mehr enthalten?
 
-```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 4
+#| fig-width: 10
+
 
 df_sites_2th_export <- dbGetQuery(conn = con, "SELECT * FROM sites WHERE export = 2") %>% 
   mutate(year = ymd(crawl_date) %>% year(),
              site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
 
 
-df_sites_2th_export %>% 
-  group_by(year, sphere) %>% 
-  summarise(counted_sites = n()) %>% 
-  ungroup() %>% 
+df_sites_2th_export %>%
+  group_by(year, sphere) %>%
+  summarise(counted_sites = n()) %>%
+  ungroup() %>%
+  ggplot(., aes(x = year, y = sphere, fill = counted_sites)) +
+  geom_tile() +
+  scale_x_continuous(breaks = year_breaks_for_plotting, limits = c(min(year_breaks_for_plotting), max(year_breaks_for_plotting)), expand = c(0, NA), name = "crawl_year") +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+  scale_y_discrete(expand = c(0, NA)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) + theme_b03_base + theme_b03_heatmap + theme_b03_facets  +
+  guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
+
+
+```
+
+## Übersicht der archivierten Seiten pro Jahr
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 4
+#| fig-width: 10
+
+
+df_sites_all <- dbGetQuery(conn = con, "SELECT s.crawl_date, s.sha1, s.sphere FROM sites s") %>% 
+  mutate(year = ymd(crawl_date) %>% year(),
+         month = ymd(crawl_date) %>% month())#,
+             # site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
+
+
+df_sites_all %>%
+  group_by(year, sphere) %>%
+  summarise(counted_sites = n()) %>%
+  ungroup() %>%
   ggplot(., aes(x = year, y = sphere, fill = counted_sites)) +
   geom_tile() +
   scale_x_continuous(breaks = year_breaks_for_plotting, limits = c(min(year_breaks_for_plotting), max(year_breaks_for_plotting)), expand = c(0, NA), name = "crawl_year") +
@@ -117,20 +157,51 @@ df_sites_2th_export %>%
 
 
 ```
+## Verteilung der archivierten Seiten über die Monate
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 4
+#| fig-width: 10
+
+df_sites_all %>%
+  mutate(month = ymd(crawl_date) %>% month()) %>% 
+  summarise(counted_sites = n(), .by = c(month, sphere)) %>% #View()
+  ggplot(., aes(x = month, y = sphere, fill = counted_sites)) +
+  geom_tile() +
+  scale_x_continuous(breaks = c(2,4,6,8,10,12), expand = c(0, NA), name = "crawl_month") +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+  scale_y_discrete(expand = c(0, NA)) +
+  theme_b03_base + theme_b03_heatmap + theme_b03_facets  +
+  guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
+
+```
+
 
 ## Um welche Uhrzeit wurden die jeweiligen Seiten gecrawlt?
 
 ```{r}
-df_sites_timestamp <- dbGetQuery(conn = con, "SELECT s.crawl_timestamp, s.sha1, s.sphere FROM sites s") 
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 4
+#| fig-width: 10
 
-df_sites_timestamp %>% 
-  mutate(hour = hour(crawl_timestamp)) %>% 
+df_sites_timestamp <- dbGetQuery(conn = con, "SELECT s.crawl_timestamp, s.sha1, s.sphere FROM sites s WHERE s.of_interest = TRUE") 
+
+df_sites_timestamp %>%
+  mutate(hour = hour(crawl_timestamp)) %>%
   reframe(., counted = n(), .by = c(hour,sphere)) %>%
   ggplot(., aes(x = hour, y = sphere, fill = counted)) +
   geom_tile() +
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+  scale_x_continuous(expand = c(0, NA)) +
   scale_y_discrete(expand = c(0, NA)) +
-  theme(axis.text.x = element_text( hjust = 1)) + theme_b03_base + theme_b03_heatmap + theme_b03_facets  + 
+  theme(axis.text.x = element_text( hjust = 1)) + theme_b03_base + theme_b03_heatmap + theme_b03_facets  +
   guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
 
 ```
