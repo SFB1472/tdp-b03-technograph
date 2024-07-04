@@ -1,5 +1,5 @@
 
-CURRENT_SPHERE <- "German"
+CURRENT_SPHERE <- "World"
 
 
 PATH_DATA_CONFIG <- "https://api.github.com/repos/SFB1472/ARCH_News_Comments/contents/config.yaml"
@@ -34,3 +34,9 @@ SPREADSHEET_ANNOTATION$Dutch <- "nl-domains"
 SPREADSHEET_ANNOTATION$German <- "de-domains"
 
 PATH_TO_SHINY_DATA <- "shiny/data/"
+
+library(re2)
+SUBDOMAINS_TO_INKLUDE <- re2_regexp("news\\.sky|timesofindia.indiatimes")
+SCRIPT_ENDINGS_TO_SEARCH_FOR <- re2_regexp("ajax(entry)?|\\.asp(x)?|\\.js(on|p|f)?|\\.php|\\.(f)?cgi|\\.do")
+
+COMMENTS_IN_TAGS <- "comment|komment"
