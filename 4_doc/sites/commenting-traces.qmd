@@ -1,0 +1,320 @@
+---
+title: "Commenting traces"
+---
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+library(googlesheets4)
+library(MetBrewer)
+library(ggforce)
+
+source("../config/config-secret.R")
+source("../config/config-graphic.R")
+source("../config/config.R")
+
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+```
+
+# Combining both approaches
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+snippets_to_find <- read.csv("../../data/helper/24-07-12-Commenting-system-detection-patterns.csv", sep = ";")
+str_snippets_to_find <- snippets_to_find %>% select(regex) %>% pull(.) %>% paste(collapse = "|")
+# traces_to_search <- c(COMMENTS_IN_TAGS, str_snippets_to_find) %>% paste(collapse = "|")
+
+get_domain_translation <- function(sphere_){
+  df_return <- read_csv(file = paste0("../../data/helper/22-09-21-Top News Websites [AU - public] - ",sphere_," news.csv"), show_col_types = FALSE) %>% 
+    mutate(cleaned_urls = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.)) %>% 
+    select(Name, cleaned_urls)
+}
+
+tag_colors <- c("iframe" = "#c969a1", "script" = "#ee8577", "form" = "#ffbb44", "div" = "#62929a", "plain text" = "#000000")
+
+get_data_snippets_plain_text <- function(sphere_){
+  df_opinary <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.snippet, s.sphere FROM sites s INNER JOIN snippets_2 t ON s.sha1 = t.site WHERE t.detected = 1 AND s.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+}
+
+get_data_snippets_tags <- function(sphere_){
+  df_googletag <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~* '", str_snippets_to_find, "' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+}
+
+get_data_comment_traces <- function(sphere_){
+  df_civey <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~* '", COMMENTS_IN_TAGS, "' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+}
+
+df_test <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.name, t.attr, t.group, t.sphere FROM tags_2 t WHERE t.site = '0af3fb63a0116eb20cc5aa227088a6ecbdd7f7d7'"))
+
+get_all_sites_sphere <- function(sphere_){
+  dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, COUNT(s.sha1) as sites_per_day FROM sites s WHERE s.of_interest = TRUE AND s.sphere ='", sphere_, "' GROUP BY (s.crawl_date, s.site)")) %>% 
+    filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
+    mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% #View()
+    reframe(counted_sites = sum(sites_per_day), .by = c("year_month", "site"))
+  }
+
+print_heatmap <- function(df_data, snippet, df_retranslate_domains){
+  # df_all_sites <- get_all_sites_sphere(sphere_)
+
+  df_data %>% 
+    # head(30000) %>% 
+    mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% 
+    reframe(counted = n(), .by = c(year_month, site, tag)) %>% #View()
+    left_join(., df_retranslate_domains, by = c("site" = "cleaned_urls")) %>% 
+        # left_join(., df_all_sites) %>%
+    # mutate(normalized = counted/counted_sites) %>% 
+    ggplot(., aes(x = year_month, y = tag, fill = tag)) +#, alpha = normalized)) +
+    geom_tile() +
+    ggtitle(paste0("Searching ",snippet , " in all tags")) + 
+    facet_col(vars(Name), scales = "free", space = "free") +
+    scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-06-01"))) +
+    scale_fill_manual(values = tag_colors) +
+      theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+    theme(axis.text.y = element_blank()) + theme_b03_timeline_faceted
+}
+
+
+```
+
+## Snippets found - plain text and tags
+
+
+Ein stichprobenartiger Vergleich der Spuren der verschiedenen Ansätze zeigt interessante "Lücken" auf. Generell gibt es mehr Funde wenn HTML als Text verstanden wird. 
+
+Im Fall der SZ gibt es beispielsweise 13 Seiten, in denen das Snippet "disqus_thread" in der Textsuche gefunden wurde, aber nicht in den Tags. In diesem Fall wurde im eingebetteten CSS der Seite eine Klasse mit diesem Namen definiert. Sie kommt aber in der Seite nicht zum Einsatz. Diese Spur kann man deuten als einen Überrest eines Tests: vorübergehend wurde hier zusätzliche Styles definiert, die in den Seiten noch zu finden sind, die Funktionalität aber nicht. 
+
+Gigya wird nur über die plain-text-Suche gefunden. Alle Spuren darauf sind in einem Script-Tag direkt in die Seiten geschrieben. Auch gibt es hiervon nur eine Handvoll Seiten. 
+
+Bei der Welt gibt es Spuren auf Disqus in einem Link-Tag, diese habe ich nicht extra geparst. Meine (womöglich falsche) Annahme, dass alle Verlinkungen einen Bezug zu div-Tags haben würden geht hier schief. Ein span-Tag trägt hier noch eine Information "commentCount". 
+
+Frankfurter Rundschau auch in a- und span-tags Spuren auf disqus. 
+
+Grobes Fazit: in dem gröberen Ansatz der Textsuche im HTML finden sich mehr Spuren auf Kommentarsysteme. Das liegt daran, dass hier auch Bereiche durchsucht werden, die bei der Selektion der Tags außen vor bleiben. Was eine interessante Perspektive ist, denn das Argument für das Parsen der Tags lautet ja, dass es die Perspektive weitet. Diese Beobachtung führt zu einer weiteren Differenzierung der Spuren. Das Auffinden einer nicht verwendeten CSS-Klasse ohne Verwendung ist noch abstrakter, als das ein div-Tag, das zwar noch "disqus-threat" heißt, aber keinerlei Daten der Kommentare und Interaktionsmöglichkeiten mehr enthält. Einzig die Tatsache, dass es einige Funde in Link-tags gibt, die nicht einzeln geparst wurden, gibt zu denken, ob diese nicht noch zusätzlich extrahiert werden sollten.
+
+Wie die Grafik zu lesen ist: Die Grafik verbindet beide Ansätze miteinander. Die Liste der vordefinierten Snippets wird hier auf die Tags angewendet. Das bringt einen enormen Vorteil für das weitere Vorgehen, denn über die Funde der Snippets in der Struktur des HTML, können diese Spuren auch für das machine learning verwendet werden.
+
+Zwischen den beiden Datensätzen gibt es (zum Glück) eine große Überlappung. Finden sich die Spuren aus der plain-text-suche innerhalb von Tags, werden sie in der Farbe des Tags gezeichnet. Befinden sie sich außerhalb, werden sie schwarz eingezeichnet.
+
+::: panel-tabset
+
+### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 20
+#| fig-width: 10
+
+df_retranslate_domains <- get_domain_translation("German")
+df_snippets_plain_de <- get_data_snippets_plain_text("German") %>% 
+  mutate(tag = "plain text")
+
+df_snippets_in_tags_de <- get_data_snippets_tags("German")
+
+# 
+# overlapping_findings_sites <- df_snippets_plain %>% 
+#   filter(sha1 %in% df_snippets_in_tags$sha1) %>% 
+#   select(sha1) %>% distinct()
+# 
+non_overlapping_findings_sites_de <- df_snippets_plain_de %>%
+  filter(!sha1 %in% df_snippets_in_tags_de$sha1) #%>%
+
+df_snippets_in_tags_print_de <- df_snippets_in_tags_de %>% 
+  bind_rows(., non_overlapping_findings_sites_de)
+
+print_heatmap(df_snippets_in_tags_print_de, "snippets of commenting systems", df_retranslate_domains)
+
+#   select(site, snippet) %>% distinct()
+# 
+# distinct_plain_findings <- df_snippets_plain %>% select(sha1, site, snippet) %>% distinct()
+# 
+# distinct_plain_findings %>% select(site, snippet) %>% distinct() %>% View()
+# 
+# df_snippets_plain %>% filter(site == "fr", snippet == "disqus_thread", !sha1 %in% df_snippets_in_tags$sha1) %>% View()
+
+
+```
+
+### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 45
+#| fig-width: 10
+
+df_retranslate_domains <- get_domain_translation("World")
+df_snippets_plain_world <- get_data_snippets_plain_text("World") %>% 
+  mutate(tag = "plain text")
+
+df_snippets_in_tags_world <- get_data_snippets_tags("World")
+
+non_overlapping_findings_sites_world <- df_snippets_plain_world %>%
+  filter(!sha1 %in% df_snippets_in_tags_world$sha1) #%>%
+
+df_snippets_in_tags_world <- df_snippets_in_tags_world %>% 
+  bind_rows(., non_overlapping_findings_sites_world)
+
+print_heatmap(df_snippets_in_tags_world, "snippets of commenting systems",df_retranslate_domains)
+
+```
+
+### Dutch
+
+Für die niederländische Sprachwelt wurden die div-Tags noch nicht extrahiert, deswegen kann es hier auch keine Spuren geben.
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 45
+#| fig-width: 10
+
+df_retranslate_domains <- get_domain_translation("Dutch")
+df_snippets_plain_nl <- get_data_snippets_plain_text("Dutch") %>% 
+  mutate(tag = "plain text")
+
+df_snippets_in_tags_nl <- get_data_snippets_tags("Dutch")
+
+non_overlapping_findings_sites_nl <- df_snippets_plain_nl %>%
+  filter(!sha1 %in% df_snippets_in_tags_nl$sha1) #%>%
+
+df_snippets_in_tags_nl <- df_snippets_in_tags_nl %>% 
+  bind_rows(., non_overlapping_findings_sites_nl)
+
+print_heatmap(df_snippets_in_tags_nl, "snippets of commenting systems",df_retranslate_domains)
+
+```
+
+:::
+
+
+## Traces of "comment|komment" found
+
+
+::: panel-tabset
+
+### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 42
+#| fig-width: 10
+
+df_retranslate_domains <- get_domain_translation("German")
+df_comment_traces_de <- get_data_comment_traces("German")
+print_heatmap(df_comment_traces_de, "Comment traces",df_retranslate_domains)
+
+```
+
+### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 50
+#| fig-width: 10
+
+df_retranslate_domains <- get_domain_translation("World")
+df_comment_traces_world <- get_data_comment_traces("World")
+print_heatmap(df_comment_traces_world, "Comment traces",df_retranslate_domains)
+
+```
+
+### Dutch
+
+
+:::
+
+## Daten zum Export vorbereiten 
+
+Die hier gezeigten Spuren werden als nächstes zusammengefasst: Diese Funde sind Blitzlichter aus dem HTML-Code. Oft sind die Tags, die hier Blitzlichter zeigen, ineinander verschachtelt, manchmal stehen sie für sich. 
+
+Einzelne Tags machen noch keine Kommentarbereiche, aber sie enthalten womöglich diejenigen Tags die in Summe dann ein (strukturelles) Bild des Kommentarbreichs zeigen können. Die Idee ist, das prototypische Vorgehen bei den form-Tags hier auf alle Spuren anzuwenden: sind die Bereiche erst einmal identifiziert und extrahiert, können sie gehasht werden und Veränderungen zuverlässig gefunden werden. 
+
+Außerdem ist diese Datenverarbeitung auch Vorbereitung für den machine learning part der nächsten Förderphase. 
+
+In dieser Verarbeitung der Daten sind die Snippetfunde, die oben schwarz markiert sind, nicht enthalten. Sie sind ohne Kontext, abstrakte Spuren. 
+
+::: panel-tabset
+
+### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+
+# test_more_comments <- df_comment_traces_de %>% 
+#   filter(str_detect(attr, "morecomment"))
+# 
+# test_recomments <- df_comment_traces_de %>% 
+#   filter(str_detect(attr, "recomment") )
+# 
+# anti_join(test_recomments, test_more_comments) %>% View()
+
+df_tags_for_context_de <- df_comment_traces_de %>% 
+  bind_rows(., df_snippets_in_tags_de) %>% 
+  # filter(!str_detect(attr, "recomment") )%>% 
+  arrange(sha1) %>% 
+  select(-group) %>% 
+  distinct()
+
+df_tags_for_context_de %>% select(sha1) %>% distinct() %>% nrow()
+
+test <- df_tags_for_context_de %>% filter(sha1 == "00012777602a9a99e667f0e4b5416440a9d0f081")
+
+write_csv(test, file = "../../data/1-parsing/tags/German/sites-and-findings-for-context-parsing-test-3.csv")
+
+write_csv(df_tags_for_context_de, file = "../../data/1-parsing/tags/German/sites-and-findings-for-context-parsing.csv")
+
+```
+
+
+### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+
+df_tags_for_context_world <- df_comment_traces_world %>% 
+  bind_rows(., df_snippets_in_tags_world) %>% 
+  filter(!str_detect(attr, "recomment") )%>% 
+  arrange(sha1)
+
+
+
+write_csv(df_tags_for_context_world, file = "../../data/1-parsing/tags/World/sites-and-findings-for-context-parsing.csv")
+
+```
+
+:::
+
