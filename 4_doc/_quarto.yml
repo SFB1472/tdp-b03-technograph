@@ -21,7 +21,7 @@ website:
         contents:
           - text: "Different approaches how to interpret HTML"
             file: sites/approaches.qmd
-          - text: "Learning about infrastructure: Analyzing doctype"
+          - text: "Analyzing doctype"
             file: sites/analyzing-doctypes.qmd
           - text: "Analyzing form tags"
             file: sites/analyzing-form-tags.qmd
@@ -33,6 +33,8 @@ website:
             file: sites/analyzing-iframes.qmd
           - text: "Analyzing specific snippets"
             file: sites/analyzing-all-tags.qmd
+          - text: "All commenting traces"
+            file: sites/commenting-traces.qmd
 
 format:
   html:
