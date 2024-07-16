@@ -1,0 +1,353 @@
+---
+title: "Analyzing form context"
+---
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+library(googlesheets4)
+
+source("../config/config-secret.R")
+source("../config/config-graphic.R")
+source("../config/config.R")
+
+
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+# dbDisconnect(con)
+
+# make_df <- function(df, sphere_){
+#   gs4_auth(cache=".secrets")
+#   gs_domain_to_look <- read_sheet(SPREADSHEET_PATH_GENERELL, sheet = SPREADSHEET_PATH_DOMAINS[[{{sphere_}}]]) %>% 
+#     select(Name, URL) %>% 
+#     mutate(site = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.)) 
+#   
+#   df_return <- df %>% 
+#     filter(site %in% gs_domain_to_look$site) %>% #View()
+#     arrange(crawl_date, hashed_forms) %>% 
+#     mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+#            site_subdomain = paste(site, subdomain, sep = "_")) %>% 
+#     mutate(change_indicator = ifelse(hashed_forms == lag(hashed_forms), 0, 1),
+#            prev_site = paste0("http://web.archive.org/web/", lag(crawl_date), "/", lag(url)),
+#            archive_url = paste0("http://web.archive.org/web/", crawl_date, "/", url),
+#            nr_unique_hashes = dense_rank(hashed_forms), .by = c(site, subdomain)) %>% #View()
+#     mutate(counted_form = n(),.by = hashed_forms) 
+#   # str(df_return)
+#   return(df_return)
+# }
+# 
+# get_hashes <- function(sphere){
+#   df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.hashed_forms FROM sites s INNER JOIN findings_hashed fh ON fh.sha1 = s.sha1 WHERE s.sphere = '", sphere, "' AND s.export = 1 ORDER BY s.crawl_date"))
+#   df_return <- make_df(df)
+# }
+# 
+# 
+# 
+# get_hashes_2 <- function(sphere_){
+#   df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.hashed_forms FROM sites s INNER JOIN findings_hashed_2 fh ON fh.sha1 = s.sha1 WHERE s.sphere = '", sphere_, "' AND fh.iteration = 1 ORDER BY s.crawl_date"))
+#   df_return <- make_df(df, sphere_)
+#   return(df_return)
+# }
+# 
+# 
+# get_hashes_3 <- function(sphere_){
+#   # print(sphere_)
+#   df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.hashed_forms FROM sites s INNER JOIN findings_hashed_2 fh ON fh.sha1 = s.sha1 WHERE s.sphere = '", sphere_, "' AND fh.iteration = 2 ORDER BY s.crawl_date"))
+#   df_return <- make_df(df, sphere_)
+#   return(df_return)
+# }
+
+# 7a7680601a641ca3f1ad02053e6aa35fe53c111e
+
+# test <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sphere, s.site, s.url, s.sha1, tc.parent_path_str, tc.group, tc.name, tc.attr, tc.value, tc.text FROM sites s INNER JOIN tags_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE 'German' AND tc.site LIKE '7a7680601a641ca3f1ad02053e6aa35fe53c111e'  ORDER BY s.sha1, tc.group"))
+# # 
+# test2 <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sphere, s.site, s.url, s.sha1, tc.parent_path_str, tc.group, tc.name, tc.attr, tc.value, tc.text FROM sites s INNER JOIN tags_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE 'German' AND tc.site LIKE 'cc879db7bc2bf85ace60968cfcb31be123592d13'  ORDER BY s.sha1, tc.group"))
+
+
+```
+
+
+
+## Tags gehasht - Weiterentwicklung
+
+
+Welche Informationen werden gehasht? 
+
+In dem Probedurchlauf mit den form-tags flossen drei Spalten in den Hash ein: Name des Tags, Name des Attributes und der Text, der auf der Seite ausgegeben wird. Mit der Ausweitung auf divs und iframes taugt diese Entscheidung nicht mehr, denn jetzt sind definitiv ganze Kommentare in den Daten. Folglich sollte der Text, der auf der Seite zu lesen ist tunlichst nicht in den Hash eingehen. 
+
+Inzwischen denke ich, sollten die Werte der Attribute schon wieder in den Hash eingehen, allerdings ist dann eine aufwendige Filteraktion notwendig. Denn wie in dem vorherigen Dokument zu den Hashes geschildert, ist es tatsächlich so, dass sich hier oftmals ids finden. Manchmal beziehen sie sich auf die Texte, die kommentiert werden können, manchmal auf User (div data-userid), Autoren oder Kommentare haben selbst ids (div id': 'comments-40383508 ´; article data-comments-block-id). Auch störend sind beispielsweise img-descriptions, die durch den Context jetzt gelegentlich dabei sind (div data-video-description, aber nur 33 Vorkommen). 
+
+Je länger ich auf die Daten starre, desto klarer wird wieder weshalb ich bei den form-tags-context die Werte der Attribute weggelassen habe.
+
+Die pragmatische Lösung hier wäre die Hashes noch einmal zu vereinfachen und den Text auch noch wegzulassen. Nachteil der Variante ist, dass als individuelle Faktoren hier nur noch die Anzahl sowie die Namen der Tags und Attribute in den Hash einfließen. 
+
+Eine Variante dazwischen wäre manche Filter zu probieren und den Unterschied zu untersuchen. 
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+# df_hashes_de <- get_hashes("German") 
+# df_hashes_de_2 <- get_hashes_2("German")
+
+
+```
+
+## Übersicht: Kennzahlen zum Verfahren
+
+Die Tabelle zeigt zunächst für jede Website wie viele der archivierten Seiten überhaupt Spuren von Kommentarfunktionalität in form-elementen haben.
+
+Die nächste Spalte `counted_hashes_distinct` gibt Auskunft darüber, wie viele unterschiedliche Kommentarbereiche für das jeweilige Nachrichtenhaus gefunden wurden.
+
+Als letzte Spalte gibt es einen Wert für das Verhältnis zwischen der Anzahl von Seiten mit Kommentarbereichen und den eindeutigen Hashes eben jener. Je kleiner der Wert ist, desto besser für die Methode. Denn dann stehen viele Seiten wenigen Hashes gegenüber, ein schönes Beispiel hierfür ist der Tagesspiegel, dazu später mehr. Je näher der Wert bei 1 ist, desto ähnlicher sind sich die Anzahl der Seiten und die unterschiedlichen Hashes.
+
+Je mehr Hashes eine Seite hat, desto weniger funktioniert die Methode hier. Hat eine Domain annähernd so viele Hashes wie archivierte Seiten vorliegen, könnte das ein Indikator dafür sein, dass hier tatsächliche Kommentare mit kodiert wurden. 
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+get_data_table <- function(sphere_){
+  
+  df_hashes_3 <- get_hashes_3(sphere_)
+  
+  # str(df_hashes_3)
+  
+  df_counted_sites_with_form_findings <- df_hashes_3 %>% 
+    reframe(nr_sites_with_form_findings = n(), .by = c(site, subdomain, site_subdomain)) 
+  
+  # print(sphere_)
+  
+  df_hashes_per_site <- df_hashes_3 %>% 
+    select(site, subdomain, site_subdomain, hashed_forms, counted_form) %>% 
+    distinct() %>% 
+    reframe(counted_hashes_distinct = n(), .by = c(site, subdomain, site_subdomain))
+  # rm(df_stats_per_site)
+  
+  # print("get data table sec")
+  
+  df_stats_per_site_de <- df_counted_sites_with_form_findings %>% 
+    left_join(., df_hashes_per_site) %>% 
+    mutate(ratio_hashes_sites = round(counted_hashes_distinct/nr_sites_with_form_findings, digits = 2))%>% 
+    # select(-site_subdomain) %>% 
+    arrange(ratio_hashes_sites)
+  
+}
+
+```
+
+
+::: panel-tabset
+
+### German
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df <- get_data_table("German") %>% select(-site_subdomain)
+
+DT::datatable(df, 
+              rownames = FALSE
+              )
+
+```
+
+### Dutch
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df <- get_data_table("Dutch") %>% select(-site_subdomain)
+
+DT::datatable(df, 
+              rownames = FALSE
+              )
+
+```
+
+### International
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df <- get_data_table("World") %>% select(-site_subdomain)
+
+DT::datatable(df, rownames = FALSE)
+
+```
+
+:::
+
+## Wann ändert sich die Struktur in den Kommentarbereichen? (Zweite Iteration)
+
+Für jede Website bekommt jeder Hash eine eigene Farbe, immer wenn diese wechselt, ändert sich etwas von einem Form-tag zum anderen. 
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+get_plot_changes <- function(sphere_){
+  # print("get plot changes first")
+  
+  sites_to_print <- get_data_table(sphere_) %>% 
+    filter(ratio_hashes_sites < 0.5) %>% 
+    select(site_subdomain) %>% 
+    distinct() %>% pull(.)
+  
+  # print("get plot changes second")
+  
+  get_hashes_3(sphere_) %>% 
+    mutate(site_subdomain = paste(site, subdomain, sep = "_")) %>%
+    # filter(site_subdomain %in% sites_to_print) %>% #View()
+    ggplot(., aes(x = crawl_date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
+    geom_point() +
+    theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+}
+
+```
+
+
+::: panel-tabset
+
+### German
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.width=9, fig.height=8}
+
+## hier fehlen alle seiten ohne form-findings
+
+get_plot_changes("German")
+
+```
+
+### Dutch
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.width=9, fig.height=8}
+
+get_plot_changes("Dutch")
+
+```
+
+### International
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.width=9, fig.height=18}
+
+get_plot_changes("World") 
+
+```
+
+:::
+
+### Erste Iteration: Hashes zu empfindlich; Wann ändert sich die Struktur in den Kommentarbereichen?
+
+Für diese Grafik, habe ich nur solche Domain-Subdomain-Kombinationen ausgewählt, die in der oberen Tabelle eine ratio kleiner 0.5 haben.
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+## hier fehlen alle seiten ohne form-findings
+  # print("get plot changes first")
+  
+  df_hashes_2 <- get_hashes_2("German")
+  
+  # str(df_hashes_3)
+  
+  df_counted_sites_with_form_findings <- df_hashes_2 %>% 
+    reframe(nr_sites_with_form_findings = n(), .by = c(site)) 
+  
+  # print("get data table first ")
+  
+  df_hashes_per_site <- df_hashes_2 %>% 
+    select(site, subdomain, site_subdomain, hashed_forms, counted_form) %>% 
+    distinct() %>% 
+    reframe(counted_hashes_distinct = n(), .by = c(site, subdomain, site_subdomain))
+  # rm(df_stats_per_site)
+  
+  # print("get data table sec")
+  
+  df_stats_per_site_de <- df_counted_sites_with_form_findings %>% 
+    left_join(., df_hashes_per_site) %>% 
+    mutate(ratio_hashes_sites = round(counted_hashes_distinct/nr_sites_with_form_findings, digits = 2))%>% 
+    # select(-site_subdomain) %>% 
+    arrange(ratio_hashes_sites)
+  
+  sites_to_print <- df_stats_per_site_de %>% 
+    filter(ratio_hashes_sites < 0.5) %>% 
+    select(site_subdomain) %>% 
+    distinct() %>% pull(.)
+  
+  # print("get plot changes second")
+  
+  df_hashes_2 %>% 
+    mutate(site_subdomain = paste(site, subdomain, sep = "_")) %>%
+    # filter(site_subdomain %in% sites_to_print) %>% #View()
+    ggplot(., aes(x = crawl_date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
+    geom_point() +
+    theme_b03_base + theme(legend.position = "none")
+
+  
+
+```
+
+
+
+## Änderungen der Seitenstrukturen
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+# library(jsonlite)
+# 
+# get_parent_pathes <- function(sphere){
+#   df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, tc.parent_path_str, tc.parent_path_json, regexp_matches(tc.value, '", COMMENTS_IN_TAGS, "') as matches FROM sites s INNER JOIN tag_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE '", sphere, "' AND tc.name LIKE 'form' ORDER BY s.crawl_date"))
+# }
+# 
+# df_pathes_2 <- get_parent_pathes("German")
+# 
+# df_pathes <- df_pathes_2 %>% 
+#   mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+#          parent_path_json = map(parent_path_json, function(p){
+#            p = fromJSON(p)
+#          })) %>% 
+#   # group_by(site, subdomain) %>% 
+#   mutate(change_indicator = ifelse(parent_path_str == lag(parent_path_str), 0, 1), .by = c("site", "subdomain"))# %>% View()
+  
+# df_pathes$parent_path_json[[1]] %>% fromJSON(.)
+```
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+# get_attr_names <- function(sphere){
+#   df <- dbGetQuery(conn = con, paste0("SELECT tc.value FROM tag_context tc WHERE tc.sphere LIKE '", sphere, "'"))
+# }
+# 
+# df_count_content <- get_attr_names("German")
+# 
+# df_count_content %>% 
+#   summarise(counted = n(), .by = value) %>% View()
+# 
+# df_count_content_ids <- df_count_content %>% 
+#   select(-value, -text) %>% 
+#   distinct() %>% 
+#   group_by(sha1, name) %>% 
+#   mutate(is_form = ifelse(name == "form", 1, 0)) %>% 
+#   ungroup() %>% 
+#   group_by(sha1, is_form) %>% 
+#   mutate(form_group = row_number(),
+#          form_group = ifelse(is_form == 0, NA, form_group)) %>% 
+#   ungroup() %>%
+#   group_by(sha1) %>% 
+#   fill(form_group) %>% 
+#   mutate(id_sha1_form_group = paste0(sha1, "_", form_group))
+# 
+# id_sha1_form_group <- function(sphere){
+#   df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT fh.id_sha1_form_group, fh.hashed_forms FROM findings_hashed_2 fh WHERE fh.sphere LIKE '", sphere, "'")) #%>% select(id_sha1_form_group) %>% pull(.)
+# }
+# df_id_sha1_form_group <- form_id_to_look_at("German")
+# 
+# df_count_content_temp <- df_count_content %>% 
+#   left_join(., df_count_content_ids) %>% 
+#   left_join(., df_id_sha1_form_group) %>% 
+#   filter(!is.na(hashed_forms))
+  # filter(id_sha1_form_group %in% df_id_sha1_form_group$id_sha1_form_group)
+
+```
+
+
+To Do
