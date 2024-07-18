@@ -1,3 +1,4 @@
+CURRENT_SPHERE <- "German"
 
 SELECT_MENU_SITE <- list()
 SELECT_MENU_SITE$German <- c('abendblatt', 'augsburger-allgemeine', 'badische-zeitung', 'berliner-zeitung', 'bild', 'deutschlandfunk', 'faz', 'focus', 'fr', 'freiepresse', 'freitag', 'ftd', 'handelsblatt', 'haz', 'hna', 'jungefreiheit', 'ksta', 'lvz', 'mads', 'mainpost', 'merkur', 'mopo', 'morgenpost', 'nwzonline', 'rheinpfalz', 'rp-online', 'spiegel', 'stern', 'stuttgarter-nachrichten', 'stuttgarter-zeitung', 'sueddeutsche', 'swr', 'tagesspiegel', 'taz', 'tz', 'volksstimme', 'welt', 'wn', 'zdf', 'zeit')
