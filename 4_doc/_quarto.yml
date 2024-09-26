@@ -35,6 +35,10 @@ website:
             file: sites/analyzing-all-tags.qmd
           - text: "All commenting traces"
             file: sites/commenting-traces.qmd
+          - text: "Context of all traces"
+            file: sites/tag-context.qmd
+          - text: "Understanding the Hashes"
+            file: sites/understanding-hashes.qmd
 
 format:
   html:
