@@ -91,7 +91,7 @@ df_plot %>%
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
   scale_y_discrete(expand = c(0, NA)) +
   guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines"))) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme(axis.text.x = element_text(angle = 30, hjust = 1))
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme(axis.text.x = element_text(angle = 30, hjust = 1))
 
 ```
 
@@ -120,7 +120,7 @@ df_sites_2th_export %>%
   scale_x_continuous(breaks = year_breaks_for_plotting, limits = c(min(year_breaks_for_plotting), max(year_breaks_for_plotting)), expand = c(0, NA), name = "crawl_year") +
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
   scale_y_discrete(expand = c(0, NA)) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1)) + theme_b03_base + theme_b03_heatmap + theme_b03_facets  +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) + theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets  +
   guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
 
 
@@ -152,7 +152,7 @@ df_sites_all %>%
   scale_x_continuous(breaks = year_breaks_for_plotting, limits = c(min(year_breaks_for_plotting), max(year_breaks_for_plotting)), expand = c(0, NA), name = "crawl_year") +
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
   scale_y_discrete(expand = c(0, NA)) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1)) + theme_b03_base + theme_b03_heatmap + theme_b03_facets  + 
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) + theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets  + 
   guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
 
 
@@ -175,7 +175,7 @@ df_sites_all %>%
   scale_x_continuous(breaks = c(2,4,6,8,10,12), expand = c(0, NA), name = "crawl_month") +
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
   scale_y_discrete(expand = c(0, NA)) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets  +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets  +
   guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
 
 ```
@@ -201,7 +201,7 @@ df_sites_timestamp %>%
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
   scale_x_continuous(expand = c(0, NA)) +
   scale_y_discrete(expand = c(0, NA)) +
-  theme(axis.text.x = element_text( hjust = 1)) + theme_b03_base + theme_b03_heatmap + theme_b03_facets  +
+  theme(axis.text.x = element_text( hjust = 1)) + theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets  +
   guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
 
 ```

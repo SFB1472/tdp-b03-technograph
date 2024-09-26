@@ -6,7 +6,7 @@ library(gdtools)
 gdtools::register_gfont("Roboto Mono")
 
 typo_sfb_mono <- "GT America Mono LC Rg"
-# typo_sfb_mono_bold <- "Roboto Mono"
+typo_sfb_mono_ggiraph <- "Roboto Mono"
 
 # systemfonts::register_font(typo_sfb_mono)
 # typo_sfb_mono_remote <- "GT America Mono LC Rg"
@@ -17,9 +17,9 @@ sfb_grey <- "#E5E5E5"
     
 theme_b03_base <- theme(
     plot.title.position = "plot",
-    plot.title = element_text(family = "Nantes-Regular", size = 18),
+    
     axis.title = element_blank(),
-    axis.text = element_text(family = typo_sfb_mono, size = 10, hjust = 0),
+    # axis.text = element_text(family = typo_sfb_mono, size = 10, hjust = 0),
     axis.ticks = element_blank(),
     axis.ticks.length = unit(0,"in"),
     panel.background = element_blank(),
@@ -31,12 +31,25 @@ theme_b03_base <- theme(
     legend.justification = "center",
     legend.position = "top",
     legend.direction = "horizontal",
-    legend.title = element_text(family = typo_sfb_mono, size = 12, hjust = 0.5),
     legend.margin = margin(0, .2, 0, .2, "in"),
-    legend.key = element_blank(),
-    text = element_text(family = typo_sfb_mono, size = 12, hjust = 0)
+    legend.key = element_blank()#,
+    # text = element_text(family = typo_sfb_mono, size = 12, hjust = 0)
   )
-  
+ 
+theme_b03_base_typo_static <- theme(
+  axis.text = element_text(family = typo_sfb_mono, size = 10, hjust = 0),
+  plot.title = element_text(family = "Nantes-Regular", size = 18),
+  legend.title = element_text(family = typo_sfb_mono, size = 12, hjust = 0.5),
+  text = element_text(family = typo_sfb_mono, size = 12, hjust = 0)
+)
+ 
+theme_b03_base_typo_interactive <- theme(
+  axis.text = element_text(family = typo_sfb_mono_ggiraph, size = 10, hjust = 0),
+  legend.title = element_text(family = typo_sfb_mono_ggiraph, size = 12, hjust = 0.5),
+  text = element_text(family = typo_sfb_mono_ggiraph, size = 12, hjust = 0)
+)
+
+
 theme_b03_dot_timeline <- theme(
     panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2),
     panel.grid.minor = element_blank(),
@@ -82,6 +95,9 @@ theme_b03_text <- theme(
     panel.spacing = unit(0, "in")
     
   )
+theme_b03_girafe_font <- theme(
+  text = element_text(family = typo_sfb_mono_ggiraph, size = 12, hjust = 0)
+)
 
 theme_b03_legend_discrete <- theme(
   legend.justification = "center",

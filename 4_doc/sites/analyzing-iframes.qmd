@@ -98,7 +98,7 @@ df_iframes_pop_de %>%
   facet_wrap(~ site, ncol = 2) +
   scale_x_date(date_labels = "%Y") +
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
   theme(axis.text.y = element_blank())
 
 ```
@@ -126,7 +126,7 @@ df_iframes_pop_world %>%
   facet_wrap(~ site, ncol = 2) +
   scale_x_date(date_labels = "%Y") +
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
   theme(axis.text.y = element_blank())
 
 ```
@@ -154,7 +154,7 @@ df_iframes_pop_nl %>%
   facet_wrap(~ site, ncol = 2) +
   scale_x_date(date_labels = "%Y") +
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
   theme(axis.text.y = element_blank())
 
 ```
@@ -207,7 +207,7 @@ df_iframe_vis_de %>%
   facet_wrap(~ site, ncol = 2) +
   scale_x_date(date_labels = "%Y") +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
   theme(axis.text.y = element_blank())
 
 ```
@@ -250,7 +250,7 @@ df_iframe_vis_world %>%
   facet_wrap(~ site, ncol = 2) +
   scale_x_date(date_labels = "%Y") +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
   theme(axis.text.y = element_blank())
 
 ```
@@ -293,7 +293,7 @@ df_iframe_vis_nl %>%
   facet_wrap(~ site, ncol = 2) +
   scale_x_date(date_labels = "%Y") +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
   theme(axis.text.y = element_blank())
 
 ```
@@ -338,7 +338,7 @@ df_iframes_srcs_de %>%
   facet_wrap(~ site, ncol = 2) +
   scale_x_date(date_labels = "%Y") +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
   theme(axis.text.y = element_blank())
 
 ```
@@ -375,7 +375,7 @@ df_iframes_srcs_world %>%
   facet_wrap(~ site, ncol = 2) +
   scale_x_date(date_labels = "%Y") +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
   theme(axis.text.y = element_blank())
 
 ```
@@ -412,7 +412,7 @@ df_iframes_srcs_nl %>%
   facet_wrap(~ site, ncol = 2) +
   scale_x_date(date_labels = "%Y") +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
   theme(axis.text.y = element_blank())
 
 ```
@@ -500,7 +500,7 @@ df_iframes_srcs_de %>%
   facet_col(vars(site), scales = "free_y", space = "free") +
   scale_x_date(date_labels = "%Y") +
   scale_fill_manual(values = colors_for_urls_de) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none")
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none")
 
 ```
 
@@ -535,7 +535,7 @@ df_iframes_srcs_world %>%
   facet_col(vars(site), scales = "free_y", space = "free") +
   scale_x_date(date_labels = "%Y") +
   scale_fill_manual(values = colors_for_urls_world) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none")
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none")
 
 ```
 
@@ -570,7 +570,7 @@ df_iframes_srcs_nl %>%
   facet_col(vars(site), scales = "free_y", space = "free") +
   scale_x_date(date_labels = "%Y") +
   scale_fill_manual(values = colors_for_urls_nl) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none")
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none")
 
 ```
 
@@ -597,7 +597,7 @@ df_iframes_srcs_de %>% filter(domain_subdomain %in% most_famous_visible_de$domai
   scale_x_date(date_labels = "%Y") +
   scale_fill_manual(values = colors_for_urls_de) +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
 
 ```
 
@@ -618,7 +618,7 @@ df_iframes_srcs_world %>% filter(domain_subdomain %in% most_famous_visible_world
   scale_x_date(date_labels = "%Y") +
   scale_fill_manual(values = colors_for_urls_world) +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
 
 ```
 
@@ -639,7 +639,7 @@ df_iframes_srcs_nl %>% filter(domain_subdomain %in% most_famous_visible_nl$domai
   scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-06-01"))) +
   scale_fill_manual(values = colors_for_urls_nl) +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
   # theme(axis.text.y = element_blank()) #+ theme(legend.position = "none")
 
 
@@ -691,7 +691,7 @@ plot <- df_iframes_srcs_de %>%
   scale_fill_manual(values = colors_for_urls_de) +
   # scale_fill_manual(colors = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "number of snippets found per site of domain and month" ) +
   ggtitle(paste0("Domains referenced in iframes")) + 
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing + theme(legend.position = "none") + theme_b03_timeline_faceted
   # theme(axis.text.y = element_blank()) #+ theme(legend.position = "none")
 
 plot

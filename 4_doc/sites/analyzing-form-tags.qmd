@@ -275,7 +275,7 @@ df_form_world_actions <- get_form_attr_info("World", "form", "action") %>%
 df_form_de_actions %>% 
   ggplot(., aes(x = crawl_date, y = script_detected, fill = normalised)) +
     geom_tile() +
-    theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme(legend.position = "none") +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme(legend.position = "none") +
     labs(title = "Script types referenced in\nform tag in the German websphere")
 
 ```
@@ -292,7 +292,7 @@ df_form_de_actions %>%
 df_form_nl_actions %>% 
   ggplot(., aes(x = crawl_date, y = script_detected, fill = normalised)) +
     geom_tile() +
-    theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme(legend.position = "none") +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme(legend.position = "none") +
     labs(title = "Script types referenced in\nform tag in the Dutch websphere")
 
 
@@ -310,7 +310,7 @@ df_form_nl_actions %>%
 df_form_world_actions %>% 
   ggplot(., aes(x = crawl_date, y = script_detected, fill = normalised)) +
     geom_tile() +
-    theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme(legend.position = "none") +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme(legend.position = "none") +
     labs(title = "Script types referenced in\nform tag in the Internatinal websphere")
 
 
@@ -419,7 +419,7 @@ get_tags_printing <- function(sphere){
   geom_text(position = "stack", hjust = 0, color = "black", family = typo_sfb_mono) +
   scale_x_continuous(labels = label_number(), expand = c(0, NA)) +
   coord_cartesian(clip = "off") +
-  theme_b03_base + theme_b03_legend_discrete
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_legend_discrete
 }
 
 # SPHERE_FOR_SHEET <- "World"
@@ -481,7 +481,7 @@ df_current_sphere_with_comment %>%
   ggplot(., aes(x = year, y = Name, fill = color_breaks, tooltip = paste0(counted, "\nsite: ", Name))) +
   geom_tile_interactive() +
   scale_fill_manual(values = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "traces of commenting possibilities" ) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets  + theme(plot.margin = margin(0, .4, 0, 0, "in")) +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets  + theme(plot.margin = margin(0, .4, 0, 0, "in")) +
   guides(fill = guide_coloursteps(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
 }
 
@@ -528,7 +528,7 @@ get_print("World")
 # df_current_sphere_with_comment %>% 
 #   ggplot(., aes(x = year, y = Name)) +
 #   geom_point()+
-#   theme_b03_base + theme_b03_dot_timeline + theme(plot.margin = margin(0,0.5,0,0, "cm"))+
+#   theme_b03_base +theme_b03_base_typo_static + theme_b03_dot_timeline + theme(plot.margin = margin(0,0.5,0,0, "cm"))+
 #   scale_x_continuous(breaks = year_breaks_for_plotting, labels = year_breaks_for_plotting,  expand = c(0, NA), name = "crawl year") +
 #   coord_cartesian(clip = "off")
 

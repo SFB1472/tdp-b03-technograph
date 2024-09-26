@@ -90,7 +90,7 @@ print_heatmap <- function(df_data, snippet){
     facet_col(vars(Name), scales = "free", space = "free") +
     scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-06-01"))) +
     scale_fill_manual(values = tag_colors) +
-      theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+      theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
     theme(axis.text.y = element_blank()) + theme_b03_timeline_faceted
 }
 

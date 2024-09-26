@@ -128,7 +128,7 @@ df_doctype_de %>%
   scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
   ylim(0,1.05) + 
   scale_x_continuous(limits = c(1996, 2021)) +
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete 
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete 
 
 ```
 
@@ -142,7 +142,7 @@ df_doctype_nl %>%
   geom_col() +
   scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
   ylim(0,1.05) + 
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete 
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete 
 
 ```
 
@@ -156,7 +156,7 @@ df_doctype_world %>%
   geom_col() +
   scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
   ylim(0,1.05) + 
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete 
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete 
 
 
 ```
@@ -185,7 +185,7 @@ df_doctype_de_abs %>%
   geom_col() +
   scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
   # ylim(0,1.05) + 
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
   facet_wrap(~group)
 
 ```
@@ -209,7 +209,7 @@ df_doctype_nl_abs %>%
   geom_col() +
   scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
   # ylim(0,1.05) + 
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
   facet_wrap(~group)
 ```
 
@@ -232,7 +232,7 @@ df_doctype_world_abs %>%
   geom_col() +
   scale_fill_manual(values = colors_, na.value = "#d2d2d2") +
   # ylim(0,1.05) + 
-  theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete +
   facet_wrap(~group)
 
 ```

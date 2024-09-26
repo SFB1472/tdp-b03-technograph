@@ -225,7 +225,7 @@ get_plot_changes <- function(sphere_){
     # filter(site_subdomain %in% sites_to_print) %>% #View()
     ggplot(., aes(x = crawl_date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
     geom_point() +
-    theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+    theme_b03_base +theme_b03_base_typo_static + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
 }
 
 ```
@@ -305,7 +305,7 @@ Für diese Grafik, habe ich nur solche Domain-Subdomain-Kombinationen ausgewähl
     # filter(site_subdomain %in% sites_to_print) %>% #View()
     ggplot(., aes(x = crawl_date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
     geom_point() +
-    theme_b03_base + theme(legend.position = "none")
+    theme_b03_base +theme_b03_base_typo_static + theme(legend.position = "none")
 
   
 
