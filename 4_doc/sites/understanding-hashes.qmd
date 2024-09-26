@@ -1,0 +1,106 @@
+---
+title: "Understanding the Hashes"
+---
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+library(ggforce)
+
+source("../config/config-secret.R")
+source("../config/config-graphic.R")
+source("../config/config.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+
+get_hashes_context_site <- function(site_){
+  df_hashes_context_site <- dbGetQuery(conn = con, paste0("SELECT s.site, s.crawl_date, t.tag, t.attr, t.value, t.context_path, ch.hashed_context, ch.id_sha1_group, ch.iteration FROM sites s INNER JOIN tag_context t ON s.sha1 = t.sha1 INNER JOIN context_hashed ch ON t.id_sha1_group = ch.id_sha1_group WHERE s.site ='", site_,"'"))
+  }
+
+
+```
+
+
+
+## Analyse der Methode
+
+Die [allgemeinen Grafiken]() zeigen, dass die Methode manchmal schon sehr gut funktioniert, manchmal aber auch noch nicht. Was ist auf den Seiten anders? Auf welche Strukturen weißen die vielen unterschiedlichen Hashes da hin? Und ist das zu fixen oder leitet sich daraus ab, dass es eine andere Lösung braucht um den Updates folgen zu können?
+
+### Handelsblatt
+
+Erstes Medienhaus für genauere Betrachtung "Handesblatt": insgesamt fast 8000 Kommentarbereiche, viele unique kodierte Hashes, hohes Verhältnis von Kommentarbereichen und einzigartigen Hashes. 
+
+Auffällig ist hier, dass ein Großteil der Hashes einen ähnlichen Pfad teilen. Nach Analyse einer der HTML-Seiten steht fest: innerhalb eines gewissen Zeitraumes wurde beim Handelsblatt in einem div, das sehr hoch in der Seite sitzt und einen großen Teil der nachfolgenden HTML-Struktur enthält, ein ajax-Script aufgerufen, das für den nachfolgenden Artikel die Anzahl der Kommentare für eben jenen Artikel erfragt. 
+
+Hier schlägt die Methode fehl, weil es sich nicht um einen Kommentarbereich handelt, wie er einem zuerst in den Sinn kommt. Irgendwo im HTML wird eine Funktion aufgerufen, die sich global auf den Artikel bezieht. Weitere Spuren auf tatsächlich eingebundene Kommentare, Eingabefelder, Buttons zum abschicken oder sortieren von Kommentaren, finden sich in den Seiten nicht mehr. Es ist also zweifellos eine wichtige Spur, in diesem Fall ist das Netz allerdings zu feinmaschig. 
+
+Als Korrektur, auch in Vorbereitung auf das maschinelles Lernen, werden nur die Zeilen in der Datenbank behalten, die die tatsächlichen Spuren auf Kommentare enthalten, alle weiteren Zeilen werden gelöscht. 
+Überprüfung steht noch aus, inwiefern sich hier die pragmatischen und gesäuberten Hashes unterscheiden. 
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+handelsblatt_hashes_raw <- get_hashes_context_site("handelsblatt")
+
+handelsblatt_hashes_raw %>% filter(iteration == "most_pragmatic", str_starts(context_path, "\\{'class': \\['ajaxify'\\], 'data:command': 'getComments', 'data:param': '")) %>% #{\"url":"/ajaxentry/cache/numberofcomments?commentRootId=9695352\",\"key\":\"cid\",\"className\":\"showCommentNumbers\",\"idPrefix\":\"commentDiv_\"}', 'id': 'hcf-content-wrapper'}") %>% 
+  select(hashed_context) %>% distinct() %>% nrow()
+
+handelsblatt_hashes_raw %>% filter(iteration == "most_pragmatic") %>%
+  select(hashed_context) %>% distinct() %>% nrow()
+
+handelsblatt_hashes_raw %>% filter(iteration == "most_pragmatic", !str_starts(context_path, "\\{'class': \\['ajaxify'\\], 'data:command': 'getComments', 'data:param': '")) %>%
+  View()
+
+```
+
+## Fokus
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+focus_hashes_raw <- get_hashes_context_site("focus")
+
+focus_hashes_raw %>% filter(iteration == "cleaned", context_path == "{'class': ['clearfix'], 'id': 'comments'}") %>% 
+  mutate(counted_hashes = n(), .by = hashed_context) %>% 
+  mutate(counted_id = n(), .by = id_sha1_group) 
+  # reframe(counted_hashed = n(context_hashed), counted_ids = n(id_sha1_group)) %>% View()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
