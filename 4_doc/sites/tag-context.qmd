@@ -71,14 +71,12 @@ make_df <- function(df, sphere_){
 }
 
 get_hashes_most_pragmatic <- function(sphere){
-  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, tc.hashed_context, tc.id_sha1_group FROM sites s INNER JOIN context_hashed tc ON tc.sha1 = s.sha1 WHERE s.sphere = '", sphere, "' AND tc.iteration ='most_pragmatic' AND s.of_interest = TRUE ORDER BY s.crawl_date"))
+  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, tc.hashed_context, tc.id_sha1_group FROM sites s INNER JOIN context_hashed tc ON tc.sha1 = s.sha1 WHERE s.sphere = '", sphere, "' AND tc.iteration ='pragmatic' AND s.of_interest = TRUE ORDER BY s.crawl_date"))
   df_return <- make_df(df)
 }
-# 
-# 
-# 
+
 get_hashes_cleaned <- function(sphere){
-  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, tc.hashed_context, tc.id_sha1_group FROM sites s INNER JOIN context_hashed tc ON tc.sha1 = s.sha1 WHERE s.sphere = '", sphere, "' AND tc.iteration ='cleaned' AND s.of_interest = TRUE ORDER BY s.crawl_date"))
+  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, tc.hashed_context, tc.id_sha1_group FROM sites s INNER JOIN context_hashed tc ON tc.sha1 = s.sha1 WHERE s.sphere = '", sphere, "' AND tc.iteration ='cleaned_counted' AND s.of_interest = TRUE ORDER BY s.crawl_date"))
   df_return <- make_df(df)
 }
 
@@ -114,7 +112,7 @@ Inzwischen denke ich, sollten die Werte der Attribute schon wieder in den Hash e
 
 Je länger ich auf die Daten starre, desto klarer wird wieder weshalb ich bei den form-tags-context die Werte der Attribute weggelassen habe.
 
-Die pragmatische Lösung hier ist die Hashes noch einmal zu vereinfachen und den Text auch noch wegzulassen. Nachteil der Variante ist, dass als individuelle Faktoren hier nur noch die Anzahl sowie die Namen der Tags und Attribute in den Hash einfließen. In der Datenbanktablle sind diese Hashes in der `iteration`-Spalte markiert mit "most_pragmatic".
+Die pragmatische Lösung hier ist die Hashes noch einmal zu vereinfachen und den Text auch noch wegzulassen. Nachteil der Variante ist, dass als individuelle Faktoren hier nur noch die Anzahl sowie die Namen der Tags und Attribute in den Hash einfließen. In der Datenbanktablle sind diese Hashes in der `iteration`-Spalte markiert mit "pragmatic".
 
 Eine Variante dazwischen wäre manche Filter zu probieren und den Unterschied zu untersuchen. 
 
@@ -374,7 +372,7 @@ Da hier die Darstellung granularer wird, nämlich auf die Subdomains der verschi
 
 plot <- df_hashed %>%
   left_join(., df_context_de, by = c("sha1", "id_sha1_group")) %>% 
-  filter(iteration == "cleaned", site_subdomain %in% exclude_from_plotting$site_subdomain) %>%
+  filter(iteration == "cleaned_whitelist", site_subdomain %in% exclude_from_plotting$site_subdomain) %>%
   ggplot(., aes(x = crawl_date, y = context_path, color = as.character(nr_unique_hashes))) +
   geom_point ()+
   # facet_wrap(~site_subdomain, ncol = 1, scales = "free_y") +
@@ -410,7 +408,7 @@ df_hashes_counted %>%
   # select(-hashed_context) %>% 
   filter(sum_hashes>55) %>% 
   mutate(sorting = sum(different_hashes), .by = c(site_subdomain, site, iteration)) %>% #View()
-  filter(iteration == "cleaned") %>% 
+  filter(iteration == "cleaned_whitelist") %>% 
   ggplot(., aes(x = sum_hashes, y = reorder(site_subdomain, sum_hashes), label = sum_hashes)) +
   geom_col() + 
   geom_text(hjust = 0) +
@@ -425,7 +423,11 @@ df_hashes_counted %>%
 
 In dieser Grafik sieht man nicht mehr die absoluten Zahlen an Kommentarbereichen, jetzt stehen hier die einzigartigen Hashes. Was wir hier sehen wollen sind möglichst kleine Zahlen für jedes Haus. Je höher hier eine Seite steht, desto wahrscheinlicher, dass Kommentare oder andere Elemente in der Seite mitcodiert wurden, die für Individualität sorgen. 
 
-Es ist eine gute Korrekturgrafik um zu prüfen wie sich kleine Verbesserungen am Handling der Hashes auswirkt. 
+Sind für ein Haus die beiden Balken nahe beieinander, spricht das für viele Hashes, die sich in der codierten Informationsmenge stark unterscheiden. 
+
+Sind die Balken weit auseinander, sagt das, dass die gesäuberte Variante viel Information codiert, die eventuell noch weiter vereinfacht werden könnte. 
+
+Es ist eine gute Korrekturgrafik um zu prüfen wie sich kleine Verbesserungen am Handling der Hashes auswirkt, in dem es in einem weiteren Analyseschritt eine Grafik "vor Verbesserung" und eine "nach Verbesserugen" nebeneinander gibt. 
 
 und desto weniger aussagekräftig ist die Methode (?) oder desto relevanter werden die pragmatischeren Hashes?
 
@@ -434,7 +436,7 @@ und desto weniger aussagekräftig ist die Methode (?) oder desto relevanter werd
 #| warning: false
 #| error: false
 #| message: false
-#| fig-height: 12 
+#| fig-height: 15 
 #| fig-width: 10
 
 df_hashes_counted %>% 
@@ -464,7 +466,7 @@ Der Kölner Stadtanzeiger hat beispielsweise über 1000 Hashes, aber nur 5 bzw. 
 #| warning: false
 #| error: false
 #| message: false
-#| fig-height: 15 
+#| fig-height: 18 
 #| fig-width: 10
 
 
@@ -489,7 +491,7 @@ Theoretisch wäre es möglich, dass ein System auf mehreren Nachrichtenseiten au
 
 Die Erwartung bei einer solchen Betrachtung ist, dass es vor allem die pragmatischen Hashes sind, die über mehrere Seiten verstreut sein können, denn dort fließt weniger Information ein, sie sind also weniger präzise. Die erste Zeile der Tabelle zeigt das auch gleich. Das tag sieht so aus <script type = "", src = "" >, was zwischen den Anführungsstrichen steht ist für den pragmatischen Hash unerheblich. Deswegen ist es nicht verwunderlich, dass der Hash aus dieser Datenkombination auf 42 unterschiedlichen Nachrichtenseiten gefunden wird. 
 
-Ja, es kommt vor ... Diese Tabelle fordert der* Leser*in wieder einiges ab: Denn wenn unter "iteration" `most_pragmatic` steht, darf der Inhalt der Spalte "value" nicht beachtet werden. Diese Informationen wird beim Erstellen des Hashes nicht verwendet. 
+Ja, es kommt vor ... Diese Tabelle fordert der* Leser*in wieder einiges ab: Denn wenn unter "iteration" `pragmatic` steht, darf der Inhalt der Spalte "value" nicht beachtet werden. Diese Informationen wird beim Erstellen des Hashes nicht verwendet. 
 
 Ei, sogar cleane Hashes schaffen es ganz nach oben. Das liegt allerdings daran, dass die urls, die im src-Attribut gecleaned werden. Url werden komplett gelöscht. Für die Ausgabe hier ist das total verwirrend. Damit die Hashes hier nachvollziehbar werden, müsste ich die gesäuberte Spalte ausgeben. Diese ist aber noch nicht in der Datenbank, weil die Analyse noch nicht abgeschlossen ist. 
 
@@ -520,10 +522,10 @@ df_hashes_sites <- dbGetQuery(conn = con, paste0("SELECT s.sha1, s.site, s.url, 
   filter(groups > 1) %>% 
   reframe(distinct_hashes = max(groups), summe = sum(summe), .by = c(iteration, hashed_context)) #%>% View() ### gute idee hier die summe dazu zu nehmen, aber hier wieder das falsche summiert. Die richtige Zahl, wie oft dieser Hash für eine Domain vorkommt, ist in der df_hashed, oder? checken! (in der baustellenausgabe nicht enthalten)
   
-df_hashed_sites_context <- df_hashes_sites %>%
-  left_join(., df_hashed) %>%
-  select(iteration, hashed_context, distinct_hashes, site, sha1, id_sha1_group, site_subdomain) %>%
-  distinct()
+# df_hashed_sites_context <- df_hashes_sites %>%
+#   left_join(., df_hashed) %>%
+#   select(iteration, hashed_context, distinct_hashes, site, sha1, id_sha1_group, site_subdomain) %>%
+#   distinct()
 
 # df_hashed_sites_context <- df_hashed %>% 
 #   filter(hashed_context %in% df_hashes_sites$hashed_context)# %>% 
@@ -534,20 +536,20 @@ df_hashed_sites_context <- df_hashes_sites %>%
 
 # df_hashed_sites_context_info_ <- df_hashed_sites_context %>% 
 
-id_to_request <- df_hashed_sites_context %>% select(id_sha1_group) %>% distinct() %>% pull() 
+# id_to_request <- df_hashed_sites_context %>% select(id_sha1_group) %>% distinct() %>% pull() 
+# 
+# special_context <- map_df(id_to_request, function(i){
+#   df<- get_context_data_partiell("German", i)
+# })
+# 
+# df_hashed_sites_context_info <- df_hashed_sites_context %>% 
+#   left_join(., special_context) %>% #View()
+#   filter(!is.na(tag)) %>% 
+#   arrange(desc(distinct_hashes)) %>% 
+#   select(iteration, "Anzahl der Seiten" = distinct_hashes, tag, attr, value, context_path, hashed_context, "Bespielseite" = sha1)
 
-special_context <- map_df(id_to_request, function(i){
-  df<- get_context_data_partiell("German", i)
-})
 
-df_hashed_sites_context_info <- df_hashed_sites_context %>% 
-  left_join(., special_context) %>% #View()
-  filter(!is.na(tag)) %>% 
-  arrange(desc(distinct_hashes)) %>% 
-  select(iteration, "Anzahl der Seiten" = distinct_hashes, tag, attr, value, context_path, hashed_context, "Bespielseite" = sha1)
-
-
-DT::datatable(df_hashed_sites_context_info)
+DT::datatable(df_hashes_sites %>% arrange(desc(distinct_hashes)) %>% select(iteration, "Anzahl der Seiten" = distinct_hashes, hashed_context) %>% head(20))
 
 ```
 
