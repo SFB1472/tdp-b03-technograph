@@ -2,6 +2,8 @@
 title: "Understanding the Hashes"
 ---
 
+## head
+
 ```{r}
 #| echo: false
 #| warning: false
@@ -27,11 +29,57 @@ con <- dbConnect(RPostgres::Postgres(),
                  password = dsn_pwd
 )
 
+df_hashes_counted <- dbGetQuery(conn = con, paste0("SELECT s.sha1, s.site, s.url, c.hashed_context, c.iteration, c.id_sha1_group FROM sites s INNER JOIN context_hashed c ON s.sha1 = c.sha1 WHERE s.of_interest = TRUE AND c.iteration = 'cleaned'")) %>% 
+  # filter(iteration == "cleaned")
+  mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+                   site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.)) %>%
+  reframe(counted = n(), .by = c(site_subdomain, site, iteration, hashed_context)) %>% 
+  reframe(sum_hashes = sum(counted), different_hashes = n(), .by = c(site_subdomain, site, iteration)) %>% 
+  filter(sum_hashes>55) %>% 
+  mutate(sorting = sum(different_hashes), .by = c(site_subdomain, site, iteration)) %>% #View()
+  arrange(desc(sum_hashes))
+
+sites_to_look_at <- df_hashes_counted %>% select(site) %>% distinct() %>% pull() %>%  paste0(., collapse = "|")
 
 get_hashes_context_site <- function(site_){
-  df_hashes_context_site <- dbGetQuery(conn = con, paste0("SELECT s.site, s.crawl_date, t.tag, t.attr, t.value, t.context_path, ch.hashed_context, ch.id_sha1_group, ch.iteration FROM sites s INNER JOIN tag_context t ON s.sha1 = t.sha1 INNER JOIN context_hashed ch ON t.id_sha1_group = ch.id_sha1_group WHERE s.site ='", site_,"'"))
+  df_hashes_context_site <- dbGetQuery(conn = con, paste0("SELECT s.site, s.url, s.crawl_date, t.tag, t.attr, t.value, t.context_path, ch.hashed_context, ch.id_sha1_group, ch.iteration FROM sites s INNER JOIN tag_context t ON s.sha1 = t.sha1 INNER JOIN context_hashed ch ON t.id_sha1_group = ch.id_sha1_group WHERE s.site ='", site_,"'")) %>% 
+    mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+           site_subdomain = paste(site, subdomain, sep = "_"))
   }
 
+get_hashes_context <- function(){
+  df_hashes_context_site <- dbGetQuery(conn = con, paste0("SELECT s.site, s.url, s.crawl_date, t.tag, t.attr, t.value, t.context_path, ch.hashed_context, ch.id_sha1_group, ch.iteration FROM sites s INNER JOIN tag_context t ON s.sha1 = t.sha1 INNER JOIN context_hashed ch ON t.id_sha1_group = ch.id_sha1_group WHERE s.site ~'", sites_to_look_at,"'")) %>% 
+    mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+           site_subdomain = paste(site, subdomain, sep = "_"))
+  }
+
+raw_data <- get_hashes_context()
+
+counted_hashes <- raw_data %>% filter(iteration == "cleaned") %>% 
+  select(context_path, hashed_context, site_subdomain) %>% distinct() %>% 
+  reframe(distinct_hashes = n(), .by = c(site_subdomain, context_path)) 
+
+hash_sizes <- raw_data %>% 
+  filter(iteration == "cleaned") %>% 
+  select(site_subdomain, context_path, hashed_context, id_sha1_group) %>% #distinct() %>% 
+  reframe(counted_rows = n(), .by = c(site_subdomain, context_path, hashed_context,id_sha1_group)) %>% 
+  reframe(shortest = min(counted_rows), longest = max(counted_rows), .by = c(site_subdomain, context_path)) %>% 
+  left_join(., counted_hashes) %>% 
+  arrange(desc(distinct_hashes))
+
+get_hash_sizes <- function(site_subdomain_){
+  hash_sizes %>% filter(site_subdomain == site_subdomain_)
+}
+
+hash_sizes_overview <- hash_sizes %>% 
+  reframe(unique_hashes = sum(distinct_hashes), different_rows = n(), .by = site_subdomain)
+
+find_dup <- function(string, thres) {
+  purrr::map_lgl(seq_along(string), function(i) {
+    sim <- stringdist::stringsim(string[i], string[0:(i - 1)], method = "lcs") #  method = "dl" -> schlecht
+    any(sim > thres)
+  })
+}
 
 ```
 
@@ -72,7 +120,12 @@ handelsblatt_hashes_raw %>% filter(iteration == "most_pragmatic", !str_starts(co
 
 ```
 
-## Fokus
+### Fokus
+
+Zwar super viele Hashes, weil Kommentare kodiert werden. Diese Bereiche sind unterschiedlich in ihrem Umfang, wodurch sich trotz cleaning unterschiedliche Hashes ergeben. Für die Analyse in der shiny-app ist die Grafik trotzdem gut zu lesen, weil die Pfade stabil bleiben.
+
+Unschlüssig, ob hier etwas zu cleanen ist, überlegen, was die shiny-Grafik tatsächlich aussagt. Vielleicht hilft es sich hier auf den Pfad zurück zuziehen, wenn der sich ändert, ändert sich der Kommentarbereich? Allerdings trifft das keine Aussage über kleine Updates im Laufe der Zeit, z.b ein neuer Button zum Bewerten der Kommmentare. 
+
 
 ```{r}
 #| echo: false
@@ -80,26 +133,285 @@ handelsblatt_hashes_raw %>% filter(iteration == "most_pragmatic", !str_starts(co
 #| error: false
 #| message: false
 
-focus_hashes_raw <- get_hashes_context_site("focus")
+focus_hashes_raw <- get_hashes_context_site("focus") %>% 
+  mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+           site_subdomain = paste(site, subdomain, sep = "_"))
 
 focus_hashes_raw %>% filter(iteration == "cleaned", context_path == "{'class': ['clearfix'], 'id': 'comments'}") %>% 
   mutate(counted_hashes = n(), .by = hashed_context) %>% 
-  mutate(counted_id = n(), .by = id_sha1_group) 
+  # mutate(counted_id = n(), .by = id_sha1_group) %>% 
+  select(counted_hashes) %>% distinct() %>% nrow()
   # reframe(counted_hashed = n(context_hashed), counted_ids = n(id_sha1_group)) %>% View()
+
+
+focus_hashes_raw %>% filter(iteration == "cleaned", context_path == "{'class': ['clearfix'], 'id': 'comments'}") %>% 
+  mutate(counted_hashes = n(), .by = hashed_context) %>% 
+  # mutate(counted_id = n(), .by = id_sha1_group) %>% 
+  select(hashed_context, counted_hashes) %>% distinct() %>% View()
+
+
+# focus_hashes_raw %>% filter(iteration == "cleaned") %>% 
+#   select(hashed_context, id_sha1_group) %>% distinct() %>% 
+#   mutate(counted_hashes = n(), .by = hashed_context) %>% 
+#   # mutate(counted_id = n(), .by = id_sha1_group) %>% 
+#   select(hashed_context, counted_hashes) %>% distinct() %>% View()
+
+focus_hashes_raw %>% filter(iteration == "cleaned", context_path == "{'class': ['clearfix'], 'id': 'comments'}") %>% 
+  # mutate(counted_hashes = n(), .by = hashed_context) %>% 
+  mutate(counted_id = n(), .by = id_sha1_group) %>% 
+  select(site, counted_id) %>% distinct() %>% nrow()
+
+
+focus_counted_hashes <- focus_hashes_raw %>% 
+  mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+           site_subdomain = paste(site, subdomain, sep = "_")) %>% 
+  filter(iteration == "cleaned", site_subdomain == "focus_www") %>% 
+  select(context_path, hashed_context) %>% distinct() %>% 
+  reframe(distinct_hashes = n(), .by = c(context_path)) 
+
+focus_hashes_umfang <- focus_hashes_raw %>% 
+  mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+           site_subdomain = paste(site, subdomain, sep = "_")) %>% 
+  filter(iteration == "cleaned", site_subdomain == "focus_www") %>% 
+  select(context_path, hashed_context, id_sha1_group) %>% #distinct() %>% 
+  reframe(counted_rows = n(), .by = c(context_path, hashed_context,id_sha1_group)) %>% 
+  reframe(shortest = min(counted_rows), longest = max(counted_rows), .by = c(context_path)) %>% 
+  left_join(., focus_counted_hashes) %>% 
+  arrange(desc(distinct_hashes))
+
+  
+```
+
+
+### Süddeutsche
+
+
+Zusätzlich cleanen: data-token, data-ts, data-referer, dann überprüfen, ob weniger als 1380 Hashes rauskommen, für den Pfad `{'class': \\['usercomments'\\], 'id': 'usercomments', 'role': 'complementary'\\}`
+
+
+`{'class': ['kommentare'], 'cellpadding': '0', 'cellspacing': '0`: hier stecken die Kommentare drin, unter diesem Pfad gibt es über 600 Hashes. Mehr zu cleanen führt nicht zu besseren Ergebnissen, weil diese Bereiche je nach Beitragen unterschiedlich strukturiert sind. 
+
+
+Zwischenstand: manchmal kann noch korrigierend eingegriffen werden, mit mehr cleanen oder um seltsame Strukturen zu korrigieren, aber es gibt mind. zwei verschiedene Zustände: manchmal können tatsächlich Strukturen beobachtet werden und damit dann auch ihre Veränderungen, manchmal ist das kaum möglich, weil die Struktur so abhängig ist vom Inhalt. Das ist immer dann problematisch für die Methode, wenn Kommentare in der Seite enthalten sind. 
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+subdomain_to_investigate <- "sueddeutsche_www"
+sz_hashes_umfang <- get_hash_umfang(subdomain_to_investigate)
+
+sz_hashes_raw %>% filter(iteration == "cleaned", str_starts(context_path, "\\{'class': \\['usercomments'\\], 'id': 'usercomments', 'role': 'complementary'\\}")) %>% #View()
+  select(context_path, hashed_context) %>% 
+  distinct() %>% 
+  reframe(counted_hashes = n(), .by = context_path) 
+
+
 
 ```
 
 
+### Welt
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+subdomain_to_investigate <- "welt_www"
+welt_hashes_umfang <- get_hash_umfang(subdomain_to_investigate)
+
+welt_sim <- welt_hashes_umfang %>% 
+  arrange(context_path) %>% 
+  mutate(dup = find_dup(context_path, 0.87),
+         group_ = ifelse(lead(dup) == TRUE & dup == FALSE, paste0("group_", row_number()), NA),
+         group_ = ifelse(dup == FALSE & lag(dup) == TRUE, paste0("group_", row_number()), group_)#,
+         
+                         # ifelse(dup == TRUE & lead(dup)==TRUE, lag(group_), NA))
+         ) %>% #View()
+  fill(group_) %>% 
+  mutate(group_ = ifelse(is.na(group_), paste0("group_", row_number()), group_),
+         group_ = ifelse(dup == FALSE & lag(dup) == FALSE, paste0("group_", row_number()), group_))
+         
+welt_sim_agg <- welt_sim %>% 
+  reframe(counted_pathes = n(), .by = group_)
+  
+
+```
+
+
+### Freie Presse
+
+Das ist interessant, so wenige verschiedene Pfade, vielleicht kann hier mit bisschen mehr cleaning noch etwas erreicht werden.
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+subdomain_to_investigate <- "freiepresse_www"
+freiepresse_hashes_umfang <- get_hash_umfang(subdomain_to_investigate)
+
+
+```
+
+
+### Tagesspiegel
+
+Hier das komplette Gegenteil, bisher die umfangreichste Pfadliste von allen. 
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+subdomain_to_investigate <- "tagesspiegel_www"
+tagesspiegel_hashes_umfang <- get_hash_umfang(subdomain_to_investigate)
+
+
+```
+
+
+### FAZ
 
 
 
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+subdomain_to_investigate <- "faz_www"
+faz_hashes_umfang <- get_hash_umfang(subdomain_to_investigate)
+
+faz_sim <- faz_hashes_umfang %>% 
+  arrange(context_path) %>% 
+  mutate(dup = find_dup(context_path, 0.85),
+         group_ = ifelse(lead(dup) == TRUE & dup == FALSE, paste0("group_", row_number()), NA),
+         group_ = ifelse(dup == FALSE & lag(dup) == TRUE, paste0("group_", row_number()), group_)#,
+         
+                         # ifelse(dup == TRUE & lead(dup)==TRUE, lag(group_), NA))
+         ) %>% #View()
+  fill(group_) %>% 
+  mutate(group_ = ifelse(is.na(group_), paste0("group_", row_number()), group_),
+         group_ = ifelse(dup == FALSE & lag(dup) == FALSE, paste0("group_", row_number()), group_))
+         
+faz_sim_agg <- faz_sim %>% 
+  reframe(counted_pathes = n(), .by = group_)
+
+
+```
+
+
+### Augsburger Allgemeine
+
+Im Detail anschauen, Struktur ist anders, als bei den anderen.
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+subdomain_to_investigate <- "augsburger-allgemeine_www"
+aa_hashes_umfang <- get_hash_umfang(subdomain_to_investigate)
+
+aa_sim <- aa_hashes_umfang %>% 
+  arrange(context_path) %>% 
+  mutate(dup = find_dup(context_path, 0.87),
+         group_ = ifelse(lead(dup) == TRUE & dup == FALSE, paste0("group_", row_number()), NA),
+         group_ = ifelse(dup == FALSE & lag(dup) == TRUE, paste0("group_", row_number()), group_)#,
+         
+                         # ifelse(dup == TRUE & lead(dup)==TRUE, lag(group_), NA))
+         ) %>% #View()
+  fill(group_) %>% 
+  mutate(group_ = ifelse(is.na(group_), paste0("group_", row_number()), group_),
+         group_ = ifelse(dup == FALSE & lag(dup) == FALSE, paste0("group_", row_number()), group_))
+         
+aa_sim_agg <- aa_sim %>% 
+  reframe(counted_pathes = n(), .by = group_)
+
+
+```
+
+
+### Tagesspiegel
 
 
 
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+subdomain_to_investigate <- "tagesspiegel_www"
+tagi_hashes_umfang <- get_hash_umfang(subdomain_to_investigate) 
+
+
+tagi_sim <- tagi_hashes_umfang %>% 
+  arrange(context_path) %>% 
+  mutate(dup = find_dup(context_path, 0.87),
+         group_ = ifelse(lead(dup) == TRUE & dup == FALSE, paste0("group_", row_number()), NA),
+         group_ = ifelse(dup == FALSE & lag(dup) == TRUE, paste0("group_", row_number()), group_)#,
+         
+                         # ifelse(dup == TRUE & lead(dup)==TRUE, lag(group_), NA))
+         ) %>% #View()
+  fill(group_) %>% 
+  mutate(group_ = ifelse(is.na(group_), paste0("group_", row_number()), group_),
+         group_ = ifelse(dup == FALSE & lag(dup) == FALSE, paste0("group_", row_number()), group_))
+         
+tagi_sim_agg <- tagi_sim %>% 
+  reframe(counted_pathes = n(), .by = group_)
+# {'data-command': 'article.comments', 'id': 'kommentare', 'class': ['ts-comments-section'], 'data-param': '/ajaxentry/nocache/showcomments?teasableId=23657810'}
+
+
+```
+
+
+### Stern-Blogs
 
 
 
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
 
+stern_hashes_raw <- get_hashes_context_site("stern") %>% 
+  mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+           site_subdomain = paste(site, subdomain, sep = "_"))
+
+
+stern_counted_hashes <- stern_hashes_raw %>% filter(iteration == "cleaned", site_subdomain == "stern_blogs") %>% 
+  select(context_path, hashed_context) %>% distinct() %>% 
+  reframe(distinct_hashes = n(), .by = c(context_path)) 
+
+stern_hashes_umfang <- stern_hashes_raw %>% filter(iteration == "cleaned", site_subdomain == "stern_blogs") %>% 
+  select(context_path, hashed_context, id_sha1_group) %>% #distinct() %>% 
+  reframe(counted_rows = n(), .by = c(context_path, hashed_context,id_sha1_group)) %>% 
+  reframe(shortest = min(counted_rows), longest = max(counted_rows), .by = c(context_path)) %>% 
+  left_join(., stern_counted_hashes) %>% 
+  arrange(desc(distinct_hashes))
+
+
+# stern_hashes_raw %>% filter(iteration == "cleaned", str_starts(context_path, "\\{'class': \\['usercomments'\\], 'id': 'usercomments', 'role': 'complementary'\\}")) %>% #View()
+#   select(context_path, hashed_context) %>% 
+#   distinct() %>% 
+#   reframe(counted_hashes = n(), .by = context_path) 
+
+
+
+```
 
 
 
