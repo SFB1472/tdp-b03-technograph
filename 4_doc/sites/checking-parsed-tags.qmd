@@ -1,0 +1,427 @@
+```{r echo=FALSE, message=FALSE, error=FALSE}
+library(tidyverse)
+library(lubridate)
+library(urltools)
+# library(MetBrewer)
+# library(urltools)
+library(DBI)
+library(RPostgres)
+library(re2)
+# library(ggiraph)
+# library(googlesheets4)
+
+# gs4_auth(cache=".secrets")
+
+# extrafont::loadfonts(quiet = TRUE)
+
+# source("../config/config-secret.R")
+source("../config/config-secret-local.R")
+# source("../config/config-graphic.R")
+source("../config/config.R")
+# dbDisconnect(con)
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+```
+
+Sind alle Seiten geparst worden?
+Wie viele fehlen? 
+Sieht die Datei in Ordnung aus?
+
+
+
+```{r}
+CURRENT_SPHERE <- "German"
+
+file_list_db_de <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s WHERE s.sphere = '", CURRENT_SPHERE, "' AND s.of_interest = TRUE")) %>% 
+  distinct() %>% 
+  mutate(sha1 = paste0(sha1, ".html")) %>% 
+  select(sha1) %>% pull()
+save(sites_of_interest, file=("../../data/helper/file_list_db_de.RData"))
+sites_of_interest <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s WHERE s.sphere = '", CURRENT_SPHERE, "' AND s.of_interest = TRUE")) %>% 
+  distinct() %>% 
+  # mutate(sha1 = paste0(sha1, ".html")) %>% 
+  select(sha1) %>% pull()
+
+# file_list_1 <- list.files(paste0("../../data/0-preprocessing/German-1/")) #%>% head(20)
+# file_list_2 <- list.files(paste0("../../data/0-preprocessing/German-2/")) #%>% head(20)
+
+header <- c("site","tag","search_date","attr","value","group","missing","sphere")
+
+```
+
+### Formular - Tags
+
+#### German
+
+```{r}
+CURRENT_SPHERE <- "German"
+tag <- "form"
+
+```
+
+#### World
+
+```{r}
+CURRENT_SPHERE <- "World"
+tag <- "form"
+```
+
+#### Dutch
+
+```{r}
+CURRENT_SPHERE <- "Dutch"
+tag <- "form"
+```
+
+```{r}
+sites_of_interest <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s WHERE s.sphere = '", CURRENT_SPHERE, "' AND s.of_interest = TRUE")) %>% 
+  distinct() %>% 
+  select(sha1) %>% pull()
+
+list_of_files <- list.files(path = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/", tag,"/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+df_form_tags <- read_csv(list_of_files, id = "file_name", col_names = header)
+# in den Daten sind keine Duplikate
+df_form_tags %>% distinct() %>% nrow()
+# es sind mehr Seiten geparsed worden, als of interest sind
+df_form_tags %>% select(site) %>% distinct() %>% nrow()
+# Sichtcheck der Datei sieht auch gut aus. Alle hashes sehen gut aus, keine leeren Zeilen, keine einzelnen Zeichen 
+
+df_form_tags_db <- df_form_tags %>% 
+  filter(site %in% sites_of_interest) %>% 
+  select(-file_name) %>% 
+  mutate(sphere = CURRENT_SPHERE)
+
+save(df_form_tags_db, file = (paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_form.RData")))
+load(file = (paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_form.RData")))
+dbWriteTable(conn = con, name = "tags", df_form_tags_db, append = TRUE)
+
+```
+
+
+### vorheriges Parsen - was ist der Unterschied?
+
+```{r}
+
+df_form_tags_old <- read_csv("../../data/1-parsing/tags/German/_deprecated/form-raw-1.csv") %>% 
+  bind_rows(., read_csv("../../data/1-parsing/tags/German/_deprecated/form-raw-2.csv")) %>% 
+  distinct()
+
+```
+
+### Script- Tags
+
+#### German
+
+```{r}
+CURRENT_SPHERE <- "German"
+tag <- "script"
+
+sites_of_interest <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s WHERE s.sphere = '", CURRENT_SPHERE, "' AND s.of_interest = TRUE")) %>% 
+  distinct() %>% 
+  select(sha1) %>% pull()
+
+list_of_files <- list.files(path = paste0("../../data/1-parsing/tags/German/", tag,"/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+df_tags <- read_csv(list_of_files, id = "file_name", col_names = header)
+# in den Daten sind keine Duplikate
+df_tags %>% distinct() %>% nrow()
+# es sind mehr Seiten geparsed worden, als of interest sind
+df_tags %>% select(site) %>% distinct() %>% nrow()
+
+# Sichtcheck der Datei sieht auch gut aus. Alle hashes sehen gut aus, keine leeren Zeilen, keine einzelnen Zeichen 
+df_tags %>% arrange(site) %>% View()
+df_tags %>% arrange(desc(site)) %>% View()
+
+
+header_embedd <- c("site", "embedded", "attr","value","group")
+
+## embedded scripts
+# die Dateien hier sind noch uneinheitlich: die eine Hälfte war noch ein Export aus dem global env und noch nicht die einzelnen Dateien mit pid
+list_of_files <- list.files(path = paste0("../../data/1-parsing/scripts/German/", tag,"-embedded/"), recursive = FALSE, pattern = ".*1th.*\\.csv$", full.names = TRUE)
+df_tags_embedded <- read_csv(list_of_files, id = "file_name", col_names = header_embedd)
+df_tags_embedded_2th <- read_csv(file = paste0("../../data/1-parsing/scripts/German/", tag,"-embedded/scripts-raw-2th-delivery-groups.csv"))
+df_tags_embedded_2th <- df_tags_embedded_2th %>% rename(value = attr, attr = name, embedded = content) %>% select(-id, -missing)
+
+# df_tags_embedded_2th <- df_tags_embedded_2th %>% rename(embedded = content)
+
+
+df_tags_embedded_ <- df_tags_embedded %>% 
+  select(-file_name ) %>% 
+  mutate(tag = "script")
+  bind_rows(., df_tags_embedded_2th) %>% 
+  distinct()
+
+
+df_tags_db <- df_tags %>% 
+  select(-file_name) %>% 
+  left_join(., df_tags_embedded_) %>% 
+  filter(site %in% sites_of_interest) %>% 
+  mutate(sphere = "German")
+
+save(df_tags_db, file = ("../../data/1-parsing/tags/German/df_tags_db_script.RData"))
+load(file = ("../../data/1-parsing/tags/German/df_tags_db_script.RData"))
+# dbCreateTable(conn = con, name = tags)
+dbWriteTable(conn = con, name = "tags", df_tags_db, append = FALSE)
+
+```
+
+#### World
+
+```{r}
+CURRENT_SPHERE <- "World"
+tag <- "script"
+
+sites_of_interest <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s WHERE s.sphere = '", CURRENT_SPHERE, "' AND s.of_interest = TRUE")) %>% 
+  distinct() %>% 
+  select(sha1) %>% pull()
+
+list_of_files <- list.files(path = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/", tag,"/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+df_tags <- read_csv(list_of_files, id = "file_name", col_names = header)
+# in den Daten sind keine Duplikate
+df_tags %>% distinct() %>% nrow()
+# es sind mehr Seiten geparsed worden, als of interest sind
+df_tags %>% select(site) %>% distinct() %>% nrow()
+
+# Sichtcheck der Datei sieht auch gut aus. Alle hashes sehen gut aus, keine leeren Zeilen, keine einzelnen Zeichen 
+df_tags %>% arrange(site) %>% View()
+df_tags %>% arrange(desc(site)) %>% View()
+
+load(file="../../data/1-parsing/scripts/World/script-raw.RData")
+
+df_tags_embedds_ <- df_tags_embedds %>% 
+  mutate(
+    group = as.numeric(group),
+         value = ifelse(!is.na(name), attr, value),
+         attr = ifelse(!is.na(name), name, attr),
+         content = ifelse(content == "", NA, content)) %>% 
+  select(-id, -name, -missing, embedded = content) %>%
+  filter(!is.na(embedded))
+
+df_tags_embedds_ %>% filter(is.na(content)) %>% View()
+
+df_tags_db <- df_tags %>% 
+  select(-file_name) %>% 
+  # mutate(group = as.numeric(group)) %>% 
+  left_join(., df_tags_embedds_) %>% 
+  filter(site %in% sites_of_interest) %>% 
+  mutate(sphere = CURRENT_SPHERE)
+
+save(df_tags_db, file = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_script.RData"))
+# load(file = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_script.RData"))
+# dbCreateTable(conn = con, name = tags)
+dbWriteTable(conn = con, name = "tags", df_tags_db, append = TRUE)
+
+```
+
+#### Dutch
+
+```{r}
+CURRENT_SPHERE <- "Dutch"
+tag <- "script"
+
+sites_of_interest <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s WHERE s.sphere = '", CURRENT_SPHERE, "' AND s.of_interest = TRUE")) %>% 
+  distinct() %>% 
+  select(sha1) %>% pull()
+
+list_of_files <- list.files(path = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/", tag,"/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+df_tags <- read_csv(list_of_files, id = "file_name", col_names = header)
+# in den Daten sind keine Duplikate
+df_tags %>% distinct() %>% nrow()
+# es sind mehr Seiten geparsed worden, als of interest sind
+df_tags %>% select(site) %>% distinct() %>% nrow()
+
+# Sichtcheck der Datei sieht auch gut aus. Alle hashes sehen gut aus, keine leeren Zeilen, keine einzelnen Zeichen 
+df_tags %>% arrange(site) %>% View()
+df_tags %>% arrange(desc(site)) %>% View()
+
+
+header_embedd <- c("site", "embedded", "tag", "attr","value","group", "missing")
+
+## embedded scripts
+# die Dateien hier sind noch uneinheitlich: die eine Hälfte war noch ein Export aus dem global env und noch nicht die einzelnen Dateien mit pid
+list_of_files <- list.files(path = paste0("../../data/1-parsing/scripts/",CURRENT_SPHERE,"/", tag,"-embedded/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+df_tags_embedded <- read_csv(list_of_files, id = "file_name", col_names = header_embedd)
+
+df_tags_embedded_ <- df_tags_embedded %>% 
+  select(-file_name ) %>% 
+  mutate(value = ifelse(is.na(value), group, value),
+         group = ifelse(!is.na(X7), X7, group) %>% as.numeric(.)
+         ) %>% 
+  select(-X7)
+
+df_tags_db <- df_tags %>% 
+  select(-file_name) %>% 
+  left_join(., df_tags_embedded_) %>% 
+  filter(site %in% sites_of_interest) %>% 
+  mutate(sphere = CURRENT_SPHERE)
+
+save(df_tags_db, file = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_script.RData"))
+load(file = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_script.RData"))
+# dbCreateTable(conn = con, name = tags)
+dbWriteTable(conn = con, name = "tags", df_tags_db, append = TRUE)
+
+```
+
+```{r}
+
+df_script_tags_old <- read_csv("../../data/1-parsing/tags/German/_deprecated/script-raw-1.csv") %>% 
+  mutate(search_date = as.character(search_date)) %>% 
+  bind_rows(., read_csv("../../data/1-parsing/tags/German/_deprecated/script-raw-2.csv")) %>% 
+  distinct()
+
+df_script_tags_old %>% arrange(site) %>% View()
+
+
+df_script_tags_old %>% arrange(desc(site)) %>% View()
+
+```
+
+### iframes
+
+#### German
+
+```{r}
+CURRENT_SPHERE <- "German"
+tag <- "iframe"
+
+```
+
+
+#### World
+
+
+```{r}
+
+CURRENT_SPHERE <- "World"
+tag <- "iframe"
+
+```
+
+#### Dutch
+
+
+```{r}
+
+CURRENT_SPHERE <- "Dutch"
+tag <- "iframe"
+
+```
+
+```{r}
+list_of_files <- list.files(path = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/", tag,"/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+df_tags <- read_csv(list_of_files, id = "file_name", col_names = header)
+# in den Daten sind keine Duplikate
+df_tags %>% distinct() %>% nrow()
+df_tags %>% filter(nchar(site)== 40) %>% nrow()
+df_tags %>% filter(nchar(site)!= 40) %>% View()
+# es sind mehr Seiten geparsed worden, als of interest sind
+df_tags %>% select(site) %>% distinct() %>% filter(nchar(site)== 40) %>% nrow()
+
+# Sichtcheck der Datei sieht auch gut aus. Alle hashes sehen gut aus, keine leeren Zeilen, keine einzelnen Zeichen 
+df_tags %>% arrange(site) %>% View()
+df_tags %>% arrange(desc(site)) %>% View()
+
+
+df_tags_db <- df_tags %>% 
+  filter(site %in% sites_of_interest) %>% 
+  select(-file_name)%>% 
+  mutate(sphere = CURRENT_SPHERE)
+
+save(df_tags_db, file = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_",tag,".RData"))
+load(file = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_",tag,".RData"))
+dbWriteTable(conn = con, name = "tags", df_tags_db, append = TRUE)
+
+```
+
+
+```{r}
+
+tag <- "iframe"
+
+df_tags_old <- read_csv(paste0("../../data/1-parsing/tags/German/_deprecated/",tag,"-raw-1.csv")) %>% 
+  # mutate(search_date = as.character(search_date)) %>% 
+  bind_rows(., read_csv(paste0("../../data/1-parsing/tags/German/_deprecated/",tag,"-raw-2.csv"))) %>% 
+  distinct()
+
+
+df_tags_old %>% distinct() %>% nrow()
+df_tags_old %>% filter(nchar(site)== 40) %>% nrow()
+
+df_tags_old %>% select(site) %>% distinct() %>% filter(nchar(site)== 40) %>% nrow()
+
+df_tags_old %>% arrange(site) %>% View()
+
+
+df_tags_old %>% arrange(desc(site)) %>% View()
+
+```
+
+## Datenbankfütterung
+
+```{r}
+CURRENT_SPHERE <- "German"
+check_all <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sphere, t.tag, COUNT(*) as counted_rows FROM tags t GROUP BY t.sphere, t.tag"))
+
+check_spheres <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sphere, t.tag FROM tags t WHERE t.sphere = ''"))
+
+```
+
+### divs
+
+#### German
+
+```{r}
+CURRENT_SPHERE <- "German"
+tag <- "div"
+
+```
+
+#### World
+
+```{r}
+
+CURRENT_SPHERE <- "World"
+tag <- "div"
+
+```
+
+
+#### Dutch
+
+```{r}
+
+CURRENT_SPHERE <- "Dutch"
+tag <- "div"
+
+```
+
+```{r}
+list_of_files <- list.files(path = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/", tag,"/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+df_tags <- read_csv(list_of_files, id = "file_name", col_names = header)
+# in den Daten sind keine Duplikate
+df_tags %>% distinct() %>% nrow()
+df_tags %>% filter(nchar(site)== 40) %>% nrow()
+df_tags %>% filter(nchar(site)!= 40) %>% View()
+# es sind mehr Seiten geparsed worden, als of interest sind
+df_tags %>% select(site) %>% distinct() %>% filter(nchar(site)== 40) %>% nrow()
+
+# Sichtcheck der Datei sieht auch gut aus. Alle hashes sehen gut aus, keine leeren Zeilen, keine einzelnen Zeichen 
+df_tags %>% arrange(site) %>% View()
+df_tags %>% arrange(desc(site)) %>% View()
+
+
+df_tags_db <- df_tags %>% 
+  filter(site %in% sites_of_interest) %>% 
+  select(-file_name)%>% 
+  mutate(sphere = CURRENT_SPHERE)
+
+save(df_tags_db, file = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_",tag,".RData"))
+load(file = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_",tag,".RData"))
+dbWriteTable(conn = con, name = "tags", df_tags_db, append = TRUE)
+```
+
