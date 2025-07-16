@@ -1,0 +1,632 @@
+---
+title: "Information über Werbung in Webseiten finden"
+---
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(ggforce)
+
+source("../config/config-secret.R")
+source("../config/config-graphic.R")
+source("../config/config.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+df_timespan_month <- seq(ymd("1997-01-01"), ymd("2021-06-01"), by = "month") %>% as_tibble()
+
+df_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.crawl_timestamp, s.sha1, s.url FROM sites s WHERE s.site ='sueddeutsche' AND s.sphere ='German'")) %>% 
+  mutate(year = year(crawl_date),
+         month = month(crawl_date),
+         simple_date = paste0(year, "-", month, "-01") %>% ymd(.)) %>% 
+  mutate(sites_year = n(), .by = "year") # %>% 
+  # full_join(., df_timespan_month, by = c("crawl_date" = "value")) # %>% 
+
+sum_sites_year <- df_sites %>% 
+  select(year, sites_year) %>% distinct() %>% 
+  filter(!is.na(year))
+
+load(file = "../../data/1-parsing/scripts/German/scripts-embedded-db-update.RData")
+
+```
+
+
+
+## Spurenlisten
+
+Um Spuren von Werbung finden zu können ist es zunächst entscheidend zu wissen, wie solche Spuren aussehen können. Software, deren Aufgabe es ist für die Benutzer:innen Werbung aus Webseiten zu entfernen, ist dafür eine geeignete Anlaufstelle.
+
+Anne Helmond hatte sich in ihrem Paper "Track the trackers" auf das Browserplugin **Ghostry** gestützt, dass Tracker in den zu untersuchenden Seiten ausfindigt machte. Von der Firma gibt es ein Repo auf Github, wo sie unter anderem eine Datenbank, in der alle Suchmuster für das Plugin hinterlegt sind. Diese Information kann auch auf das vorliegende Archiv angewendet werden. 
+Die Datenbank ist so strukturiert, dass es für jede Organisation eine Datei gibt und für jedes Suchmuster. Zunächst wurde die Dateien mit den Suchmustern verarbeitet und auf die Seiten der SZ angewendet. 
+Kritik an Ghostry: 2013 wurde darüber berichtet, dass die Firma, die hinter Ghostry steht, Daten an die Werbeindustrie weitergibt. Von 19 Millionen Nutzern damals, hatten 8 Millionen aktiviert, dass ihre Daten (vermeintlich) anonymisiert an Werbetreibende als Datenspende weitergegeben werden darf. [Technology Review berichtete](https://web.archive.org/web/20201126022507/https://www.heise.de/hintergrund/Die-Geister-die-ich-rief-1890700.html).
+
+Eine weitere Quelle ist **Easylist**, die Grundlage für Blockings durch Browserplugins wie AdBlockPlus. Diese arbeiten auf Basis einer Liste, die community-geführt auf einem aktuellen Stand gehalten wird und unter dieser [url](https://easylist.to/easylist/easylist.txt) frei verfügbar ist. Da die Datei sehr lang ist (über 65.000 Zeilen) und zwischendrin Kommentare enhält, aus denen abzulesen ist, dass es sich um eine zusammengesetzte Datei aus mehreren einzelnen Listen ist, wurde diese lange Datei wieder zerlegt in die kleineren Dateien. 
+Die Plugins stellen nur die Software zur Verfügung, Nutzer:innen sind angehalten selbst Listen zu hinterlegen, auf Basis derer die Software ihre versprochene Arbeit macht. Die beiden umfangreichsten Listen sind easylist und Fanboy's List. Auf der [Webseite von AdBlockPlus](https://web.archive.org/web/20250306100552/https://adblockplus.org/de/getting_started#subscription) wird dazu geraten nur eine der beiden Listen zu verwenden. Auf der ["about"-Seite von easylist](https://web.archive.org/web/20160731092518/https://easylist.to/pages/about.html) steht allerdings, dass easylist mit Fanboy's List zusammengeführt wurde. 
+Von Easylist gibt weiterhin spezifische Länderlisten, auch für deutschsprachige Seiten. Diese ist sehr viel weniger umfangreich, liefert auch weniger Treffer, dafür aber auch ergänzende Informationen. 
+
+Die Listen sind leider nicht genauso verwendbar, wie sie zur Verfügung stehen. Die einzelnen Muster, die dort hinterlegt sind, enthalten selbst wieder Kodierungen (reguläre Ausdrücke, regex), die die jeweilige Software auflösen kann. Da die Software aber nicht zur Verfügung steht, ist es notwendig die Kodierungen aus den Listen zu entfernen und mehr oder minder darauf zu hoffen, dass immer noch genug gefunden wird. Das entfernen der softwarespezifischen regulären Ausdrücke vereinfacht die Suchmuster, macht sie weniger spezifisch. Die Tatsache, gekoppelt mit der Suchmethode (zunächst wieder nur Textsuche, ohne Berücksichtigung der HTML-Struktur) wird tendenziell zu viele Ergebnisse produzieren. Denn es handelt sich immer noch auch um Nachrichtenseiten, deren Berichtsgegenstand auch die Firmen sein können, nach denen hier gesucht wird.
+
+## Einordnung von "Spuren"
+
+Werbe-Block-Software als Grundlage für die Suche in historischen Webseiten zu verwenden, um damit nachzeichnen zu können, wie sehr Werbung verbreitet war, generiert verschiedene Formen von Spuren. In den Seiten finden sich die Domains von Unternehmen, die Werbung verkaufen, URLs die Werbung nachladen sollten und HTML-Elemente, die Platzhalter für Werbung in der Seite waren. Für diese unterschiedlichen Varianten gibt es verschiedene Listen, die von der jeweiligen Software auch wieder zu unterschiedlichen Zwecken eingesetzt werden. In dem Fall der Domains und URLs wird der Datenverkehr unterbrochen, so dass die Werbung nicht in der Seite erscheint. Damit bleiben die im HTML dafür vorgesehenen Platzhalter leer, die die Software versucht zu finden und auszublenden. Zur genaueren Einordnung der Spuren muss ich wohl etwas länger darüber nachdenken. 
+
+Die Listen, die Informationen enthalten, damit Datenverkehr blockiert werden kann, liefern in der Menge weniger Ergebnisse, als Listen, die verwendet werden um bestimmte Elemente auszublenden. Was bedeuten könnte, dass von ein paar Anbietern Werbung auf verschiedenste Weise in den Seiten angezeigt wird. 
+
+Was vor allem an den nachfolgenden Grafiken abgelesen werden kann ist, dass jede Liste Spezifika mit sich bringt, die sich teilweise wesentlich unterscheiden und immer nur einen Teilbereich der Werbelandschaft ausleuchten können. 
+
+Ghostry findet die großen Anbieter und scheint einen Schwerpunkt auf Unternehmen die in den letzten Jahren aktiv sind/waren zu haben. In den älteren Seiten werden lediglich doubleclick-Spuren aufgelistet.
+
+Easylist ist ein älteres Projekt und fokussiert weniger auf die großen, generischen Unternehmen, nimmt auch die kleineren Verweise auf Werbung in den Blick und findet damit auch in den älteren Seiten Hinweise.
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+library(furrr)
+future::plan(multisession)
+
+load(file = "../../data/helper/tracker-snippets/all-snippets.RData")
+iter_rows <- df_script_row_update %>% select(tags_id) %>% filter(!is.na(tags_id)) %>% pull(.) #%>% head(5)
+all_snippets %>% enframe() %>%  distinct(value) %>% View()
+df_script_row_update %>% filter(is.na(tags_id)) %>% nrow()
+
+# snippets_embedded <- future_map(iter_rows, function(j){
+snippets_embedded <- map_df(iter_rows, function(j){
+  df <- dbGetQuery(conn = con, paste0("SELECT * FROM tags_2 t WHERE t.tags_id = '", j, "'"))
+    # df_script_row_update %>% filter(tags_id == j)
+  embedded_script_to_be_searched <- df %>% select(embedded) %>% pull(.)
+  # print(j)
+  df_inner <- tibble(
+      site = df$site, 
+      # search_date = search_date,
+      snippet = map_chr(all_snippets, function(i){i}),
+      detected = map_chr(all_snippets, function(i){str_detect(embedded_script_to_be_searched, fixed(i))})
+    )
+  write_csv(df_inner, "../../data/1-parsing/tracker/findings-embedded.csv", append = TRUE)
+})
+
+
+# to do: daten hochladen
+# missing tags-id handeln
+# dann hier abfragen, geht das nicht auch performanter?
+
+```
+
+
+
+### Ghostry Trackerdatenbank
+
+:::panel-tabset
+
+#### ghostry domains
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
+
+df_traces_domains <- read_csv("../../data/1-parsing/snippet-detection/German/tracker-domains.csv") %>% 
+  mutate(search_list = "ghostry_domain") %>% 
+  left_join(., df_sites)
+
+df_sites_ghostry_domains <- df_traces_domains %>% 
+  # left_join(., df_traces_domains) %>%  #, by = ("sha1" = "site"))
+  # filter(!is.na(pattern)) %>% 
+  reframe(counted_snippets = n(), .by = "year") %>% 
+  right_join(sum_sites_year) %>% 
+  mutate(snippets_normalized = counted_snippets/sites_year)
+
+
+df_sites_ghostry_domains %>% 
+   #View()
+  # reframe(counted_domains = n(), sites_month = first(sites_month), .by = c("simple_date")) %>% #View()
+  # mutate(domains_normalized = counted_domains/sites_month) %>% 
+  ggplot(aes(x = year, y = snippets_normalized)) +
+  geom_col() +
+  scale_y_continuous(limits = c(0, 12)) +
+  scale_x_continuous(limits = c(1997, 2021))
+```
+
+
+#### ghostry patterns
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
+df_traces_patterns <- read_csv("../../data/1-parsing/snippet-detection/German/tracker-pattern.csv") %>% 
+  mutate(search_list = "ghostry_patterns") %>% 
+  left_join(., df_sites)
+
+sum_ghostry_patterns <- df_traces_patterns %>% 
+  # left_join(., df_traces_patterns) %>% #, by = ("sha1" = "site")) %>% 
+  # filter(!is.na(pattern)) %>% 
+  reframe(counted_snippets = n(), .by = "year") %>% 
+  right_join(sum_sites_year) %>% 
+  mutate(snippets_normalized = counted_snippets/sites_year)
+
+sum_ghostry_patterns %>% 
+  ggplot(aes(x = year, y = snippets_normalized)) +
+  geom_col() +
+  scale_y_continuous(limits = c(0, 12)) +
+  scale_x_continuous(limits = c(1997, 2021))
+
+
+```
+:::
+
+### Easylist - en
+
+::: panel-tabset
+
+```{r}
+
+
+## wo sind die lücken
+## was bedeuten die verschiedenen snippets?
+## warum domains und patterns? macht das was anderes als einfach mehr findings möglich?
+## wer sind die werbetreibenden? wann setzen die variationen ein? 
+
+
+
+```
+
+#### easylist general blocks
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
+df_traces_easylist_gerneral_block <- read_csv("../../data/1-parsing/snippet-detection/German/tracker-easylist-gerneral-block.csv") %>% 
+  mutate(search_list = "easylist_general_block") %>% 
+  left_join(., df_sites)
+
+df_sites_traces_el_general_block <- df_traces_easylist_gerneral_block %>% 
+  # left_join(., df_traces_easylist_gerneral_block) %>% #, by = ("sha1" = "site"))
+  # filter(!is.na(pattern)) %>% # View()
+  reframe(counted_snippets = n(), .by = "year") %>% 
+  right_join(sum_sites_year) %>% 
+  mutate(snippets_normalized = counted_snippets/sites_year)
+
+df_sites_traces_el_general_block %>% 
+   #View()
+  # reframe(counted_patterns = n(), sites_month = first(sites_month), .by = c("simple_date")) %>% #View()
+  # mutate(pattern_normalized = counted_patterns/sites_month) %>% 
+  ggplot(aes(x = year, y = snippets_normalized)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0, 12)) +
+  scale_x_continuous(limits = c(1997, 2021))
+
+```
+
+#### easylist adservers 
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
+
+df_traces_easylist_adservers <- read_csv("../../data/1-parsing/snippet-detection/German/tracker-easylist-adservers.csv") %>% 
+  mutate(search_list = "easylist_adservers") %>% 
+  left_join(., df_sites)
+
+df_sites_easylist_adservers <- df_traces_easylist_adservers %>% 
+  # left_join(., df_traces_easylist_gerneral_block) %>% #, by = ("sha1" = "site"))
+  # filter(!is.na(pattern)) %>% # View()
+  reframe(counted_snippets = n(), .by = "year") %>% 
+  right_join(sum_sites_year) %>% 
+  mutate(snippets_normalized = counted_snippets/sites_year)
+
+df_sites_easylist_adservers %>% 
+   #View()
+  # reframe(counted_patterns = n(), sites_month = first(sites_month), .by = c("simple_date")) %>% #View()
+  # mutate(pattern_normalized = counted_patterns/sites_month) %>% 
+  ggplot(aes(x = year, y = snippets_normalized)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0, 12)) +
+  scale_x_continuous(limits = c(1997, 2021))
+
+```
+
+#### easylist third party  
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
+df_traces_easylist_thirdparty <- read_csv("../../data/1-parsing/snippet-detection/German/tracker-easylist-thirdparty.csv") %>% 
+  mutate(search_list = "easylist_thirdparty") %>% 
+  left_join(., df_sites)
+
+df_sites_easylist_thirdparty <- df_traces_easylist_thirdparty %>% 
+  # left_join(., df_traces_easylist_gerneral_block) %>% #, by = ("sha1" = "site"))
+  # filter(!is.na(pattern)) %>% # View()
+  reframe(counted_snippets = n(), .by = "year") %>% 
+  right_join(sum_sites_year) %>% 
+  mutate(snippets_normalized = counted_snippets/sites_year)
+
+df_sites_easylist_thirdparty %>% 
+   #View()
+  # reframe(counted_patterns = n(), sites_month = first(sites_month), .by = c("simple_date")) %>% #View()
+  # mutate(pattern_normalized = counted_patterns/sites_month) %>% 
+  ggplot(aes(x = year, y = snippets_normalized)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0, 12)) +
+  scale_x_continuous(limits = c(1997, 2021))
+
+```
+#### easylist general hide  
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
+df_traces_easylist_general_hide <- read_csv("../../data/1-parsing/snippet-detection/German/tracker-easylist-general-hide.csv") %>% 
+  mutate(search_list = "easylist_general_hide") %>% 
+  left_join(., df_sites)
+
+df_sites_easylist_general_hide <- df_traces_easylist_general_hide %>% 
+  # left_join(., df_traces_easylist_gerneral_block) %>% #, by = ("sha1" = "site"))
+  # filter(!is.na(pattern)) %>% # View()
+  reframe(counted_snippets = n(), .by = "year") %>% 
+  right_join(sum_sites_year) %>% 
+  mutate(snippets_normalized = counted_snippets/sites_year)
+
+df_sites_easylist_general_hide %>% 
+   #View()
+  # reframe(counted_patterns = n(), sites_month = first(sites_month), .by = c("simple_date")) %>% #View()
+  # mutate(pattern_normalized = counted_patterns/sites_month) %>% 
+  ggplot(aes(x = year, y = snippets_normalized)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0, 20)) +
+  scale_x_continuous(limits = c(1997, 2021))
+
+```
+Achtung: hier springt die y-Achse von 12 auf 20!
+
+:::
+
+### Easylist - de
+
+::: panel-tabset
+
+#### easylist general blocks
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
+df_traces_easylist_gerneral_block_de <- read_csv("../../data/1-parsing/snippet-detection/German/tracker-easylist-gerneral-block-de.csv") %>% 
+  mutate(search_list = "easylist_general_block_de") %>% 
+  left_join(., df_sites)
+
+df_sites_traces_el_general_block_de <- df_traces_easylist_gerneral_block_de %>% 
+  # left_join(., df_traces_easylist_gerneral_block) %>% #, by = ("sha1" = "site"))
+  # filter(!is.na(pattern)) %>% # View()
+  reframe(counted_snippets = n(), .by = "year") %>% 
+  right_join(sum_sites_year) %>% 
+  mutate(snippets_normalized = counted_snippets/sites_year)
+
+df_sites_traces_el_general_block_de %>% 
+   #View()
+  # reframe(counted_patterns = n(), sites_month = first(sites_month), .by = c("simple_date")) %>% #View()
+  # mutate(pattern_normalized = counted_patterns/sites_month) %>% 
+  ggplot(aes(x = year, y = snippets_normalized)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0, 12)) +
+  scale_x_continuous(limits = c(1997, 2021))
+
+```
+
+#### easylist adservers 
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
+
+df_traces_easylist_adservers_de <- read_csv("../../data/1-parsing/snippet-detection/German/tracker-easylist-adservers-de.csv") %>% 
+  mutate(search_list = "easylist_adservers_de") %>% 
+  left_join(., df_sites)
+
+df_sites_easylist_adservers_de <- df_traces_easylist_adservers_de %>% 
+  # left_join(., df_traces_easylist_gerneral_block) %>% #, by = ("sha1" = "site"))
+  # filter(!is.na(pattern)) %>% # View()
+  reframe(counted_snippets = n(), .by = "year") %>% 
+  right_join(sum_sites_year) %>% 
+  mutate(snippets_normalized = counted_snippets/sites_year)
+
+df_sites_easylist_adservers_de %>% 
+   #View()
+  # reframe(counted_patterns = n(), sites_month = first(sites_month), .by = c("simple_date")) %>% #View()
+  # mutate(pattern_normalized = counted_patterns/sites_month) %>% 
+  ggplot(aes(x = year, y = snippets_normalized)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0, 12)) +
+  scale_x_continuous(limits = c(1997, 2021))
+
+```
+
+#### easylist third party  
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
+df_traces_easylist_thirdparty_de <- read_csv("../../data/1-parsing/snippet-detection/German/tracker-easylist-thirdparty-de.csv") %>% 
+  mutate(search_list = "easylist_thirdparty_de") %>% 
+  left_join(., df_sites)
+
+df_sites_easylist_thirdparty_de <- df_traces_easylist_thirdparty_de %>% 
+  # left_join(., df_traces_easylist_gerneral_block) %>% #, by = ("sha1" = "site"))
+  # filter(!is.na(pattern)) %>% # View()
+  reframe(counted_snippets = n(), .by = "year") %>% 
+  right_join(sum_sites_year) %>% 
+  mutate(snippets_normalized = counted_snippets/sites_year)
+
+df_sites_easylist_thirdparty_de %>% 
+   #View()
+  # reframe(counted_patterns = n(), sites_month = first(sites_month), .by = c("simple_date")) %>% #View()
+  # mutate(pattern_normalized = counted_patterns/sites_month) %>% 
+  ggplot(aes(x = year, y = snippets_normalized)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0, 12)) +
+  scale_x_continuous(limits = c(1997, 2021))
+
+```
+
+#### easylist general hide  
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+
+df_traces_easylist_general_hide_de <- read_csv("../../data/1-parsing/snippet-detection/German/tracker-easylist-general-hide-de.csv") %>% 
+  mutate(search_list = "easylist_general_hide_de") %>% 
+  left_join(., df_sites)
+
+df_sites_easylist_general_hide_de <- df_traces_easylist_general_hide_de %>% 
+  # left_join(., df_traces_easylist_gerneral_block) %>% #, by = ("sha1" = "site"))
+  # filter(!is.na(pattern)) %>% # View()
+  reframe(counted_snippets = n(), .by = "year") %>% 
+  right_join(sum_sites_year) %>% 
+  mutate(snippets_normalized = counted_snippets/sites_year)
+
+df_sites_easylist_general_hide_de %>% 
+   #View()
+  # reframe(counted_patterns = n(), sites_month = first(sites_month), .by = c("simple_date")) %>% #View()
+  # mutate(pattern_normalized = counted_patterns/sites_month) %>% 
+  ggplot(aes(x = year, y = snippets_normalized)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0, 12)) +
+  scale_x_continuous(limits = c(1997, 2021))
+
+```
+
+:::
+
+
+
+## Was wird gefunden? 
+
+Ist es immer das gleiche, verändert es sich über die Zeit, wie unterschiedlich sind die jeweiligen Suchlisten?
+
+Übergreifend sind zu generische Domains enthalten, beispielsweise google.de, google.com, facebook.de, facebook.net. Zwar werden über die Firmen Werbung ausgespielt, aber die Suchmuster müssen dringend spezifischer formuliert sein, denn so wird das Bild verzerrt, aufgeblasen. 
+
+to do: general hide
+
+:::panel-tabset
+
+### ghostry domains
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+DT::datatable(df_traces_domains %>% 
+  reframe(patterns = n(), .by = "pattern") %>% 
+    arrange(desc(patterns))
+)
+
+```
+
+### ghostry patterns
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+DT::datatable(df_traces_patterns %>% 
+  reframe(patterns = n(), .by = "pattern") %>% 
+    arrange(desc(patterns))
+)
+
+```
+
+### easylist general block
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+DT::datatable(df_traces_easylist_gerneral_block %>% 
+  reframe(patterns = n(), .by = "pattern") %>% 
+    arrange(desc(patterns))
+)
+
+```
+
+### easylist adserver
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+DT::datatable(df_traces_easylist_adservers %>% 
+  reframe(patterns = n(), .by = "pattern") %>% 
+    arrange(desc(patterns))
+)
+
+```
+
+### easylist thirdparty
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+DT::datatable(df_traces_easylist_thirdparty %>% 
+  reframe(patterns = n(), .by = "pattern") %>% 
+    arrange(desc(patterns))
+)
+
+```
+
+
+### easylist general hide
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+DT::datatable(df_traces_easylist_general_hide %>% 
+  reframe(patterns = n(), .by = "pattern") %>% 
+    arrange(desc(patterns))
+)
+
+```
+
+:::
+
+## Zeitleiste
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+df_findings <- df_traces_domains %>% 
+  bind_rows(., df_traces_patterns) %>% 
+  bind_rows(., df_traces_easylist_gerneral_block) %>% 
+  bind_rows(., df_traces_easylist_adservers) %>% 
+  bind_rows(., df_traces_easylist_thirdparty) %>% 
+  bind_rows(., df_traces_easylist_general_hide) %>% 
+  bind_rows(., df_traces_easylist_adservers_de) %>% 
+  bind_rows(., df_traces_easylist_gerneral_block_de) %>% 
+  bind_rows(., df_traces_easylist_thirdparty_de) %>% 
+  bind_rows(., df_traces_easylist_general_hide_de)
+  # right_join(., df_sites)
+
+test <- df_findings %>% 
+  filter(!pattern %in% c("google.de", "google.com"), !is.na(sha1)) %>% 
+  reframe(counted_patterns = n(), search_list_ = paste(search_list, collapse = ","), .by = "sha1") #%>% 
+
+```
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-width: 10
+#| fig-height: 35
+
+df_findings %>% 
+  ggplot(., aes(x = year, y = reorder(pattern, desc(pattern)))) +
+  geom_tile()+
+  facet_col(vars(search_list), scales = "free", space = "free") +
+  scale_x_continuous(limits = c(1997, 2021), expand = c(0, NA)) +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing
+
+
+
+
+```
+
+
+## Tabelle: Seiten mit Links ins Archive
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+dt_table <- df_findings %>% 
+  select(sha1, crawl_date, crawl_timestamp, search_list, url) %>% 
+  distinct() %>% 
+  mutate(url_date = as.character(crawl_timestamp) %>% str_remove_all(., "[-:\\s]")) %>% #View()
+  reframe(search_lists = paste(search_list, collapse = ","), .by = c(crawl_date, sha1, crawl_timestamp, url, url_date)) %>% 
+  mutate(archive_link = paste0('<a href= "http://web.archive.org/web/', url_date, '/', url,'" target="_blank">Link ins Archive</a>')) %>% 
+  select(-sha1, -url_date, -crawl_timestamp) %>% 
+  arrange((crawl_date))
+
+DT::datatable(dt_table, rownames = FALSE, escape=F)
+
+```
+
