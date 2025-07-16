@@ -8,22 +8,37 @@ Diese Seiten umfassen die Dokumentation der semi-automatischen Analyse des Proje
 
 Die Daten sind messy, was das in Bezug auf dieses Projekt in den unterschiedlichen Prozessschritten bedeutet und welche Schlüsse sich daraus ziehen lassen, findet sich hier in den unterschiedlichen Seiten.
 
-[Data basis: sampling and structure](datengrundlage.qmd) blickt auf die Quelldaten: was wurde vom Internet Archive zur Verfügung gestellt, wie ist die Struktur, wie passiert das Sampling? Grafiken zeigen die zeitliche Abdeckung der Webspheres und auch eine Übersicht über den Zeitpunkt der Archivierung.
+[Data basis: sampling and structure](sites/datengrundlage.qmd) blickt auf die Quelldaten: was wurde vom Internet Archive zur Verfügung gestellt, wie ist die Struktur, wie passiert das Sampling? Grafiken zeigen die zeitliche Abdeckung der Webspheres und auch eine Übersicht über den Zeitpunkt der Archivierung.
 
-[Data cleaning](data-cleaning.qmd) Die vom Internet Archive zur Verfügung gestellten Daten enthielten weit mehr, als das was zur Analyse angefragt war. Für die Analyse-Methodik wird vorausgesetzt, dass den Scripten jeweils vollständige HTML-Seiten "gefüttert" werden. Um hier unnötigen Fehlern bei der Verarbeitung vorzubeugen und auch um Rechenzeit zu sparen, wurde in diesem Abschnitt darauf geschaut, welche Seiten unnötiger Weise in den Datensatz gelangt sind.
+[Data cleaning](sites/data-cleaning.qmd) Die vom Internet Archive zur Verfügung gestellten Daten enthielten weit mehr, als das was zur Analyse angefragt war. Für die Analyse-Methodik wird vorausgesetzt, dass den Scripten jeweils vollständige HTML-Seiten "gefüttert" werden. Um hier unnötigen Fehlern bei der Verarbeitung vorzubeugen und auch um Rechenzeit zu sparen, wurde in diesem Abschnitt darauf geschaut, welche Seiten unnötiger Weise in den Datensatz gelangt sind.
 
-[Matching script files to html pages](script-files-to-html-pages.qmd) Zusätzlich zu HTML-Seiten bekamen wir vom Internet Archiv auch ein Archiv mit javascript-files. Auf dieser Seite findet sich eine schnelle Analyse dazu, inwiefern das HTML-Archiv mit dem Javascript-Archiv übereinstimmt. Hier ist ein To Do offen, mit Helge Holzmann nachzuforschen warum die Übereinstimmung quasi nicht gegeben ist.
+[Matching script files to html pages](sites/script-files-to-html-pages.qmd) Zusätzlich zu HTML-Seiten bekamen wir vom Internet Archiv auch ein Archiv mit javascript-files. Auf dieser Seite findet sich eine schnelle Analyse dazu, inwiefern das HTML-Archiv mit dem Javascript-Archiv übereinstimmt. Hier ist ein To Do offen, mit Helge Holzmann nachzuforschen warum die Übereinstimmung quasi nicht gegeben ist.
 
 Der zweite Abschnitt dieser Analyse-Sammlung bezieht sich auf die Inhalte der HTML Seiten.
 
-[Different approaches how to interpret HTML](approaches.qmd) Das ist momentan ein bisschen legacy und mit ein wenig Muse zu überarbeiten.
+[Different approaches how to interpret HTML](sites/approaches.qmd) Das ist momentan ein bisschen legacy und mit ein wenig Muse zu überarbeiten.
 
-[Learning about infrastructur: Analyzing doctype](analyzing-doctypes.qmd) ist der Beginn einer Analyse zu welchen Zeiten sich die jeweiligen HTML-Standards in den verschieden Webspheres verbreitet haben
+[Learning about infrastructur: Analyzing doctype](sites/analyzing-doctypes.qmd) ist der Beginn einer Analyse zu welchen Zeiten sich die jeweiligen HTML-Standards in den verschieden Webspheres verbreitet haben
 
-[Analyzing form tags](analyzing-form-tags.qmd) widmet sich der Verwendung und Verbreitung von form-tags in HTML-Seiten im Allgemeinen und auch bezogen auf potentielle Spuren von Kommentarmöglichkeiten
+[Analyzing form tags](sites/analyzing-form-tags.qmd) widmet sich der Verwendung und Verbreitung von form-tags in HTML-Seiten im Allgemeinen und auch bezogen auf potentielle Spuren von Kommentarmöglichkeiten
 
-[Context of form tags](form-context.qmd) Diese Analyse geht einen Schritt weiter, nämlich über das bloße Vorhandensein eines Tags oder Spur hinaus und sucht nach der tatsächlich Implementierung der Kommentaroptionen. Hier wird dann sichtbar welche Elemente die Kommentarspuren begleiten, zum Beispiel ob es möglich war sich mit Facebook anzumelden oder mögliche Sortieroptionen für die folgenden Kommentare.
+[Context of form tags](sites/form-context.qmd) Diese Analyse geht einen Schritt weiter, nämlich über das bloße Vorhandensein eines Tags oder Spur hinaus und sucht nach der tatsächlich Implementierung der Kommentaroptionen. Hier wird dann sichtbar welche Elemente die Kommentarspuren begleiten, zum Beispiel ob es möglich war sich mit Facebook anzumelden oder mögliche Sortieroptionen für die folgenden Kommentare.
 
-To Do: Analyseseite für eingebunde Scripte in den HTML-Seiten
+[Analyzing script tags](sites/script-tags.qmd) Die Analyse steht noch aus. 
 
-To Do: Analyseseite für iframes
+[Analyzing iframes](sites/analyzing-iframes.qmd)Die iframes anzusehen ist das Ergebnis aus verschiedenen Diskussionen innerhalb des Forschungsprojekts. Iframes werden dazu genutzt Fenster in HMTL-Seiten zu schneiden, so dass innerhalb dieses Fensters Inhalte angezeigt werden können, die unter ganz anderen Domains liegen. Damit meine ich nicht nur die physische Adresse eines Inhalts, sondern auch Domäne im Sinne von Verantwortlichkeit für die technische einwandfreie Funktionalität. 
+
+Die Analyse-Grafiken zeigen hier, zum Beispiel, das Umfragetools wie das von Civey auf diese Weise verfügbar gemacht wurde.
+
+[Analyzing specific snippets](sites/analyzing-all-tags.qmd)Diese Seite zeigt Zeitverläufe für spezifische Snippets, wie Opinary, Civey, Googletag, Facebook, Twitter, unabhängig davon, über welche Tags sie eingebunden waren. 
+
+[All commenting traces](sites/commenting-traces.qmd)Das ist eine sehr interessante Seite, sie führt jetzt die Informationen aus den verschiedenen Ansätzen zusammen. Es gibt den Ansatz, den Robert noch begonnen hat, nämlich nach verschiedenen Snippets in HTML-Text zu suchen. Der zweite Ansatz sucht nach Snippets in der HTML-Struktur und liefert damit auch die Information darüber, wie die Funktionalität verfügbar gemacht wurde. Der zweite Ansatz geht noch einen Schritt weiter und hält auch Datenfunde vor, die über "comment" oder "komment" gefunden wurden.
+
+[Context of all traces](sites/tag-context.qmd)Hier passiert die Analyse des Hashings. 
+Dadurch, dass der zweite Ansatz Informationen zur Struktur der jeweiligen Spuren mitliefert, ist es möglich sich die Umgebung der Spuren anzusehen. HTML-Tags sind hierachisch strukturiert, hier wird für den höchsten Knoten, der Spuren enthält, alle Kindknoten extrahiert und diese Information auf unterschiedliche Weise weiterverarbeitet. Davon handelt diese Seite.
+
+[Understanding the hashes](sites/understanding-hashes.qmd)Das ist work in progress, nachvollziehbar nur für die entwickelnde Person. 
+
+
+
+
