@@ -1,0 +1,282 @@
+---
+title: "Intermezzo: creating datasets for context parsing in python"
+toc-depth: 4
+execute:
+  eval: false
+---
+
+```{r}
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+
+source("../../config/config-graphic.R")
+source("../../config/config.R")
+source("../../config/config-secret-local.R")
+
+con_local <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+get_traces_export <- function(sphere_){
+  df <- dbGetQuery(conn = con_local, paste0("SELECT DISTINCT t.site as sha1, t.trace, ts.tag, ts.attr, ts.value, t.search_type, t.search_method, t.sphere FROM traces t INNER JOIN tags ts ON t.tags_id = ts.tags_id::text WHERE t.search_topic = 'comment' AND ts.attr NOT IN ('no attr', 'type', 'language') AND t.sphere = '",sphere_,"'"))
+}
+
+get_traces_export_just_embedded <- function(sphere_){
+  df <- dbGetQuery(conn = con_local, paste0("SELECT DISTINCT t.site as sha1, t.trace, ts.tag, ts.attr, ts.value, t.search_type, t.search_method, t.sphere FROM traces t INNER JOIN tags ts ON t.tags_id = ts.tags_id::text WHERE t.search_topic = 'comment' AND t.comment = 'embedded script' AND t.sphere = '",sphere_,"'"))
+}
+
+```
+
+to do: 
+- mehr Erläuterungen zu den einzelnen Abschnitten
+
+## Info
+
+### Why Context Parsing?
+
+Die hier gezeigten Spuren werden als nächstes zusammengefasst: Diese Funde sind Blitzlichter aus dem HTML-Code. Oft sind die Tags, die hier Blitzlichter zeigen, ineinander verschachtelt, manchmal stehen sie für sich. 
+
+Einzelne Tags machen noch keine Kommentarbereiche, aber sie enthalten womöglich diejenigen Tags die in Summe dann ein (strukturelles) Bild des Kommentarbreichs zeigen können. Die Idee ist, das prototypische Vorgehen bei den form-Tags hier auf alle Spuren anzuwenden: sind die Bereiche erst einmal identifiziert und extrahiert, können sie gehasht werden und Veränderungen zuverlässig gefunden werden. 
+
+Außerdem ist diese Datenverarbeitung auch Vorbereitung für den machine learning part der nächsten Förderphase. 
+
+In dieser Verarbeitung der Daten sind die Snippetfunde, die oben schwarz markiert sind, nicht enthalten. Sie sind ohne Kontext, abstrakte Spuren. 
+
+### Context parsing in a different development environment
+
+... weil python bibliotheken viel besser im dom-tree des html herum wandern können. 
+
+Was wird exportiert? - die Tags, die Kommentarspuren enthalten und selbst aussagekräftig genug sind, um eindeutig identifiziert werden können. Formulierung des Satzes verrät: hier hab es schon ein wenig hin und her. Script tags sind oft so anonym implementiert, dass dem Programm, dass den Kontext extrahieren soll, nicht genug Information zu Identifikation gegeben werden kann. Da diese in vielen Fällen auch in gar keinem Kontext stehen, sondern ganz zu Beginn der Seite geladen werden, wird hierfür nicht nach einem Umweg gesucht, den potentiellen Kontext doch noch zu erwischen. 
+
+## Intermezzo Teil 1: Export aus der traces-tabelle 
+
+Für die Tags mit Kommentarspuren werden alle Elternpfade aus der Html-Seite herausgesucht. 
+Die hier gespeicherten Daten füttern das erste python-script `parsing-tags-pathes.py`. 
+
+::: panel-tabset
+
+### German
+
+```{r}
+
+df_tags_for_context_de <- get_traces_export("German")
+
+df_tags_for_context_de %>% filter(tag == "script", attr == "no attr") %>% nrow()
+
+df_tags_for_context_de <- df_tags_for_context_de %>% 
+  # bind_rows(., df_snippets_in_tags_de) %>% 
+  filter(attr != "no attr", attr != "type", attr != "language") %>% ### solche script-tag rausfiltern, die keine Eigenschaften haben, weil sie nicht identifiziert werden können. Hier an anderer Stelle implementieren, dass die extrahierten Scripte trotzdem gehasht werden. Dass diese dann ohne Kontextinfo sind oder eventuell in anderen hashes ebenfalls enhalten, weil sie innerhalb einer extrahierten html-Bereichs liegen, ist etwas, das zunächst einfach hingenommen werden muss. 
+  arrange(sha1) %>% 
+  # select(-group) %>% 
+  distinct()
+
+write_csv(df_tags_for_context_de, file = "../../../data/1-parsing/tags/German/25-12-03-sites-and-findings-for-context-parsing.csv")
+
+# df_tags_for_context_de %>% select(sha1) %>% distinct() %>% nrow()
+
+# test <- df_tags_for_context_de %>% filter(sha1 %in% c("0252ceedf970117f23a4ee03ff6fdf18cfb52024", "00e193f193ee663cccedac713cf0595e6807ef1d"))
+
+# write_csv(test, file = "../../data/1-parsing/tags/German/sites-and-findings-for-context-parsing-test-4.csv")
+
+```
+
+
+### International
+
+```{r}
+
+df_tags_for_context_world <- get_traces_export("World") %>% 
+  filter(attr != "no attr", attr != "type", attr != "language") %>% 
+  arrange(sha1) %>% 
+  distinct()
+
+write_csv(df_tags_for_context_world, file = "../../data/1-parsing/tags/World/25-11-12-sites-and-findings-for-context-parsing.csv")
+
+```
+
+### Dutch
+
+```{r}
+
+df_tags_for_context_nl <- get_traces_export("Dutch") %>% 
+  arrange(sha1) %>% 
+  distinct()
+
+write_csv(df_tags_for_context_nl, file = "../../../data/1-parsing/tags/Dutch/25-11-27-sites-and-findings-for-context-parsing.csv")
+
+```
+
+:::
+
+## Intermezzo Teil 2: Pfade aus dem python-script
+
+Hier kommen die vollständigen Pfade der Tags aus dem python-script zurück. In diesem Abschnitt werden die Pfade analysiert: sind weitere Kommentarspuren in den Elternpfaden enthalten, werden nur diese behalten und anschließend abgespeichert, damit das zweite python-script `parsing-tags-context.py` alle Tags unterhalb dieses Pfades extrahiert. 
+
+```{r}
+snippets_to_find <- read.csv("../../../data/helper/24-07-12-Commenting-system-detection-patterns.csv", sep = ";")
+str_snippets_to_find <- snippets_to_find %>% select(regex) %>% pull(.) %>% paste(collapse = "|")
+traces_to_search <- c(COMMENTS_IN_TAGS, str_snippets_to_find) %>% paste(collapse = "|")
+
+```
+
+
+```{r}
+
+CURRENT_SPHERE <- "German"
+
+tags_pathes_ <- read_csv(file = paste0("../../../data/1-parsing/tags-context/",CURRENT_SPHERE,"/25-12-03-extracted-pathes.csv"))
+
+tags_pathes <- tags_pathes_ %>% 
+  filter(!str_detect(attr, "recomment")) %>% #select(sha1) %>% distinct() #View()  ## -15 Seiten
+  pivot_longer(., cols = starts_with("depth_"), names_to = "depth", values_to = "path") %>% #View()
+  filter(!is.na(path)) %>% 
+  mutate(
+    comment_trace = str_extract(str_to_lower(path), traces_to_search) # note to future mika: yes, multiple traces are possible, and here only one is recocnized but here it isnt important to find all, just a char finding for futher aggregation
+    )
+
+# hier ist was komisch: 0002942e48e86d6c4d23d4a149432a7ab551e59c, für das script-tag wird auf ebene 9 wird angeblich was gefunden, aber das ist quatsch, das müsste ebene 17 sein. 
+
+
+### sollten Spuren von Kommentaren im HTML verschachtelt vorkommen, nur solche Pfade weiterverarbeiten, die im Baum weiter oben sind
+
+tags_parsing_context <- tags_pathes %>% 
+  mutate(comment_finding = ifelse(!is.na(comment_trace), 1, NA)) %>%
+  # arrange(comment_finding) %>%
+  mutate(filter_helper = row_number(), .by = c(sha1, tag, attr, value, comment_finding)) %>%# View()
+  filter(!is.na(comment_trace), filter_helper == 1) %>% #View()
+  select(sha1, path) %>% 
+  distinct() %>%   
+  mutate(
+    # path = str_remove(path, "^div\\{\\},"),
+    tag = str_extract(path, "^\\w{1,}\\s") %>% trimws(),
+         attrs = str_extract(path, "\\{.*\\}"))# %>% str_remove_all(., "\\{|\\}") ) #%>% View()
+
+# write_csv(tags_parsing_context, file = paste0("../../../data/1-parsing/tags/",CURRENT_SPHERE,"/25-12-03-tag-context-parsing.csv"))
+
+# python script abgebrochen, ab Abruchstelle weiter parsen
+# temp_input <- read_csv(file = paste0("../../../data/1-parsing/tags/",CURRENT_SPHERE,"/25-11-13-tag-context-parsing.csv")) 
+# temp_output <- read_csv("../../../data/1-parsing/tags-context/World/25-11-27-context-all-traces.csv") %>% select(sha1, path = context_path) %>% distinct()
+
+# temp_missing <- temp_input %>% filter(., between(row_number(), temp_output %>% nrow(), n()))
+# write_csv(temp_missing, file = paste0("../../../data/1-parsing/tags/",CURRENT_SPHERE,"/25-11-27-tag-context-parsing.csv"))
+
+```
+
+### Export für context-parsing-Script in python
+
+```{r}
+
+write_csv(tags_parsing_context, file = paste0("../../../data/1-parsing/tags/",CURRENT_SPHERE,"/25-12-03-tag-context-parsing.csv"))
+
+```
+
+Notieren welche Datentransformationen stattfinden.
+
+## Tests
+
+### Von traces zu Ergebnis Elternpfade
+
+Zu testen: Alle Spuren aus der traces Tabelle müssen in der Ausgabedatei des Scriptes enthalten sein. 
+Primitiver Test auf Datenebene: Ist die Zeilenanzahl in beiden Dateien identisch?
+
+::: panel-tabset
+
+### German
+
+Ausgabe: TRUE
+
+```{r}
+
+de_test_input_1 <- read_csv(file = "../../../data/1-parsing/tags/German/25-12-03-sites-and-findings-for-context-parsing.csv")
+de_test_output_1 <- read_csv(file = paste0("../../../data/1-parsing/tags-context/German/25-12-03-extracted-pathes.csv"))
+
+de_test_input_1 %>% nrow() == de_test_output_1 %>% nrow()
+```
+
+### World
+
+Ausgabe: TRUE
+
+```{r}
+
+world_test_input_1 <- read_csv(file = "../../../data/1-parsing/tags/World/25-11-12-sites-and-findings-for-context-parsing.csv")
+world_test_output_1 <- read_csv(file = paste0("../../../data/1-parsing/tags-context/World/25-11-12-extracted-pathes.csv"))
+
+world_test_input_1 %>% nrow() == world_test_output_1 %>% nrow()
+
+```
+
+### Dutch
+
+Ausgabe: TRUE
+
+```{r}
+
+nl_test_input_1 <- read_csv(file = "../../../data/1-parsing/tags/Dutch/25-11-27-sites-and-findings-for-context-parsing.csv")
+nl_test_output_1 <- read_csv(file = paste0("../../../data/1-parsing/tags-context/Dutch/25-11-27-extracted-pathes.csv"))
+
+nl_test_input_1 %>% nrow() == nl_test_output_1 %>% nrow()
+
+```
+
+:::
+
+### Von Eltern- bzw Gruppenpfaden zu Context-Daten
+
+
+:::panel-tabset
+
+### German
+
+Ausgabe: TRUE
+
+```{r}
+
+## ich will wissen, dass alle pfade, die ich ins context parsing reingesteckt habe auch in der Ausgabedatei drin stecken. 
+CURRENT_SPHERE <- "German"
+de_test_input_2 <- read_csv(file = paste0("../../../data/1-parsing/tags/",CURRENT_SPHERE,"/25-07-18-tag-context-parsing.csv"))
+de_test_output_2 <- read_csv(file = paste0("../../../data/1-parsing/tags-context/",CURRENT_SPHERE,"/25-07-18-context-all-traces.csv")) %>% select(sha1, context_path) %>% distinct()
+
+de_test_input_2 %>% nrow() == de_test_output_2 %>% nrow()
+
+```
+
+### World
+
+Ausgabe: TRUE, aber in dem input-file sind Pfade doppelt, deswegen brauchte es hier noch ein `distinct()` beim Einlesen des input-files.
+
+```{r}
+CURRENT_SPHERE <- "World"
+world_test_input_2 <- read_csv(file = paste0("../../../data/1-parsing/tags/",CURRENT_SPHERE,"/25-11-28-tag-context-parsing.csv"))%>% select(sha1, context_path = attrs) %>% distinct()
+world_test_output_2 <- read_csv(file = paste0("../../../data/1-parsing/tags-context/",CURRENT_SPHERE,"/25-11-27-context-all-traces.csv")) %>% 
+  bind_rows(., read_csv(file = paste0("../../../data/1-parsing/tags-context/",CURRENT_SPHERE,"/25-11-27-context-all-traces-resumption.csv"))) %>% 
+  select(sha1, context_path) %>% distinct()
+
+# world_test_input_2 %>% anti_join(., world_test_output_2) %>% View()
+# world_test_output_2 %>% anti_join(., world_test_input_2) %>% View()
+
+world_test_input_2 %>% nrow() == world_test_output_2 %>% nrow()
+
+```
+
+### Dutch
+
+Ausgabe: TRUE
+
+```{r}
+
+## ich will wissen, dass alle pfade, die ich ins context parsing reingesteckt habe auch in der Ausgabedatei drin stecken. 
+CURRENT_SPHERE <- "Dutch"
+nl_test_input_2 <- read_csv(file = paste0("../../../data/1-parsing/tags/",CURRENT_SPHERE,"/25-11-27-tag-context-parsing.csv")) 
+nl_test_output_2 <- read_csv(file = paste0("../../../data/1-parsing/tags-context/",CURRENT_SPHERE,"/25-11-27-context-all-traces.csv")) %>% select(sha1, context_path) %>% distinct()
+
+nl_test_input_2 %>% nrow() == nl_test_output_2 %>% nrow()
+
+```
+:::

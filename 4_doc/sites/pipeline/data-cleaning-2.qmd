@@ -1,3 +1,8 @@
+---
+
+---
+
+
 ```{r echo=FALSE, message=FALSE, error=FALSE}
 library(tidyverse)
 library(lubridate)
@@ -16,9 +21,9 @@ gs4_auth(cache=".secrets")
 extrafont::loadfonts(quiet = TRUE)
 
 
-source("../config/config-secret.R")
-source("../config/config-graphic.R")
-source("../config/config.R")
+source("../../config/config-secret.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
 
 
 con <- dbConnect(RPostgres::Postgres(),
@@ -46,11 +51,11 @@ Als nächstes folgt eine kurze Analyse zu den mehrfach vorkommenden HTML-Seiten,
 
 
 get_messy_sites <- function(sphere){
-  df_sites_messy <- read_csv(paste0("../../data/raw/", sphere, "/2nd/html-file-information.csv"), col_select = c("crawl_date", "url", "sha1", "md5"), col_types = c("c", "c", "c", "c")) %>%  
+  df_sites_messy <- read_csv(paste0("../../../data/raw/", sphere, "/2nd/html-file-information.csv"), col_select = c("crawl_date", "url", "sha1", "md5"), col_types = c("c", "c", "c", "c")) %>%  
     mutate(year = ymd_hms(crawl_date) %>% year(),
                site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
   
-  file_list <- list.files(paste0("../../data/0-preprocessing/", sphere, "/")) %>% 
+  file_list <- list.files(paste0("../../../data/0-preprocessing/", sphere, "/")) %>% 
     enframe() %>% 
     mutate(sha1 = str_remove(value, ".html"))
   
@@ -293,7 +298,7 @@ Die Grafik zeigt die Quantitäten der Duplikate: am häufigsten kommen HTML-Seit
   ggplot(., aes(x = duplicated_overall, y = count, tooltip = paste0(duplicated_overall, "fach duplizierte Seite, kommt so häufig vor: ", count),label = count))+
   geom_point_interactive()
 
- ggiraph(ggobj = plot)
+ girafe(ggobj = plot)
  
 ```
 
@@ -308,7 +313,7 @@ Die Grafik zeigt die Quantitäten der Duplikate: am häufigsten kommen HTML-Seit
   ggplot(., aes(x = duplicated_overall, y = count, tooltip = paste0(duplicated_overall, "fach duplizierte Seite, kommt so häufig vor: ", count),label = count))+
   geom_point_interactive()
 
- ggiraph(ggobj = plot)
+ girafe(ggobj = plot)
  
 ```
 
@@ -323,7 +328,7 @@ Die Grafik zeigt die Quantitäten der Duplikate: am häufigsten kommen HTML-Seit
   ggplot(., aes(x = duplicated_overall, y = count, tooltip = paste0(duplicated_overall, "fach duplizierte Seite, kommt so häufig vor: ", count),label = count))+
   geom_point_interactive()
 
- ggiraph(ggobj = plot)
+ girafe(ggobj = plot)
  
 ```
 :::

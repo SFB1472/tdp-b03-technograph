@@ -1,0 +1,854 @@
+---
+title: "Context of traces"
+execute:
+  eval: false
+---
+
+```{r}
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+
+source("../../config/config-graphic.R")
+source("../../config/config.R")
+
+# source("../../config/config-secret.R")
+# con_remote <- dbConnect(RPostgres::Postgres(), 
+#                  dbname = dsn_database,
+#                  host = dsn_hostname, 
+#                  port = dsn_port,
+#                  user = dsn_uid, 
+#                  password = dsn_pwd
+# )
+
+source("../../config/config-secret-local.R")
+con_local <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+```
+
+
+## Info
+Bezug zu Script 1-parsing/analyse-tag-context.R
+Dieses Script baute auf analyse-form-context.R auf. Das war der Prototyp für die Idee, den Kontext der Spuren mit zu berücksichtigen.
+Fieseste Umwandlung bis Daten in die Datenbank kommen, weil das cleaning richtig ätzend qualitativ abläuft.
+
+In diesem Prozessschritt werden die Daten aus dem zweiten pythonscript eingelesen (und überprüft?). Die Tabelle `trace_context` ist diejenige, auf deren Grundlage in einem weiteren Schritt verschiedene Hashes berechnet werden. Erläuterungen dazu auf dieser Seite (to do: verlinken).
+
+Zur Vorbereitung auf den weiteren Verarbeitungsschritt, werden die geparsten Daten hier um einige Werte erweitert. Es kommen zwei Gruppenvariablen hinzu, sowie vereinfachte Werte für die Spalte `value`. 
+
+
+## Input
+
+```{r}
+#### Verbesserung im Vergleich zu den form tags: Es gibt jetzt schon eine Gruppenvariable aus dem Parsing
+#### in der Datenbank gibt es eine Spalte of_interest in der sites tabelle, so fallen hier einige Schritte raus.
+
+SPHERE_FOR_SHEET <- "Dutch"
+
+better_path <- read_csv(file = paste0("../../../data/1-parsing/tags/", SPHERE_FOR_SHEET, "/25-11-27-tag-context-parsing.csv"), show_col_types = FALSE) %>% 
+  select(sha1, path, attrs) %>% distinct()
+
+df_tags_context_ <- read_csv(file = paste0("../../../data/1-parsing/tags-context/", SPHERE_FOR_SHEET, "/25-11-27-context-all-traces.csv"), show_col_types = FALSE) %>% 
+  # bind_rows(., read_csv(file = paste0("data/1-parsing/tags-context/", SPHERE_FOR_SHEET, "/context-all-traces-2.csv"), show_col_types = FALSE)) %>%
+  select(-`...1`) #%>%
+
+```
+
+```{r}
+## eigener Abschnitt für World, weil es hier während des context parsen zu einer Unterbrechung kam. Deswegen gibt es zwei Dateien
+
+better_path <- read_csv(file = paste0("../../../data/1-parsing/tags/World/25-11-28-tag-context-parsing.csv"), show_col_types = FALSE) %>% 
+  select(sha1, path, attrs) %>% distinct()
+
+df_tags_context_ <- read_csv(file = paste0("../../../data/1-parsing/tags-context/World/25-11-27-context-all-traces.csv")) %>% 
+  bind_rows(., read_csv(file = paste0("../../../data/1-parsing/tags-context/World/25-11-27-context-all-traces-resumption.csv"))) %>% 
+  select(-`...1`) #%>%
+
+```
+
+
+## Tests
+
+Sind input datei für das python-script und output des python-scripts gleich lang? Welche Lücken gibt es? Warum entstehen sie?
+
+```{r}
+
+```
+
+
+## Transformations
+
+Gruppenvariablen sind im weiteren Verarbeitungsschritt wichtig, wenn die Hashes berechnet werden. Denn die Variablen definieren dann den Umfang an Werten, die dafür berücktsichtig werden sollen. (Hier ausführen, was die verschiedenen Bedeutung sind oder später, wenn ich mir anschaue, wie die Ergebnisse der Hashes sind? Später, dann ists besser zu verstehen, aber hier verlinken, to do)
+
+### group variable for site-tag-group
+
+Ein sogenannter Context kann in der Tabelle aus mehreren Zeilen bestehen, um die Information nicht zu verlieren, welche Zeilen zusammengehören und um im weiteren Verlauf aus diesen Bereichen eindeutige fingerprints erstellen zu können, findet der folgende Verarbeitungsschritt statt.
+
+```{r}
+
+tags_context_group_indices <- df_tags_context_ %>% 
+  # head(500) %>% 
+  select(sha1, context_path) %>% distinct() %>% 
+  mutate(tag_group = row_number(), .by = c(sha1)) %>% 
+  left_join(., better_path, by = c("sha1" = "sha1", "context_path" = "attrs"))
+
+df_tags_context <- df_tags_context_ %>% 
+  # head(500) %>% 
+  left_join(., tags_context_group_indices) %>% 
+  # left_join(., better_path, by = c("sha1" = "sha1", "context_path" = "attrs")) %>% 
+  mutate(id_sha1_group = paste0(sha1, "_", tag_group)) %>% 
+  select(-context_path) %>% 
+  rename(context_path = path) %>% distinct()
+
+```
+
+
+### group variable for month-site-subdomain
+
+Die Erstellung dieser zusätzlichen Variable ist Ergebnis der Analyse der fingerprints, die aus der oberen Gruppenvariable entstanden sind. Diese sind sehr reaktiv, so sehr das in vielen Fällen vor allem Praktiken des Programmierens abzulesen sind und die Vermutung naheliegt, dass sie wenig zur Vermittlung in die Sphäre der Praktiken des Kommentierens beitragen können. 
+
+Diese Variable geht über den Horizont einzelner Bereiche hinaus und faßt für die jeweiligen Webseiten die Observationen für einen ganzen Monat zusammen. 
+
+#### Variable erstellen, wenn der Datensatz der Sphere zu traces-context erst aufgebaut wird
+
+```{r}
+# creating a group_id for all tags based sub_domain and month ----------------------------------
+
+df_sites <- dbGetQuery(conn = con_local, paste0("SELECT s.sha1, s.crawl_date, s.url, s.site FROM sites s WHERE s.sphere = '", SPHERE_FOR_SHEET,"'")) 
+
+df_tags_timely_group <- df_tags_context %>% 
+  left_join(df_sites) %>% 
+  mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd(),
+         subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+         site_subdomain = paste(site, subdomain, sep = "_"),
+         id_date_site_subdomain = paste0(year_month, "_", site_subdomain)) %>% 
+  select(-crawl_date, -url, -year_month, -subdomain, -site_subdomain, -site) %>% 
+  select(sha1, tag, attr, value, text, group, tag_group, sphere, context_path, id_sha1_group, id_date_site_subdomain)
+
+```
+
+#### Variable erstellen, wenn die Daten von traces-context schon in der Datenbank liegen
+
+```{r}
+# creating a group_id for all tags based sub_domain and month ----------------------------------
+
+df_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.url, s.site, tc.* FROM tag_context tc INNER JOIN sites s ON s.sha1 = tc.sha1 AND s.sphere = tc.sphere WHERE tc.sphere = '", SPHERE_FOR_SHEET,"'")) 
+df_traces <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.url, s.site, tc.trace, tc.search_method, tc.search_topic, tc.search_type, tc.comment, tc.site as sha1 FROM traces tc INNER JOIN sites s ON s.sha1 = tc.site AND s.sphere = tc.sphere WHERE tc.sphere = '", SPHERE_FOR_SHEET,"'")) 
+
+# df_traces %>% 
+#   # select(-tag_context_id, -id_date_site_subdomain) %>% 
+#   mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd(),
+#          subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+#          site_subdomain = paste(site, subdomain, sep = "_"),
+#          id_date_site_subdomain = paste0(year_month, "_", site_subdomain)) %>% View()
+
+df_tags_timely_group <- df_tags %>% 
+  select(-tag_context_id, -id_date_site_subdomain) %>% 
+    mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd(),
+         subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+         site_subdomain = paste(site, subdomain, sep = "_"),
+         id_date_site_subdomain = paste0(year_month, "_", site_subdomain)) %>% 
+  select(-crawl_date, -url, -year_month, -subdomain, -site_subdomain, -site) %>% 
+  select(sha1, tag, attr, value, value_cleaned_whitelist, text, group, tag_group, sphere, context_path, context_path_cleaned, id_sha1_group, id_date_site_subdomain)
+
+
+```
+
+### cleaned value count-based
+
+Nur für die deutsche und internationale Sphere gerechnet. Analysen und Überlegungen dazu findet sich in diesem Dokument (to do: Verlinkung)
+
+Dieser Ansatz ist sehr von manueller Arbeit geprägt, dass Sprachkenntnisse unerlässlich sind, deshalb gibt es diesen Wert nicht für die nl-Sphere. Die spätere Analyse (to do: link einfügen) hat ergeben, dass diese Variante sehr viel schlechter abschneidet, als die anderen beiden, die sich auf die gleiche Gruppe beziehen. 
+
+Zunächst eine Analyse der Werte in der Spalte `value`, auf deren Grundlage dann das weitere Vorgehen basiert.
+
+```{r}
+attrs_to_empty_values <- c("href", "title","data-video-poster", "alt", "data-video-src", "data-video-title", "data-video-teaser", "datetime", "action", "src", "name", "srcset", "data-default-src", "data-id", "data-reactid")
+
+
+## Welche Kombinationen von Attributen und Werten kommen wie häufig vor?
+# interessant werden hier vor allem die einstelligen Einträge
+duplicate_attr_values <- df_tags_timely_group %>% #df_tags_context %>%
+  reframe(counted = n(), .by = c(attr, value))
+
+## auf einen Blick: welche Werte haben die einmal vorkommenden Attribute
+individual_attrs <- duplicate_attr_values %>%
+  filter(counted < 100, !is.na(value)) #%>% View()
+
+# individual_attrs  %>% filter(is.na(value)) %>% View()
+
+# duplicate_attr_values %>% 
+#   reframe(histogram = n(), .by = counted) %>% View()
+
+## und welche Attribute haben die meisten unterschiedlichen Werte, denn ab denen würde ich mit dem Filtern ansetzen.
+most_individual_attrs <- duplicate_attr_values %>%
+  filter(counted < 100, !is.na(value)) %>% #View()
+  reframe(counted = n(), .by = attr) %>% #View()
+  arrange(desc(counted))
+
+```
+
+Im weiteren Verlauf wird sehr konkret auf einzelne Attribut-Value-Kombinationen eingegangen, um sie möglichst schonend von individuellen Spuren von User:innen zu reinigen. Und ja, es ist ein Reinigungsprozess oder ein Abstraktionsprozess, der hier notwendig ist. 
+
+Messiness in HTML-Datei: individuelle Spuren von User:innen, Praktiken des Programmierens ... verschleiern die abstrakteren Praktiken des Kommentierens.
+
+```{r}
+
+
+# most_individual_attrs
+# rm(cleaning_all_content)
+cleaning_all_content <- individual_attrs %>%
+  filter(attr %in% attrs_to_empty_values) %>% 
+  mutate(value_cleaned_counted = "value_replaced")
+
+cleaning_class <- individual_attrs %>%
+  filter(attr %in% c("class", "data-in_reply_to", "data-bookmark", "aria-controls")) %>%
+  mutate(
+    value_cleaned_counted = ifelse(str_detect(value, "\\d{1,}"), str_replace_all(value, "\\d", "0"), NA),
+    value_cleaned_counted = ifelse(str_detect(value, "[/]{2,}"), "replaced_url", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "comment byuser comment-author-"), "comment byuser comment-author-shortend", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value_cleaned_counted, "ee-post post-000000 post type-post status-publish format-standard has-post-thumbnail hentry category"), "ee-post post-000000 post type-post status-publish format-standard has-post-thumbnail hentry category-shortend", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value_cleaned_counted, "elementor elementor-000000 elementor-location-single post-000000 post type-post status-publish format-standard has-post-thumbnail hentry category"), "elementor elementor-000000 elementor-location-single post-000000 post type-post status-publish format-standard has-post-thumbnail hentry category shortend", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value_cleaned_counted, "post-000000 post type-post status-publish format-standard has-post-thumbnail category"), "post-000000 post type-post status-publish format-standard has-post-thumbnail category shortend", value_cleaned_counted)
+         )
+
+cleaning_class %>% reframe(counted= n(), .by = c(attr, value_cleaned_counted)) %>% View()
+
+
+## onlick german sphere -----------------
+
+cleaning_onclick <- individual_attrs %>%
+  filter(attr == "onclick") %>% #View()
+  # head(3) %>%
+  mutate(
+    url_detected = ifelse(str_detect(value, "[\\/]{1,}"), "replaced_url", NA),
+    function_replaced = ifelse (str_detect(value, "\\(.*$"), str_replace(value, "\\(.*$", "_deleted"), NA),
+    value_cleaned_counted = ifelse(!is.na(function_replaced), function_replaced, url_detected),
+    # value_cleaned_counted = ifelse(is.na(value_cleaned_counted), value, value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "return rating"), str_replace_all(value_cleaned_counted, "\\d", "0"), value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "follow_18"), "follow_18_deleted", value_cleaned_counted)
+  ) %>% select(-url_detected, -function_replaced)
+
+
+
+## onclick world sphere ------------------
+
+cleaning_onclick <- individual_attrs %>%
+  filter(attr == "onclick") %>% #View()
+  # head(3) %>%
+  mutate(
+    url_detected = ifelse(str_detect(value, "[\\/]{1,}"), "replaced_url", NA),
+    function_replaced = ifelse (str_detect(value, "\\(.*$"), str_replace(value, "\\(.*$", "_deleted"), NA),
+    value_cleaned_counted = ifelse(!is.na(function_replaced), function_replaced, url_detected),
+    # value_cleaned_counted = ifelse(is.na(value_cleaned_counted), value, value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "if\\("), "if(replaced)", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "follow_18"), "follow_18_deleted", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "document.location.href"), "document.location.href_deleted", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "javascript:.*.smh.com.au/"), "javascript:u='http://www.smh.com.au/_deleted", value_cleaned_counted)
+  ) %>% select(-url_detected, -function_replaced)
+
+cleaning_onclick %>% filter(counted == 1 & is.na(value_cleaned_counted)) %>% View()
+
+cleaning_onclick%>% reframe(counted= n(), .by = c(attr, value_cleaned_counted)) %>% View()
+
+
+## id/value german sphere --------------------------
+cleaning_id_attrs <- individual_attrs %>%
+  filter(str_detect(attr, "id|value"), attr != "width", !attr %in% attrs_to_empty_values) %>%
+  mutate(
+    # id_found = ifelse(str_detect(value, "(?<=-|_)(?=.*?\\d)[a-z\\d]+$"), 1, NA),
+         finding = ifelse(str_detect(value, "(?<=-|_)(?=.*?\\d)[a-zA-Z\\d-_]{1,}$"), str_extract(value, "(?<=-|_)(?=.*?\\d)[a-zA-Z\\d-_]{1,}$"), NA),
+         check_on_word = ifelse(str_detect(finding, "^[a-z]{1,}-"), str_remove(finding, "^[a-z]{1,}-"), NA),
+         hash_found = ifelse(str_detect(value, "(?=.*?\\d)[a-zA-Z\\d]{1,}$"), str_extract(value, "(?=.*?\\d)[a-zA-Z\\d]{1,}$"), 0),
+         test = nchar(hash_found),
+         clean_id_from = case_when(
+           !is.na(check_on_word) ~ check_on_word,
+           !is.na(finding) ~ finding,
+           test > 16 ~ hash_found
+         ),
+         check_hash = nchar(value),
+         value_cleaned_counted = ifelse(!is.na(clean_id_from), str_replace(value, clean_id_from, "id_replaced"), NA),
+         value_cleaned_counted = ifelse(is.na(value_cleaned_counted) & str_detect(value, "\\d{1,}"), str_replace_all(value, "\\d", "0"), value_cleaned_counted),
+         value_cleaned_counted = ifelse(attr == "data-comments-remoteid" & check_hash == 36, "id_replaced", value_cleaned_counted),
+         value_cleaned_counted = ifelse(attr == "data-userid", "id_replaced", value_cleaned_counted),
+         value_cleaned_counted = ifelse(str_detect(value_cleaned_counted, "bookmark"), str_remove_all(value_cleaned_counted, "\\d"), value_cleaned_counted),
+         value_cleaned_counted = ifelse(str_detect(value_cleaned_counted, "[0a-fA-F]{10,10}") & check_hash == 10, "id_replaced", value_cleaned_counted),
+         value_cleaned_counted = ifelse(attr == "data-id-mconf", "replaced", value_cleaned_counted),
+         value_cleaned_counted = ifelse(str_detect(value, "^/"), "url_cleaned", value_cleaned_counted),
+         value_cleaned_counted = ifelse(str_detect(value, "^http"), "url_cleaned", value_cleaned_counted),
+         value_cleaned_counted = ifelse(attr == "value" & str_detect(value, "^[a-zA-Z\\d-]{1,}$"), "id_replaced", value_cleaned_counted),
+         value_cleaned_counted = ifelse(str_detect(value, "Schreiben Sie hier Ihren Kommentar zum Artikel|Video"), "Schreiben Sie hier Ihren Kommentar zum Artikel/Video shortend", value_cleaned_counted),
+         value_cleaned_counted = ifelse(check_hash == 44 & attr == "value", "id_replaced", value_cleaned_counted),
+         value_cleaned_counted = ifelse(str_detect(value, "^re\\:\\s"), "re_replaced", value_cleaned_counted),
+         value_cleaned_counted = ifelse(str_detect(value, "^(Thread|thread)\\:\\s"), "thread_replaced", value_cleaned_counted),
+         value_cleaned_counted = ifelse(attr == "data-id", "id_replaced", value_cleaned_counted)
+         ) %>% 
+  select(-finding, -check_on_word, -hash_found, -test, -clean_id_from, -check_hash)
+
+# cleaning_id_attrs %>% 
+#   filter(str_detect(value_cleaned_counted, "[0a-f]{10,10}"), check_hash == 10) %>% View()
+
+check_on_clean_id_attrs <- cleaning_id_attrs %>%
+  reframe(counted = n(), .by = c(attr, value_cleaned_counted))
+
+
+## id/value world sphere --------------------------
+cleaning_id_attrs <- individual_attrs %>%
+  filter(str_detect(attr, "id|value"), attr != "width", !attr %in% attrs_to_empty_values) %>%
+  mutate(
+    # id_found = ifelse(str_detect(value, "(?<=-|_)(?=.*?\\d)[a-z\\d]+$"), 1, NA),
+    finding = ifelse(str_detect(value, "(?<=-|_)(?=.*?\\d)[a-zA-Z\\d-_]{1,}$"), str_extract(value, "(?<=-|_)(?=.*?\\d)[a-zA-Z\\d-_]{1,}$"), NA),
+    check_on_word = ifelse(str_detect(finding, "^[a-z]{1,}-"), str_remove(finding, "^[a-z]{1,}-"), NA),
+    hash_found = ifelse(str_detect(value, "(?=.*?\\d)[a-zA-Z\\d]{1,}$"), str_extract(value, "(?=.*?\\d)[a-zA-Z\\d]{1,}$"), 0),
+    test = nchar(hash_found),
+    clean_id_from = case_when(
+      !is.na(check_on_word) ~ check_on_word,
+      !is.na(finding) ~ finding,
+      test > 16 ~ hash_found
+    ),
+    check_hash = nchar(value),
+    value_cleaned_counted = ifelse(!is.na(clean_id_from), str_replace(value, clean_id_from, "id_replaced"), NA),
+    value_cleaned_counted = ifelse(is.na(value_cleaned_counted) & str_detect(value, "\\d{1,}"), str_replace_all(value, "\\d", "0"), value_cleaned_counted),
+    value_cleaned_counted = ifelse(attr == "data-comments-remoteid" & check_hash == 36, "id_replaced", value_cleaned_counted),
+    value_cleaned_counted = ifelse(attr == "data-userid", "id_replaced", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value_cleaned_counted, "bookmark"), str_remove_all(value_cleaned_counted, "\\d"), value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value_cleaned_counted, "[0a-fA-F]{10,10}") & check_hash == 10, "id_replaced", value_cleaned_counted),
+    value_cleaned_counted = ifelse(attr == "data-id-mconf", "replaced", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "^/"), "url_cleaned", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "^http"), "url_cleaned", value_cleaned_counted),
+    value_cleaned_counted = ifelse(attr == "value" & str_detect(value, "^[a-zA-Z\\d-]{1,}$"), "id_replaced", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "Schreiben Sie hier Ihren Kommentar zum Artikel|Video"), "Schreiben Sie hier Ihren Kommentar zum Artikel/Video shortend", value_cleaned_counted),
+    value_cleaned_counted = ifelse(check_hash == 44 & attr == "value", "id_replaced", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "^re\\:\\s"), "re_replaced", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "^(Thread|thread)\\:\\s"), "thread_replaced", value_cleaned_counted),
+    value_cleaned_counted = ifelse(attr == "data-id", "id_replaced", value_cleaned_counted)
+  ) %>% 
+  select(-finding, -check_on_word, -hash_found, -test, -clean_id_from, -check_hash)
+
+
+
+cleaning_rel <- individual_attrs %>% 
+  filter(attr == "rel") %>% 
+  mutate(
+    value_cleaned_counted = ifelse(str_detect(value, "\\d{1,}"), str_replace_all(value, "\\d", "0"), NA),
+    value_cleaned_counted = ifelse(str_detect(value, "TFCMS1_CMS"), "TFCMS1_CMS_deleted", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "TFVIDEO_VIDEO"), "TFVIDEO_VIDEO_deleted", value_cleaned_counted)
+         )
+
+cleaning_rel %>% reframe(counted= n(), .by = c(attr, value_cleaned_counted)) %>% View()
+
+
+### für alle zahlen vereinheitlichen (data-in_reply_to, data-bookmark,aria-controls), schwieriger fall: data-userid
+
+cleaning_datanocache <- individual_attrs %>% 
+  filter(attr %in% c("data-nocache", "data-cache")) %>% 
+  mutate(value_cleaned_counted = ifelse(str_detect(value, "^.*\\?"), paste0(str_extract(value, "^.*\\?"),"_deleted"), NA)
+         )
+cleaning_datanocache %>% reframe(counted= n(), .by = c(attr, value_cleaned_counted)) %>% View()
+
+
+cleaning_dataparam <- individual_attrs %>% 
+  filter(attr %in% c("data-param", "data:param", "data-bind")) %>% 
+  mutate(value_cleaned_counted = ifelse(str_detect(value, "\\d{1,}"), str_replace_all(value, "\\d", "0"), NA),
+    value_cleaned_counted = ifelse(str_detect(value, "^.*\\?"), paste0(str_extract(value, "^.*\\?"),"_deleted"), value_cleaned_counted),
+         value_cleaned_counted = ifelse(attr== "data:param" & str_detect(value, '[{\\"]url'), "url: cleaned", value_cleaned_counted),
+         value_cleaned_counted = ifelse(attr== "data:param" & str_detect(value, '[{\\"]title'), "title: cleaned", value_cleaned_counted),
+    value_cleaned_counted = ifelse(attr== "data:param" & str_detect(value, '[{\\"]prefix'), "prefix: cleaned", value_cleaned_counted),
+         value_cleaned_counted = ifelse(str_detect(value, "^.*\\jsessionid"), paste0(str_extract(value, "^.*\\jsessionid")), value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "^/") & !str_detect(value, "^/ajaxentry"), "url_cleaned", value_cleaned_counted),
+    value_cleaned_counted = ifelse(str_detect(value, "^http"), "url_cleaned", value_cleaned_counted),
+    value_cleaned_counted = ifelse(attr == "data-bind" & str_detect(value, "widget.Comments|widget.Disqus"), paste0(str_extract(value, "widget.Comments|widget.Disqus"), "_data_replaced"), value_cleaned_counted)
+         )
+
+cleaning_dataparam %>% reframe(counted= n(), .by = c(attr, value_cleaned_counted)) %>% View()
+
+cleaning_style <- duplicate_attr_values %>% 
+  filter(attr == "style") %>% 
+  mutate(
+         value_cleaned_counted = ifelse(str_detect(value, "url"), paste0(str_extract(value, "^.*url"), "_replaced"), NA),
+         value_cleaned_counted = ifelse(is.na(value_cleaned_counted),
+                                str_replace_all(value, "[0-9\\.]{1,}px","px_cleaned"), 
+                                str_replace_all(value_cleaned_counted, "[0-9\\.]{1,}px","px_cleaned")),
+         value_cleaned_counted = ifelse(is.na(value_cleaned_counted),
+                                str_replace_all(value, "[0-9\\.]{1,}%", "size_cleaned"), 
+                                str_replace_all(value_cleaned_counted, "[0-9\\.]{1,}%", "size_cleaned")),
+         value_cleaned_counted = ifelse(is.na(value_cleaned_counted), 
+                                str_replace_all(value, "\\#[0-9a-fA-F]{6,6}", "color_cleaned"), 
+                                str_replace_all(value_cleaned_counted, "\\#[0-9a-fA-F]{6,6}", "color_cleaned")
+                                )
+         )
+
+cleaned_attrs <- cleaning_class %>% 
+  bind_rows(., cleaning_datanocache) %>% 
+  bind_rows(., cleaning_dataparam) %>%
+  bind_rows(., cleaning_id_attrs) %>% 
+  bind_rows(., cleaning_onclick) %>% 
+  bind_rows(., cleaning_rel) %>% 
+  bind_rows(., cleaning_style) %>%
+  bind_rows(., cleaning_all_content)
+
+# rm(cleaned_all_attrs)
+
+duplicate_attr_values_cleaned <- duplicate_attr_values %>% 
+  filter(attr != "style") %>% 
+  full_join(., cleaned_attrs) %>% 
+  mutate(value_cleaned_counted = ifelse(is.na(value_cleaned_counted), value, value_cleaned_counted)) %>% 
+  select(-counted)
+
+duplicate_attr_values_cleaned_aggr <- duplicate_attr_values_cleaned %>% 
+  reframe(counted = n(), .by = c(attr, value_cleaned_counted))
+
+
+df_tags_context_cleaned <- df_tags_timely_group %>% #df_tags_context %>% 
+  left_join(., duplicate_attr_values_cleaned) %>% #View()
+  # filter(!is.na(value)) %>% 
+  mutate(value_cleaned_counted = ifelse(str_detect(value_cleaned_counted, "\\d{1,}"), str_replace_all(value_cleaned_counted, "\\d", "0"), value_cleaned_counted))
+
+
+```
+
+### cleaned value whitelist approach
+
+Als brauchbarer hat sich herausgestellt, sich weniger an der Häufigkeit individueller Attribut-Value-Kombinationen abzuarbeiten, als viel mehr zu überlegen, welche Werte bringen für die Analyse einen tatsächlichen Mehrwert, also bei der Suche nach Praktiken des Kommentierens, und dann bei diesen noch einmal auf die Spuren von individuellen User:innen zu sehen und evtl. bereinigen.
+
+```{r}
+
+## to do: einfacherer switch zwischen Datenquellen implementieren
+
+attrs_to_be_cleaned <- c("id", "class")
+
+cleaned_attrs_whitelist <- duplicate_attr_values %>% filter(attr %in% attrs_to_be_cleaned) %>% #View()
+  mutate(id_check = str_detect(value, "[a-fA-F0-9-_]{1,}$"),
+         detected = str_extract(value, "[a-fA-F0-9-_]{1,}$"),
+         digits_found = str_detect(detected, "[\\d]{1,}"),
+         value_cleaned_whitelist = ifelse(id_check & digits_found, str_replace(value, detected, "id_replaced"), NA),
+         value_cleaned_whitelist = ifelse(is.na(value_cleaned_whitelist), value, value_cleaned_whitelist),
+         value_cleaned_whitelist = ifelse(str_detect(value_cleaned_whitelist, "comment byuser comment-author"), "comment byuser comment-author", value_cleaned_whitelist),
+         value_cleaned_whitelist = ifelse(str_detect(value_cleaned_whitelist, "[\\d]{1,}"), str_replace_all(value_cleaned_whitelist, "[\\d]{1,}", "0"), value_cleaned_whitelist)
+         ) #%>% View()
+
+duplicate_attr_values_cleaned_whitelist <- duplicate_attr_values %>% 
+  filter(!attr %in% attrs_to_be_cleaned) %>% 
+  full_join(., cleaned_attrs_whitelist) %>% 
+  # filter(!is.na(value)) %>% 
+  select(-counted, -id_check, -digits_found, -detected) 
+
+df_tags_context_cleaned_whitelist <- df_tags_timely_group %>% #df_tags_context_cleaned %>% #df_tags_context %>% 
+  # filter(!is.na(value)) %>% 
+  left_join(., duplicate_attr_values_cleaned_whitelist) 
+
+```
+
+
+
+### cleaned pathes on whitelist value cleaned
+
+```{r}
+site_info <- dbGetQuery(conn = con_local, paste0("SELECT s.sha1, s.url, s.site FROM sites s WHERE s.of_interest = 'true' AND s.sphere = '", SPHERE_FOR_SHEET, "'")) %>% 
+  mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+         site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.))
+
+prep_pathes_whitelist <- df_tags_context_cleaned_whitelist %>% 
+  left_join(., site_info) %>% #View()
+  select(site_subdomain, context_path, id_sha1_group, tag, attr, value_cleaned_whitelist) %>% 
+  # select(site_subdomain, id_sha1_group, context_path, sha1, sphere) %>% 
+  distinct() %>% #View()
+  arrange(site_subdomain, context_path) %>% #View()
+  mutate(path_tag_group= row_number(), .by = c(site_subdomain, context_path, id_sha1_group, tag)) %>% 
+  mutate(path_subdomain_group = row_number(), .by = c(site_subdomain, context_path, id_sha1_group)) %>% 
+  filter(path_tag_group == path_subdomain_group)
+
+pathes_whitelist <- prep_pathes_whitelist %>% 
+  reframe(attr_whitelist = paste0(attr," : ", value_cleaned_whitelist), .by = c(site_subdomain, context_path, id_sha1_group, tag)) %>% 
+  reframe(attrs_whitelist = paste(attr_whitelist, collapse = ", "), .by = c(site_subdomain, context_path, id_sha1_group, tag)) %>% 
+  mutate(context_path_cleaned = paste0(tag, " {", attrs_whitelist, "}")) %>% 
+  select(-tag, -attrs_whitelist) %>% 
+  distinct() #%>% View()
+
+df_tags_pathes_whitelist <- df_tags_context_cleaned_whitelist %>% 
+  left_join(., site_info) %>% 
+  left_join(., pathes_whitelist) %>% 
+  select(-url, -site, -subdomain, -site_subdomain)
+
+
+```
+
+```{r}
+## Korrektur von alten context pfaden auf neue 
+
+tbl_tags_context <- dbGetQuery(conn = con_local, paste0("SELECT s.sha1, s.tag, s.attr, s.value, s.text, s.group, s.tag_group, s.sphere, s.context_path, s.id_sha1_group, s.id_date_site_subdomain, s.value_cleaned_counted, s.value_cleaned_whitelist FROM traces_context s WHERE s.sphere = '", SPHERE_FOR_SHEET, "'")) 
+
+mini_df_tags_pathes_whitelist <- df_tags_pathes_whitelist %>% select(id_sha1_group, context_path_cleaned) %>% distinct()
+
+update_tbl_tags_context <- tbl_tags_context %>% 
+  left_join(., mini_df_tags_pathes_whitelist)
+
+## DELETE FROM traces_context WHERE sphere='German';
+
+dbWriteTable(conn = con_local, name = "traces_context", value = update_tbl_tags_context, append = TRUE)
+
+save(update_tbl_tags_context, file = paste0("../../../data/1-parsing/tags-context/",SPHERE_FOR_SHEET,"/25-12-08-update_tbl_tags_context.RData"))
+
+```
+
+
+
+## Output
+
+
+```{r}
+
+SPHERE_FOR_SHEET <- "Dutch"
+
+load(file = paste0("../../../data/1-parsing/tags-context/",SPHERE_FOR_SHEET, "/25-12-03-tags-pathes-cleaned.RData"))
+dbWriteTable(conn = con_local, name = "traces_context", value = df_tags_pathes_cleaned_nl, append = TRUE)
+
+```
+
+
+## Appendix: Schritte zur Überprüfungen erster Parsing-Ansätze. 
+
+```{r}
+
+load(file = "../../../data/1-parsing/tags-context/Dutch/25-12-03-tags-pathes-cleaned.RData")
+just_time_index <- df_tags_timely_group %>% select(id_date_site_subdomain)
+df_tags_pathes_cleaned_nl <- df_tags_pathes_cleaned %>% 
+  bind_cols(., just_time_index)
+
+df_tags_pathes_cleaned <- df_tags_pathes_cleaned_nl
+save(df_tags_pathes_cleaned, file="../../../data/1-parsing/tags-context/Dutch/25-12-04-tags-pathes-cleaned.RData")
+
+df_nl <- dbGetQuery(conn = con_local, paste0("SELECT * FROM traces_context s WHERE s.sphere = '", SPHERE_FOR_SHEET,"'")) 
+
+df_nl_hashes <- dbGetQuery(conn = con_local, paste0("SELECT * FROM context_hashed s WHERE s.sphere = '", SPHERE_FOR_SHEET,"' AND s.iteration='date_site_subdomain'")) 
+
+rm(df_tags_pathes_cleaned_nl)
+load(file = "../../../data/1-parsing/tags-context/World/25-12-03-tags-pathes-cleaned.RData")
+
+```
+
+### Erste Variante von vereinfachten Pfaden: cleaned pathes of tags 
+
+Eine Vermutung ist, dass die Pfade der Kontextblöcke bei der Analyse unterstützend wirken könnten. Bisher (Stand Winter 2025) werden die vereinfachten Pfade vor allem zum Zeichnen der Spuren verwendet.
+Aber auch hier besteht das Problem, wie oben beschrieben. Denn die Werte, die oben vereinfacht werden, sind in vollständigen Pfaden, in den diese Werte vorkommen natürlich auch enthalten. 
+
+Diese Passage ist sehr rechenintensiv, deshalb werden zwischendurch Datensätze immer wieder auf Festplatte geschrieben, um zu verhindern, dass wenn sich die Umgebung zwischendurch aufhängt, Ergebnisse bisheriger Rechenprozesse hinfällig werden.
+
+```{r}
+site_info <- dbGetQuery(conn = con_local, paste0("SELECT s.sha1, s.url, s.site FROM sites s WHERE s.of_interest = 'true' AND s.sphere = '", SPHERE_FOR_SHEET, "'")) %>% 
+  mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+         site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.))
+
+pathes <- df_tags_context %>% 
+  left_join(., site_info) %>% #View()
+  select(site_subdomain, context_path) %>% 
+  # select(site_subdomain, id_sha1_group, context_path, sha1, sphere) %>% 
+  distinct() %>% #View()
+  arrange(site_subdomain, context_path) #%>% #View()
+
+save(pathes, file = paste0("../../../data/1-parsing/tags-context/", SPHERE_FOR_SHEET, "/25-12-03-pathes.RData"))
+
+# library(furrr)
+# future::plan(multisession)
+subdomains <- pathes %>% select(site_subdomain) %>% distinct() %>% pull(.)
+pathes_sim_alternative <- map_df(subdomains, function(i){
+# pathes_sim_alternative <- future_map(subdomains, function(i){
+  df <- pathes %>% 
+    filter(site_subdomain == i) %>% 
+    mutate(group_ = str_extract(context_path, "([a-zA-Z_\\{\\}\\\\\\[\\]\\\"\\'\\:\\-0-9\\/\\.\\,\\_]{1,}\\s?){1,3}")
+    ) %>% 
+    mutate(group_ = str_replace_all(group_, "[0-9]{1,}", "0"))
+  
+  write_csv(df, paste0("../../../data/1-parsing/tags-context/", SPHERE_FOR_SHEET, "/25-12-03-cleaned-pathes-alternative.csv"), append = TRUE)
+  return(df)
+}, .progress = TRUE)
+
+# pathes_sim_alternative_ <- read_csv(paste0("../../../data/1-parsing/tags-context/", SPHERE_FOR_SHEET, "/25-12-03-cleaned-pathes-alternative.csv"), col_names = c("site_subdomain", "context_path", "group_"), show_col_types = FALSE)
+
+
+pathes_sim_agg <- pathes_sim_alternative %>% #flatten() %>% 
+  reframe(counted_pathes = n(), .by = c(site_subdomain, group_))
+
+pathes_overview_alt <- pathes_sim_agg %>% 
+  reframe(pathes_pro_site = n(), .by = c(site_subdomain))
+
+pathes_sim_pathes <- pathes_sim_alternative %>% 
+  left_join(., pathes_sim_agg) %>% 
+  mutate(context_path_group = ifelse(counted_pathes >1, group_, context_path))
+
+```
+::: panel-tabset
+
+#### World
+
+```{r}
+#### World Sphere-----------------------------------------------------
+
+pathes_sim_simpler <- pathes_sim_alternative %>% 
+  mutate(
+    # group_ = str_extract(group_, "([a-zA-Z\\{\\}\\\\\\[\\]\\\"\\'\\s\\-0-9\\/\\.\\,\\_]{1,}\\:){1,3}"),
+         group_ = ifelse(str_detect(context_path, "'gigyaCommentPlugin-mirror"), paste0(group_, "'gigyaCommentPlugin-mirror"), group_),
+         group_ = ifelse(str_detect(context_path, "body \\{'data-tracking': '\\{\"isEnabled\":true,"), "body {'data-tracking': '{isEnabled:true,", group_),
+         group_ = ifelse(str_detect(context_path, "'onclick': \"wp_pb\\.report\\('comments'"), paste0(group_,  "onclick': 'wp_pb.report(comments)"), group_),
+         group_ = ifelse(str_detect(context_path, "div \\{'data-api-url':"), paste0(group_, "div {'data-api-url':"), group_),
+         group_ = ifelse(str_detect(context_path, "div \\{'data-content'"), paste0(group_, "div {'data-content'"), group_),
+         group_ = ifelse(str_detect(group_, "div \\{'class': \\['sc"), "div {'class': ['sc", group_),
+         group_ = str_replace_all(group_, "[0-9]{1,}", "0")
+  ) %>% 
+  rename(context_path_cleaned = group_)
+
+pathes_sim_agg_simpler <- pathes_sim_simpler %>% 
+  reframe(counted_pathes = n(), .by = c(site_subdomain, context_path_cleaned)) %>% 
+  arrange(desc(counted_pathes))
+
+
+pathes_overview_simpler <- pathes_sim_agg_simpler %>% 
+  reframe(pathes_pro_site = n(), .by = c(site_subdomain)) %>% 
+  arrange(desc(pathes_pro_site))
+
+df_tags_pathes_cleaned <- df_tags_context_cleaned_whitelist %>% 
+  left_join(., site_info) %>% 
+  left_join(., pathes_sim_simpler) %>% 
+  select(-url, -site, -subdomain, -site_subdomain) %>% 
+  distinct()
+
+save(df_tags_pathes_cleaned, file = paste0("../../../data/1-parsing/tags-context/World/25-12-03-tags-pathes-cleaned.RData"))
+# dbWriteTable(conn = con, name = "tag_context", value = df_tags_pathes_cleaned, append = TRUE)
+```
+
+#### German
+
+```{r}
+#### German Sphere-----------------------------------------------------
+
+pathes_sim_simpler <- pathes_sim_alternative %>% 
+  mutate(group_ = ifelse(site_subdomain == "faz_www" & str_detect(context_path, "\\{'class'\\: \\['Headline'\\], 'title'"), "group_1885", group_),
+         group_ = ifelse(site_subdomain == "faz_www" & str_detect(context_path, "div \\{'class'\\: \\['MediaLink'\\], 'title'"), "group_3", group_),
+         group_ = ifelse(site_subdomain == "faz_www" & str_detect(context_path, "\\['RightBox'\\], 'mysiteshow"), "group_10", group_),
+         group_ = ifelse(site_subdomain == "faz_www" & str_detect(context_path, "\\{'class'\\: \\['fb-share-button'"), "group_16", group_),
+         group_ = ifelse(site_subdomain == "faz_www" & str_detect(context_path, "\\{'class'\\: \\['g-plusone'"), "group_49", group_),
+         group_ = ifelse(site_subdomain == "faz_www" & str_detect(context_path, "\\{'class'\\: \\['js-adobe-digital-data'"), "group_59", group_),
+         group_ = ifelse(site_subdomain == "faz_www" & str_detect(context_path, "\\{'class'\\: \\['sharebuttons'"), "group_307", group_),
+         group_ = ifelse(site_subdomain == "faz_www" & str_detect(context_path, "span \\{'title'"), "group_2119", group_),
+         group_ = ifelse(site_subdomain == "handelsblatt_www" & str_detect(context_path, "div \\{'class': \\['commentBox'\\]\\}"), "group_1709", group_),
+         group_ = ifelse(site_subdomain == "handelsblatt_www" & str_detect(context_path, "\\{'class'\\: \\['hcf-google-buzz-button', 'ajaxify'\\]"), "group_1739", group_),
+         group_ = ifelse(site_subdomain == "handelsblatt_www" & str_detect(context_path, "\\{'type'\\: 'text/javascript', 'src'\\: '/preparesite/empty\\.js"), "group_1773", group_),
+         group_ = ifelse(site_subdomain == "sueddeutsche_www" & str_detect(context_path, "\\{'class'\\: \\['commentbottom"), "group_8", group_),
+         group_ = ifelse(site_subdomain == "sueddeutsche_www" & str_detect(context_path, "\\{'id'\\: 'comments', 'data-token'"), "group_21", group_),
+         group_ = ifelse(site_subdomain == "sueddeutsche_www" & str_detect(context_path, "\\{'id'\\: 'disqus_thread', 'class'\\: \\['disqus-container'\\]"), "group_26", group_),
+         group_ = ifelse(site_subdomain == "sueddeutsche_www" & str_detect(context_path, "\\{'id'\\: 'taboola-feed-below-article', 'data-overline'"), "group_112", group_),
+         group_ = ifelse(site_subdomain == "focus_www" & str_detect(context_path, "\\{'class'\\: \\['OUTBRAIN'\\], 'data-src'\\: '"), "group_853", group_),
+         group_ = ifelse(site_subdomain == "focus_www" & str_detect(context_path, "\\{'class'\\: \\['fb-like'\\], 'data-href'"), "group_889", group_),
+         group_ = ifelse(site_subdomain == "focus_www" & str_detect(context_path, "\\{'data-button-shape'\\: 'square', 'data-lang'"), "group_905", group_),
+         group_ = ifelse(site_subdomain == "focus_www" & str_detect(context_path, "a \\{'href'\\: '"), "group_1", group_),
+         group_ = ifelse(site_subdomain == "hna_www" & str_detect(context_path, "div \\{'class': \\['idComment', 'idJSComponent'"), "group_3", group_),
+         group_ = ifelse(site_subdomain == "hna_www" & str_detect(context_path, "\\{'data-id-module'\\: 'facebook', 'data-id-mconf'"), "group_96", group_),
+         group_ = ifelse(site_subdomain == "hna_www" & str_detect(context_path, "\\{'data-id-module'\\: 'twitter', 'data-id-mconf'"), "group_116", group_),
+         group_ = ifelse(site_subdomain == "hna_www" & str_detect(context_path, "\\{'data-widget'\\: 'plista_widget_belowArticle_rwd'"), "group_132", group_),
+         group_ = ifelse(site_subdomain == "hna_www" & str_detect(context_path, "\\{'id'\\: 'plista_widget_belowArticle_rwd', 'data-id-modul"), "group_410", group_),
+         group_ = ifelse(site_subdomain == "badische-zeitung_www" & str_detect(context_path, "form \\{'id': 'login_embed', 'enctype': 'multipart\\/form-d"), "group_6", group_),
+         group_ = ifelse(site_subdomain == "badische-zeitung_www" & str_detect(context_path, "iframe \\{'src': 'http://www.facebook.com/plugins/like"), "group_156", group_),
+         # group_ = ifelse(site_subdomain == "badische-zeitung_www" & str_detect(context_path, "\\{'class'\\: \\['comment__list'"), "group_47", group_),
+         # group_ = ifelse(site_subdomain == "badische-zeitung_www" & str_detect(context_path, "\\{'id'\\: 'login_embed', 'enctype'\\: 'multipart/form-data'"), "group_213", group_),
+         group_ = ifelse(site_subdomain == "freitag_www" & str_detect(context_path, "form \\{'id'\\: 'article-comment', 'action'\\: "), "group_1738", group_),
+         group_ = ifelse(site_subdomain == "jungefreiheit_NA" & str_detect(context_path, "article \\{'class': \\['post-\\d{6,6}', 'post', 'type-post', 'status-pu"), "group_1", group_),
+         group_ = ifelse(site_subdomain == "jungefreiheit_NA" & str_detect(context_path, "div \\{'data-elementor-type'\\: 'single', 'data-elementor-id"), "group_60", group_),
+         group_ = ifelse(site_subdomain == "jungefreiheit_NA" & str_detect(context_path, "form \\{'method': 'post', 'enctype': 'multipart/form-data"), "group_117", group_),
+         group_ = ifelse(site_subdomain == "jungefreiheit_NA" & str_detect(context_path, "\\{'href'\\: 'https\\://jungefreiheit.de/debatte/kommentar/"), "group_1597", group_),
+         group_ = ifelse(site_subdomain == "jungefreiheit_NA" & str_detect(context_path, "script \\{'type': 'text/javascript', 'src': 'http://jungefreih"), "group_136", group_),
+         group_ = ifelse(site_subdomain == "welt_www" & str_detect(context_path, "\\{'class'\\: \\['fb-like'\\], 'data-href'\\: 'http\\://www.welt.de/"), "group_9", group_),
+         group_ = ifelse(site_subdomain == "welt_www" & str_detect(context_path, "\\{'class'\\: \\['fb-like'\\], 'data-layout'\\: 'button_count', 'data-"), "group_43", group_),
+         group_ = ifelse(site_subdomain == "welt_www" & str_detect(context_path, "div \\{'class': \\['widget', 'disqus', 'articleComments'"), "group_73", group_),
+         group_ = ifelse(site_subdomain == "welt_www" & str_detect(context_path, "\\{'id'\\: 'gplus-button-inline', 'class'\\: \\['g-plusone'\\], 'data"), "group_89", group_),
+         group_ = ifelse(site_subdomain == "welt_www" & str_detect(context_path, "div \\{'id': 'readcomments'\\}"), "group_130", group_),
+         group_ = ifelse(site_subdomain == "welt_www" & str_detect(context_path, "div \\{'id': 'recommend', 'class': \\['articleBox', 'commentB"), "group_131", group_),
+         group_ = ifelse(site_subdomain == "welt_www" & str_detect(context_path, "\\{'id'\\: 'poll-\\d{9,9}', 'action': 'http://www.welt.de/"), "group_356", group_),
+         group_ = ifelse(site_subdomain == "rp-online_www" & str_detect(context_path, "form \\{'action': '/public/comments/preview"), "form {'action': '/public/comments/preview", group_)#,
+         # group_ = ifelse(site_subdomain == "welt_www" & str_detect(context_path, "\\{'id'\\: 'poll-\\d{9,9}', 'action': 'http://www.welt.de/"), "group_20498", group_)#,
+         
+         ) 
+
+pathes_sim_agg_simpler <- pathes_sim_simpler %>% 
+  reframe(counted_pathes = n(), .by = c(site_subdomain, group_))
+
+pathes_overview_simpler <- pathes_sim_agg_simpler %>% 
+  reframe(pathes_pro_site = n(), .by = c(site_subdomain))
+
+pathes_sim_simpler_join <- pathes_sim_simpler %>% 
+  select(context_path_cleaned = group_)
+
+pathes_sim_simpler_join %>% select(context_path) %>% distinct() %>% nrow()
+
+df_tags_pathes_cleaned <- df_tags_context_cleaned_whitelist %>% 
+  left_join(., site_info) %>% 
+  left_join(., pathes_sim_simpler) %>% 
+  select(-url, -site, -subdomain, -site_subdomain, context_path_cleaned = group_)
+
+save(df_tags_pathes_cleaned, file = paste0("../../../data/1-parsing/tags-context/German/25-12-03-tags-pathes-cleaned.RData"))
+
+```
+
+#### Dutch
+
+```{r}
+pathes_sim_simpler <- pathes_sim_alternative %>% 
+  mutate(
+    # group_ = str_extract(group_, "([a-zA-Z\\{\\}\\\\\\[\\]\\\"\\'\\s\\-0-9\\/\\.\\,\\_]{1,}\\:){1,3}"),
+         group_ = ifelse(str_detect(context_path, "script \\{'src': 'https:\\/\\/cdns\\.gigya\\.com\\/js\\/gigya\\.js"), "script {'src': 'https://cdns.gigya.com/js/gigya.js", group_),
+         group_ = ifelse(str_detect(context_path, "gigya-comments'"), paste0(group_, " gigya-comments"), group_),
+         group_ = ifelse(str_detect(context_path, "comments-counter"), paste0(group_,  "comments-counter"), group_),
+         group_ = ifelse(str_detect(context_path, "disqus_thread'\\}"), paste0(group_, "disqus_thread"), group_),
+         # group_ = ifelse(str_detect(context_path, "div \\{'data-content'"), paste0(group_, "div {'data-content'"), group_),
+         # group_ = ifelse(str_detect(group_, "div \\{'class': \\['sc"), "div {'class': ['sc", group_),
+         group_ = str_replace_all(group_, "[0-9]{1,}", "0")
+  ) %>% 
+  rename(context_path_cleaned = group_) %>% 
+  filter(site_subdomain %in% subdomains)
+
+pathes_sim_agg_simpler <- pathes_sim_simpler %>% 
+  reframe(counted_pathes = n(), .by = c(site_subdomain, context_path_cleaned)) %>% 
+  arrange(desc(counted_pathes))
+
+
+pathes_overview_simpler <- pathes_sim_agg_simpler %>% 
+  reframe(pathes_pro_site = n(), .by = c(site_subdomain)) %>% 
+  arrange(desc(pathes_pro_site)) %>% 
+  filter(site_subdomain %in% subdomains)
+
+df_tags_pathes_cleaned <- df_tags_context_cleaned_whitelist %>% 
+  left_join(., site_info) %>% #View()
+  left_join(., pathes_sim_simpler) %>% 
+  select(-url, -site, -subdomain, -site_subdomain) %>%
+  mutate(value_cleaned_counted = NA) %>% 
+  distinct()
+
+save(df_tags_pathes_cleaned, file = paste0("../../../data/1-parsing/tags-context/Dutch/25-12-03-tags-pathes-cleaned.RData"))
+```
+
+
+:::
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+
+df_tags_parent_parsed_check <- read_csv("../../data/1-parsing/tags-context/German/extracted-pathes-error-check.csv") #%>% 
+  select(sha1, tag, name, attr)
+
+df_tags_for_context_de %>% anti_join(., df_tags_parent_parsed_check) %>% View()
+
+
+### parsing problem für die pfade lösen: zeilenumbrüche in den values entfernen
+
+```
+
+## Parsing Test context
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| error: false
+
+# site_info <- dbGetQuery(conn = con, "SELECT s.sha1, s.url, s.site FROM sites s WHERE s.of_interest = 'true' AND s.sphere = 'German'") %>% 
+#   mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+#          site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.))
+# 
+# #### so viel mehr zeilen als vorher!
+# #### aber sind ja auch mehr pfade jetzt
+# #### testen: sind alle sha1-context-path-gruppen dabei? 
+# #### wie viel zeile nehmen diese neuen pfade ein?
+# 
+input_for_context_parsing <- read_csv("../../data/1-parsing/tags/World/tag-context-parsing.csv") #%>% select(sha1, path) %>%
+  mutate(context_path = str_remove(path, "^[a-z]{1,}\\s"))
+
+df_tags_context_parsed_check <- read_csv("../../data/1-parsing/tags-context/World/context-all-traces.csv", show_col_types = FALSE) #%>%
+#   bind_rows(., read_csv("../../data/1-parsing/tags-context/German/context-all-traces-2.csv"))
+#   # select(sha1, tag, name, attr)
+# 
+# df_tags_context_parsed_check %>% distinct() %>% nrow()
+# 
+# df_context_de_ <- df_context_de %>% select(-id_sha1_group, -tag_context_id)
+# 
+# context_parsed_abgleich <- df_tags_context_parsed_check %>% select(-text, `...1`) %>% distinct() %>% 
+#   anti_join(., df_context_de) %>% View()
+# 
+output_context_parsing <- df_tags_context_parsed_check %>% select(sha1, context_path) %>% distinct()
+# 
+# ## parsing problem lösen: es fehlen tatsächlich zeilen: immer solche, bei denen ein attribut leer ist. 
+# ## --> now fixed, table is empty
+some_missing <- input_for_context_parsing %>% anti_join(., output_context_parsing)
+# 
+# ## auf den ersten Blick sind das vor allem attr-value-combinations, die groß- und kleinschreibung enthalten. aber immer noch komisch, dass diese 38xxx mehr pfade über 20 mio mehr context info liefern.
+# newly_added_pathes <- output_context_parsing %>% anti_join(., df_context_de_)
+# 
+# ## keine 20 mio, 8.461.092
+# df_tags_context_parsed_check %>% 
+#   filter(sha1 %in% newly_added_pathes$sha1) %>% distinct() %>% nrow()
+# 
+# should_be_same_lenght <- df_tags_context_parsed_check %>% 
+#   filter(!sha1 %in% newly_added_pathes$sha1) %>% distinct() #%>% 
+#   
+# df_context_de %>% nrow()
+# 
+# df_context_de %>% filter(sha1 %in% some_missing$sha1) %>% select(sha1, context_path) %>% distinct() %>% View()
+# 
+# ### ich muss wissen, ob ich im parsing-script irgendwas eingebaut habe, was dafür sorgt, dass ich wieder viel zuviele einträge bekomme. 
+# ### checken, ob ich massiv unterschiedliche inhalte bekomme, für gleiche sha1-pfad-kombinationen -> turns out: ja, gravierende fehler, ich muss mein string-pretty-print von list auf dict erweitern
+# 
+# prev_sha1_path_combi <- df_context_de_ %>% 
+#   reframe(counted_prev = n(), .by = c(sha1, context_path))
+# 
+# current_sha1_path_combi <- df_tags_context_parsed_check %>% 
+#   distinct() %>% 
+#   reframe(counted_current = n(), .by = c(sha1, context_path))
+# 
+# vergleich_umfang <- prev_sha1_path_combi %>% 
+#   left_join(., current_sha1_path_combi) %>% 
+#   mutate(caution = ifelse(counted_prev == counted_current, FALSE, TRUE),
+#          caution_new = ifelse(counted_current > counted_prev, TRUE, FALSE),
+#          caution_old = ifelse(counted_current < counted_prev, TRUE, FALSE))
+# 
+# how_much_caution <- vergleich_umfang %>% 
+#   reframe(counted = n(), .by = caution_new)
+# 
+# special_attention <- vergleich_umfang %>% filter(caution_new) %>% left_join(., site_info) #%>% View()
+# 
+# new_parsing_test_file <- input_for_context_parsing %>% filter(sha1 %in% special_attention$sha1) %>% head(10)
+# write_csv(new_parsing_test_file, file = "../../data/1-parsing/tags/German/tag-context-parsing_test_to_much_info.csv")
+# 
+# result_parsing_test <- read_csv("../../data/1-parsing/tags-context/German/context-all-traces-test_to_much_info.csv")
+# 
+# result_sha1_path_combi <- result_parsing_test %>% 
+#   reframe(counted_current = n(), .by = c(sha1, context_path))
+# 
+# 
+# vergleich_umfang_test <- prev_sha1_path_combi %>% 
+#   filter(sha1 %in% result_parsing_test$sha1) %>% 
+#   left_join(., result_sha1_path_combi) %>% 
+#   mutate(caution = ifelse(counted_prev == counted_current, FALSE, TRUE),
+#          caution_new = ifelse(counted_current > counted_prev, TRUE, FALSE),
+#          caution_old = ifelse(counted_current < counted_prev, TRUE, FALSE))
+# 
+# next_test <- input_for_context_parsing %>% filter(sha1 %in% some_missing$sha1) %>% head(10)
+# write_csv(next_test, file = "../../data/1-parsing/tags/German/tag-context-parsing_missing-pathes.csv")
+# result_test_missing_pathes <- read_csv("../../data/1-parsing/tags-context/German/context-all-traces-test_missing-pathes.csv")
+# 
+# df_tags_context_parsed_check %>% 
+#   head(500) %>% 
+#   select(sha1, context_path) %>% distinct() %>% 
+#   mutate(counted = row_number(), .by = c(sha1)) %>% View()
+# # cur_group_id
+
+
+```
+

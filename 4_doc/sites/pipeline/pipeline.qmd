@@ -1,0 +1,67 @@
+---
+title: "Erläuterung Pipeline"
+execute:
+  eval: false
+---
+
+```{r echo=FALSE, message=FALSE, error=FALSE}
+library(tidyverse)
+library(lubridate)
+library(urltools)
+library(DBI)
+library(RPostgres)
+
+
+```
+
+## Vorgangsbeschreibung zur Erstellung der Datenbanktabellen
+
+### 1. Extraktion der HTML-Seiten
+
+Das Internet Archive stellte für jede der Spheres eine Tabelle im `csv`-Format zur Verfügung. In diesen Tabellen waren in einer der Spalten der gesamte HTML-Code eingebettet. Das hat zur Folge, dass diese Tabellen extrem groß im Datenumfang sind und entsprechend schwierig im handling. Wird nur für eine Seite Information aus der Tabelle benötigt, müssen jedes Mal durchschnittlich 30 GB Daten in den Arbeitsspeicher geladen werden. Für eine zielorientierte Verarbeitung der Informationen ist das viel zu aufwändig.
+
+Der erste Arbeitsschritt war, die HTML-Seiten als einzelne Dateien im filesystem des Computers abzulegen und die Meta-Information über die Seiten in einer ersten Datenbanktabelle, `sites` abzulegen. Die Verknüpfung der Metadaten und den einzelen HTML-Seiten geschieht auf Basis des sha1-Hashes, den das Internet Archive für alle Seiten errechnet und als Metainformation zur Verfügung stellt. Innerhalb des Archives wird dieser (oder ähnliche) Hashes verwendet um Duplikate von Webseiten finden zu können. So funktioniert das auch in diesem Fall. Wurde eine Seite exakt so schon einmal zu einem anderen Zeitpunkt archiviert, ist diese Information über die Meta-Tabelle abzulesen, die HTML-Seite liegt nur einmal im filesystem. 
+
+### 2. Snippetsuche 
+
+Der nächste Schritt war innerhalb der HTML-Seiten nach den Snippets zu suchen, die in einer anderen Tabelle definiert wurden, als Spuren auf Kommentarsysteme. Das ist der Schritt, der in dem Projekt auch schon in anderer Programmierumgebung zuvor schon durchgeführt wurde. Die Ergebnisse dieser Suche sind in der Datenbank abgelegt in der Tabelle `snippets`.
+
+### 3. Aufbau der Tabelle `tags`
+
+Dieser Schritt ist sowas wie die ein zweites Standbein für die Suche nach Kommentaroptionen in den Webseiten. Nach den Kommentarsystemen suchen ist eine Sache und auch sehr ergiebig, doch finden sich damit erst relativ späte Spuren, nämlich solche, die zeigen, dass Kommentare inzwischen eine Art Infrastruktur ermöglichen. Die Möglichkeit zu kommentieren hat sich so verstetigt und entwickelt, dass Unternehmen diese nicht mehr komplett selbst entwickeln, sondern auf Drittanbieter setzen, die inzwischen komplex gewordene Funktionen für sie weiter entwickeln und warten.
+
+Schon bevor sich Unternehmen etabliert haben, die Kommentarsysteme als Geschäftsmodell hatten, gab es auf Webseiten die Möglichkeiten zu kommentieren. Diese Kommentarbereiche wurden oft in house entwickelt. Die Spuren davon sind generischer Art, zu finden sind sie in den Attributen von Tags. 
+
+Nicht alle Tags sind gleichermaßen interessant, wenn es darum geht Spuren zu finden. Für die nächste Tabelle wurden aus den HTML-Seiten, `<form>`, `<script>`, `<iframe>` und `<div>` Tags extrahiert und mit allen Attribut-Wert-Kombinationen und dem Inhalt des Tags (bis auf die iframes) in der Tabelle `tags` abgelegt. Eine Option wäre gewesen hier nur solche Tags zu speichern, die auch Spuren auf Kommentaroptionen tragen, doch gab es im Forschungsprojekt immer wieder neue Ideen, was außer den generischen Spuren noch interessant sein könnte zu finden. Und so erschien es zielführender zunächst alle Information zu extrahieren und den Filterprozess auf einen späteren Zeitpunkt zu verlegen.
+
+### 4. konkrete Spuren
+
+Der zuvor angesprochene Filterprozess ist vielschichtiger als es auf den ersten Gedanken erscheint. Die vierte Tabelle hält alle Spuren auf Kommentaroptionen vor und später auch solche auf Werbetracker. 
+
+### Intermezzo: Extraktion ganzer "Kommentarbereiche"
+
+Die extrahierten Tags, deren Spuren in der oberen Tabelle hinterlegt sind, können als kleine Spotlights in den Seiten verstanden werden. Es sind binöre Spuren: eine Spur ist vorhanden, oder eben nicht. 
+Die Tags bieten aber auch wieder einen Weg zurück in den HTML-Code der Seiten und damit in die DOM-Struktur, die weiterführende Informationen enthalten kann, als die binäre Informationen, etwas ist vorhanden. DOM-Struktur erklären, Tags, die ineinander verschachtelt sind und beispielsweise einen Thumbs-up-Button enthält, ohne dass der in der `traces` Tabelle auftauchen würde, weil die generischen Worte in keinem der Attribute vorkommen. Für die Beurteilung, inwiefern sich Praktiken des Kommentierens ändern, ist es aber ein interessantes Datum. 
+
+Hier geht es wieder zurück in die HTML-Seiten. Zunächst werden alle Pfade von Kommentarspuren nach ihren Eltern-Elementen abgefragt und nur solche Elemente behalten, die mit Spur möglichst weit oben in den Verzweigungen liegen. In einem zweiten Schritt werden diese Pfade mit allen Kind-Elementen aus den HTML-Seiten entnommen und gespeichert. 
+
+### 5. Kontext der Spuren
+
+Hier entsteht eine Tabelle, `traces_context`, mit allen Kind-Elementen, die einer Kommentarspur zu zuordnen sind. Die Wette läuft, darauf, dass durch die Weitung des Blicks auf diese Kind-Elemente eher Praktiken des Kommentierens gefunden werden könnten. Gleichzeitig wird die Analyse sehr viel komplexer, weil mit viel mehr Daten gerechnet werden muss. 
+
+Diese Tabelle wird nach dem parsing/extraction-Vorgangs noch durch einige Variablen erweitert. Ein schon angedeutetes Problem ist, dass in diesen Spuren vor allem Praktiken des Programmierens sichtbar werden. Die Verarbeitungsschritte, die in dem Dokument beschrieben werden, zielen darauf ab, diese Praktiken zu verwischen oder in den Hintergrund zu drängen, so dass anderes sichtbar werden kann. 
+
+### 6. Vergleichbarkeit zwischen den Spuren - Veränderung sichbar machen
+
+Derivat aus `traces_context`. Ein Kommentarblock nimmt in der Tabelle `traces_context` oft viele Zeilen ein, wie werden die Blöcke aus der einen Seite mit den Blöcken aus anderen Seiten vergleichbar? Und was wenn diese unterschiedlich umfangreich sind? Und wie ungleich umfangreich können die Datenblöcke sein und trotzdem in den Praktiken des Kommentierens unverändert lassen. 
+
+Diese Tabelle hält verschiedene eindeutige Fingerabdrücke unterschiedlicher Datenüberlegungen vor, deren Vergleiche unterschiedliche Antworten erlauben. 
+
+
+
+
+
+
+
+
+

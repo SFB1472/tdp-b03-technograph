@@ -1,0 +1,171 @@
+---
+title: "Fünfte Datenbanktabelle: eindeutige Fingerabdrücke für Kommentarbereiche"
+toc-depth: 4
+execute:
+  eval: false
+---
+
+```{r}
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+
+source("../config/config-graphic.R")
+source("../config/config.R")
+
+source("../config/config-secret.R")
+con_remote <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+source("../config/config-secret-local.R")
+con_local <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+SPHERE_FOR_SHEET <- "Dutch"
+
+```
+
+## Info
+
+Ursprünglich in 1-parsing/create-hashes.R
+
+Der Hintergrund zu diesen Transformationen, ist die Idee einzelne Spuren vergleichbar zu bekommen. Die Notwendigkeit ein Verfahren zu finden, das Vergleichbarkeit ermöglicht, rührt aus der Tatsache, dass unterschiedliche Spurenabschnitte unterschiedlich umfangreich sind, häufig mehrere zig Zeilen. Es wird also ein Verfahren benötigt, das es ermöglicht aus vielen Zeilen einen Wert zu generieren, um diesen mit anderen Abschnitten des gleichen Zeitungshauses zu vergleichen, mit dem Ziel Aussagen darüber treffen zu können, ob ein Bereich gleich geblieben ist oder sich verändert hat. 
+
+Dieses Dokument erzeugt die genannten Aggregationen mit Hilfe von Hashes, in diesem Fall mit sha1. Hashes erzeugen eindeutige Fingerabdrücke von Dokumenten, dabei ist jedes Zeichen relevant und wird dafür sorgen, dass ein Hash für einen Abschnitt in dem der Unterschied zum vorherigen lediglich in einem Attribut eine Veränderung der Groß- und Kleinschreibung hat, komplett unterschiedlich ausfällt. 
+
+Das ist einer der Nachteile dieser Variante. Es ist unerheblich, wie groß der Unterschied von einem Spurenabschnitt zum nächsten ist, der Fingerabdruck wird sich immer stark unterscheiden. 
+
+Für die Qualität der Fingerabdrücke ist es also zentral welche Datenfelder einbezogen werden, welche Informationen als zentral genug gelten, um unbedingt einbezogen zu werden und welche womöglich die "falschen" Praktiken mitcodieren. Falsch meint hier Praktiken des Programmierens mit zu kodieren, wobei das nicht zu tun, legdig
+
+## Creating hashes
+
+### Aggregation: site and tag group
+
+
+
+#### Input
+
+```{r}
+
+df_tags_pathes_cleaned <- dbGetQuery(conn = con_local, paste0("SELECT DISTINCT tc.sphere, tc.sha1, tc.id_sha1_group, tc.tag, tc.attr, tc.value_cleaned_counted, tc.value_cleaned_whitelist FROM traces_context tc WHERE tc.sphere = '", SPHERE_FOR_SHEET,"'"))
+
+```
+
+#### pragmatic
+
+```{r}
+# creating pragmatic hashes  -------------------------------------------------------------------
+
+df_hashed_context <- df_tags_pathes_cleaned %>% 
+  select(id_sha1_group, tag, attr) %>% 
+  reframe(hashed_context = digest::sha1(c(tag, attr), serialize = F), .by = id_sha1_group) %>% #,
+  mutate(agg_id = id_sha1_group,
+         agg_type = "sha1_group",
+         sphere = SPHERE_FOR_SHEET,
+         # sha1 = str_remove(id_sha1_group, "_\\d{1,}$"),
+         iteration = "pragmatic") %>% 
+  select(-id_sha1_group)
+
+# write new table of hashes to db --------------------------------------------------------------------------------------------------------
+
+dbWriteTable(conn = con_local, name = "context_hashed", value = df_hashed_context, append = TRUE)
+
+# dbDisconnect(con)
+```
+
+#### cleaned counted
+
+```{r}
+# creating hashes for cleaned_counted iteration ----------------------------------
+
+df_hashed_context_cleaned_counted <- df_tags_pathes_cleaned %>% 
+  select(id_sha1_group, tag, attr, value_cleaned_counted) %>% 
+  reframe(hashed_context = digest::sha1(c(tag, attr, value_cleaned_counted), serialize = F), .by = id_sha1_group) %>% #,
+  mutate(agg_id = id_sha1_group,
+         agg_type = "sha1_group",
+         sphere = SPHERE_FOR_SHEET,
+         # sha1 = str_remove(id_sha1_group, "_\\d{1,}$"),
+         iteration = "cleaned_counted") %>% 
+  select(-id_sha1_group)
+
+dbWriteTable(conn = con_local, name = "context_hashed", value = df_hashed_context_cleaned_counted, append = TRUE)
+
+```
+
+#### cleaned whitelist
+
+```{r}
+# creating hashes for cleaned_whitelist iteration ------------------------------------------------------------------
+
+df_hashed_context_cleaned_whitelist <- df_tags_pathes_cleaned %>%
+  distinct(tag, attr, value_cleaned_whitelist, id_sha1_group, .keep_all = TRUE) %>% 
+  select(id_sha1_group, tag, attr, value_cleaned_whitelist) %>%
+  # group_by(id_sha1_group) %>% 
+  arrange(id_sha1_group, tag, attr, value_cleaned_whitelist) %>% #View()
+  # ungroup() %>% # View()
+  reframe(hashed_context = digest::sha1(c(tag, attr, value_cleaned_whitelist), serialize = F), .by = id_sha1_group) %>% #,
+  mutate(agg_id = id_sha1_group,
+         agg_type = "sha1_group",
+         sphere = SPHERE_FOR_SHEET,
+         # sha1 = str_remove(id_sha1_group, "_\\d{1,}$"),
+         iteration = "cleaned_whitelist") %>% 
+  select(-id_sha1_group)
+
+dbWriteTable(conn = con_local, name = "context_hashed", value = df_hashed_context_cleaned_whitelist, append = TRUE)
+
+```
+
+### Aggregation: site_subdomain and month 
+
+#### cleaned whitelist
+
+
+
+```{r}
+# creating hashes for monthly and cleaned_whitelist iteration ----------------------------------
+
+## to do: bei sphere dutch gibts probleme mit der date_site_subdomain id. wie ist das entstanden?
+
+df_tags_monthly <- dbGetQuery(conn = con_local, paste0("SELECT DISTINCT tc.sphere, tc.id_date_site_subdomain, tc.tag, tc.attr, tc.value_cleaned_whitelist FROM traces_context tc WHERE tc.sphere = '", SPHERE_FOR_SHEET,"'")) 
+
+df_hashed_context_monthly <- df_tags_monthly %>% 
+  distinct(tag, attr, value_cleaned_whitelist, id_date_site_subdomain, .keep_all = TRUE) %>% 
+  select(id_date_site_subdomain, tag, attr, value_cleaned_whitelist) %>%
+  # group_by(id_sha1_group) %>% 
+  arrange(id_date_site_subdomain, tag, attr, value_cleaned_whitelist) %>% #View()
+  reframe(hashed_context = digest::sha1(c(tag, attr, value_cleaned_whitelist), serialize = F), .by = id_date_site_subdomain) %>% #,
+  mutate(agg_id = id_date_site_subdomain,
+         agg_type = "date_site_subdomain",
+         sphere = SPHERE_FOR_SHEET,
+         # sha1 = str_remove(id_sha1_group, "_\\d{1,}$"),
+         iteration = "monthly_whitelist") %>% 
+  select(-id_date_site_subdomain)
+
+dbWriteTable(conn = con_local, name = "context_hashed", value = df_hashed_context_monthly, append = TRUE)
+
+```
+
+
+## Tests
+
+```{r}
+df_hashes <- dbGetQuery(conn = con_local, paste0("SELECT * FROM context_hashed"))
+df_hashes_aggregated <- df_hashes %>% 
+  reframe(counted = n(), .by = c("sphere", "agg_type", "iteration"))
+
+```
+
+
+
+

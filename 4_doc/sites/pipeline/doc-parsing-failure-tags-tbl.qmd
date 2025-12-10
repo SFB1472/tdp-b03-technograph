@@ -1,0 +1,135 @@
+---
+title: "Checking fixed parsing"
+---
+
+```{r}
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+
+source("../../config/config-graphic.R")
+source("../../config/config.R")
+
+# source("../config/config-secret.R")
+# con_remote <- dbConnect(RPostgres::Postgres(), 
+#                  dbname = dsn_database,
+#                  host = dsn_hostname, 
+#                  port = dsn_port,
+#                  user = dsn_uid, 
+#                  password = dsn_pwd
+# )
+
+source("../../config/config-secret-local.R")
+con_local <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+stats_local_sites_counted <- dbGetQuery(conn = con_local, "SELECT t.sphere, COUNT(DISTINCT(t.site)) as counted FROM tags t GROUP BY t.sphere", check_interrupts = TRUE)
+# stats_remote_sites_counted <- dbGetQuery(conn = con_remote, "SELECT t.sphere, COUNT(DISTINCT(t.site)) as counted FROM tags_2 t GROUP BY t.sphere")
+# save(stats_remote_sites_counted, file = "../../../data/4-doc/check-fixed-parsing/stats_remote_sites_counted.RData")
+load(file = "../../../data/4-doc/check-fixed-parsing/stats_remote_sites_counted.RData")
+
+# stats_remote_sites_counted_sha1 <- dbGetQuery(conn = con_remote, "SELECT t.sphere, COUNT(DISTINCT(t.site)) as counted FROM tags_2 t WHERE LENGTH(site)=40 GROUP BY t.sphere")
+# save(stats_remote_sites_counted_sha1, file = "../../../data/4-doc/check-fixed-parsing/stats_remote_sites_counted_sha1.RData")
+load(file = "../../../data/4-doc/check-fixed-parsing/stats_remote_sites_counted_sha1.RData")
+
+# stats_remote_sites_sites_counted <- dbGetQuery(conn = con_remote, "SELECT t.sphere, COUNT(DISTINCT(t.sha1)) as counted FROM sites t WHERE of_interest = true GROUP BY t.sphere")
+
+stats_local_tags_counted <- dbGetQuery(conn = con_local, "SELECT t.sphere, t.tag, COUNT(DISTINCT(t.site, t.group)) as counted FROM tags t GROUP BY t.sphere, t.tag", check_interrupts = TRUE)
+# stats_remote_tags_counted <- dbGetQuery(conn = con_remote, "SELECT t.sphere, t.tag, COUNT(DISTINCT(t.site, t.group)) as counted FROM tags_2 t GROUP BY t.sphere, t.tag")
+# save(stats_remote_tags_counted, file = "../../../data/4-doc/check-fixed-parsing/stats_remote_tags_counted.RData")
+load(file = "../../../data/4-doc/check-fixed-parsing/stats_remote_tags_counted.RData")
+
+# dbDisconnect(con_local)
+
+```
+
+## Parsing Fehler in erster Version des Technograf
+
+In der ersten Version des Technografs, der im November 2025 so immer noch online ist, gab es ein Problem beim parsen der Daten. Um die vielen Seiten schneller zu parsen, lief das über mehrere Prozesse. Allerdings schrieben alle Prozesse in die gleiche csv-Datei. Das bewirkte, dass Prozesse einander die Daten überschrieben, manchmal sind dadurch die Spalten der Daten verrutscht. Das fiel dann viel später auf, als in Aggregationen Werte in Spalten auftauchten, die dort gar nichts zu suchen hatten. 
+
+Momentan gibt es zwei verschiedene Datenbanken, eine remote auf einem Server in Siegen (alter Datenstand) und eine lokal auf Mikas Rechner. Die Zahlen hier vergleichen die Remote-Tabellen mit den lokalen. Allerdings werden die remote-Daten hier schon lokal gespeichert, damit diese Darstellung auch dann noch funktioniert, wenn die remote-Datenbank in naher Zukunft aktualisiert wird. 
+
+## Problembehebung
+
+Zur Fehlerbehandlung wurde jedem Prozess eine eigene csv-Datei zugestanden, die nach Abschluss des parsen alle zusammen gefügt werden. 
+
+## Auswirkung des Fehlers
+
+In Tabellen zeigt sich der Fehler auf die Weise, dass es viel mehr Zeilen gibt, als es eigentlich Daten sind. Wahrscheinlich fügt jeder Prozess eine neue Zeile in das Zieldokument ein. Wenn aber gerade ein anderer Prozess der Zeile schreibt, wird diese einfach umgebrochen und damit viel mehr Zeilen erzeugt. Ein bisschen kontra-intuitiv, aber in diesem Fall ist es tatsächlich besser, die Zahlen sind kleiner. 
+
+Die Tabelle an der sich der Fehler zu erst zeigt, ist die `tags`. Aggregiert man die fehlerhalfte Tabelle ist auf den ersten Blick zu sehen, dass das seltsam aussieht, wie das folgende Beispiel verdeutlicht. In der Spalte `tag` sollten lediglich `div`, `form`, `script` und `iframe` zu sehen sein. Statt dessen ist die Tabelle für drei verschiedene Spheres und vier verschiedene tags 4746 Zeilen lang. 
+
+
+```{r}
+DT::datatable(stats_remote_tags_counted, rownames = FALSE)
+```
+
+
+Die gleiche Aggregation auf die gefixte Tabelle angewendet, liefert die folgende Tabelle
+
+```{r}
+
+DT::datatable(stats_local_tags_counted, rownames = FALSE, options = c(list(pageLength = 12), dom = 'ti'))
+
+```
+
+
+## Anhang: Vergleich Anzahl der Zeilen
+
+Für die alte Tabelle ergeben sich folgende Zahlen:
+
+```{r}
+DT::datatable(stats_remote_sites_counted, rownames = FALSE, options = c(list(pageLength = 12), dom = 'ti'))
+```
+
+Diese Tabelle sieht ein bisschen besser aus, wenn beim Abruf der Daten eine Bedingung eingebaut wird, nämlich, dass die Mindestlänge der Seite, die in einer Zeile genannt wird 40 Zeichen lang sein sollen (dann entspricht es der Länge des sha1, der zur Identifikation einer Seite mit genutzt wird)
+
+```{r}
+
+DT::datatable(stats_remote_sites_counted_sha1, rownames = FALSE, options = c(list(pageLength = 12), dom = 'ti'))
+
+```
+
+Auch diese Tabelle enthält noch zu viele Seiten. Das liegt allerdings daran, dass in dem Datensatz vom Internet Archive Seiten auch von anderen Domains als den angefragten enthalten waren. Im ersten parsing-Schritt wurden noch alle HTML-Seiten geparsed. Zur Korrektur des Fehlers wurde auch das Extraktionsscript dahingehend angepasst, dass nur noch solche Seiten verarbeitet wurden, die auch in die Analyse einfließen sollen. 
+
+Die aktuelle gibt folgende Zeilen wieder
+
+```{r}
+
+DT::datatable(stats_local_sites_counted, rownames = FALSE, options = c(list(pageLength = 12), dom = 'ti'))
+
+```
+
+## Check on progress of `traces` table
+
+Ist vollständig ... 
+
+```{r}
+
+stats_local_traces <- dbGetQuery(conn = con_local, "SELECT t.sphere, COUNT(DISTINCT(t.site)) as counted FROM traces t GROUP BY t.sphere")
+
+DT::datatable(stats_local_traces, rownames = FALSE, options = c(list(pageLength = 12), dom = 'ti'))
+
+```
+
+
+## Check on progress of `tag_context` table
+
+
+```{r}
+
+stats_local_tag_context <- dbGetQuery(conn = con_local, "SELECT t.sphere, COUNT(DISTINCT(t.sha1)) as counted FROM traces_context t GROUP BY t.sphere")
+DT::datatable(stats_local_tag_context, rownames = FALSE, options = c(list(pageLength = 12), dom = 'ti'))
+```
+
+
+```{r}
+dbDisconnect(con_local)
+```
+

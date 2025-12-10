@@ -1,3 +1,7 @@
+---
+
+---
+
 ```{r echo=FALSE, message=FALSE, error=FALSE}
 library(tidyverse)
 library(lubridate)
@@ -14,9 +18,10 @@ gs4_auth(cache=".secrets")
 
 extrafont::loadfonts(quiet = TRUE)
 
-source("../config/config-secret.R")
-source("../config/config-graphic.R")
-source("../config/config.R")
+source("../../config/config-secret.R")
+# source("../../config/config-secret-local.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
 
 con <- dbConnect(RPostgres::Postgres(), 
                  dbname = dsn_database,
@@ -25,6 +30,10 @@ con <- dbConnect(RPostgres::Postgres(),
                  user = dsn_uid, 
                  password = dsn_pwd
 )
+
+## as of db crash in december 25 importing sites tbl from computer change in september 25
+# df_sites_dump <- read_csv(paste0("../../../data/1-parsing/sites/all-sites-dump.csv")) %>% select(-sites_id) 
+# dbWriteTable(conn = con, name = "sites", df_sites_dump)
 
 ```
 
@@ -37,9 +46,22 @@ Deshalb folgt als nächstes eine kurze Analyse zu den mehrfach vorkommenden HTML
 
 ```{r echo=FALSE, message=FALSE, error=FALSE}
 
+# df_snippets <- dbGetQuery(conn = con, "SELECT * FROM snippets_2")
+# # write_csv(df_sites, file = "../../data/1-parsing/sites/all-sites-dump.csv")
+# 
+# df_snippets_dump <- df_snippets %>% 
+#   # mutate(of_interest = ifelse(site == "stadtmenschen", TRUE, of_interest)) %>% 
+#   select(-snippets_id)
+# 
+# dbWriteTable(conn = con, name =  "snippets_2", value = df_snippets_dump, append=FALSE)
+
 df_sites_messy <- dbGetQuery(conn = con, "SELECT * FROM sites_messy") %>% 
   mutate(year = ymd(crawl_date) %>% year(),
              site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
+
+# df_test <- read_csv(paste0("../../../data/raw/German/2nd/html-file-information.csv"), col_select = c("crawl_date", "url", "sha1")) %>%  
+#     mutate(crawl_timestamp = ymd_hms(crawl_date),
+#            crawl_date = as_date(crawl_timestamp))
 
 df_sites_messy <- df_sites_messy %>% 
   mutate(site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.),
@@ -145,7 +167,7 @@ Die Grafik zeigt die Quantitäten der Duplikate: am häufigsten kommen HTML-Seit
   ggplot(., aes(x = duplicated_overall, y = count, tooltip = paste0(duplicated_overall, "fach duplizierte Seite, kommt so häufig vor: ", count),label = count))+
   geom_point_interactive()
 
- ggiraph(ggobj = plot)
+ girafe(ggobj = plot)
  
 ```
 
@@ -179,8 +201,8 @@ df_sites_cleaned <- df_sites_messy %>%
   mutate(archive_id = paste0(sphere,"_", row_number())) %>% 
   ungroup() %>% 
   select(archive_id, crawl_date, sha1, url, site, sphere)
-       
-# dbWriteTable(conn = con, name =  "sites", value = df_sites_cleaned, append=FALSE)
+
+
                                                                
 ```
 

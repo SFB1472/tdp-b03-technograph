@@ -11,13 +11,29 @@ website:
         contents:
           - text: "Data basis: sampling and structure"
             file: sites/datengrundlage.qmd
-          - text: "Data cleaning"
-            file: sites/data-cleaning.qmd
-          - text: "Data cleaning - second export"
-            file: sites/data-cleaning-2.qmd
           - text: "Matching scripts files to html pages"
             file: sites/script-files-to-html-pages.qmd
-      - section: "Parsing: How to find commenting possibilities in HTML?"
+      - section: "Pipeline: data processing"
+        contents:
+          - text: "Erläuterung Pipeline"
+            file: sites/pipeline/pipeline.qmd
+          - text: "1. db tabelle: sites - Data cleaning"
+            file: sites/pipeline/data-cleaning.qmd
+          - text: "Erweiterung der ersten Tabelle: second export"
+            file: sites/pipeline/data-cleaning-2.qmd
+          - text: "2. db-tabelle: tags"
+            file: sites/pipeline/create-tags-tbl.qmd
+          - text: "intermezzo: dokumentation des parsing fehlers"
+            file: sites/pipeline/doc-parsing-failure-tags-tbl.qmd
+          - text: "3 db tabelle: traces"
+            file: sites/pipeline/create-traces-tbl.qmd
+          - text: "intermezzo: zwischenschritte zur vierten tabelle"
+            file: sites/pipeline/create-context-pathes.qmd
+          - text: "4. db tabelle: traces context"
+            file: sites/pipeline/create-traces-context-tbl.qmd
+          - text: "5 db tabelle: hashes"
+            file: sites/pipeline/create-traces-hashes-tbl.qmd
+      - section: "Analysing: How to find commenting possibilities in HTML?"
         contents:
           - text: "Different approaches how to interpret HTML"
             file: sites/approaches.qmd

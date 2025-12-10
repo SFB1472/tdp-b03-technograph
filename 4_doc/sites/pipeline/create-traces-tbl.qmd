@@ -1,0 +1,293 @@
+---
+title: "Dritte Tabelle: Kommentarspuren"
+execute:
+  eval: false
+---
+
+```{r}
+
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+
+source("../../config/config-secret-local.R")
+source("../../config/config.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+```
+
+## Info
+
+Für die Tabelle `traces` findet keine große Datentransformation statt, sie ist das Ergebnis eines Suchprozesses nach Spuren auf Kommentare in den Webseiten, in einer Reihe unterschiedlicher Optionen. 
+
+Es wird nach snippets von Kommentarsystemen, solchen also, die unmissverständlich einer Firma zuzuordnen sind, in reinem Text, in tags und in embedded scripts gesucht. 
+
+Nach Kommentarspuren wird "nur" in tags und embedded scripts gesucht. 
+
+Alle diese Funde werden in eine Datenstruktur gebracht und pro Sphere in die Datenbank geladen.
+
+Die Tabelle enthält folgende Spalten: site, tags_id, sphere, trace, search_method, search_topic, search_type, comment
+
+To do: Vorschausnippets auf die Tabellen erstellen, bspw die ersten zehn zeilen, im data/doc/helper ordner ablegen. Hm, geht aber auch nicht, wenn diese Dokumente nicht ausgeführt werden. Kann ich Teilabschnitte ausführbar machen? 
+
+
+```{r}
+snippets_to_find <- read.csv("../../../data/helper/24-07-12-Commenting-system-detection-patterns.csv", sep = ";")
+str_snippets_to_find <- snippets_to_find %>% select(regex) %>% pull(.) %>% paste(collapse = "|")
+
+get_data_snippets_plain_text <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.snippet, s.sphere FROM sites s INNER JOIN snippets_2 t ON s.sha1 = t.site WHERE t.detected = 1 AND s.sphere ='", sphere_,"' AND s.of_interest = TRUE"), check_interrupts = TRUE) %>% 
+  mutate(
+    search_topic = "comment",
+    search_method = "plain_text",
+    search_type = "snippet_list") %>% 
+  rename(trace = snippet)
+}
+
+get_data_snippets_traces <- function(sphere_, search_in){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tags_id, t.tag, t.",search_in," as column_t, t.sphere FROM tags t WHERE t.sphere ='", sphere_,"' AND  t.missing IS NULL AND t.",search_in," ~* '", str_snippets_to_find, "'"), check_interrupts = TRUE) %>% 
+    mutate(trace = str_extract(column_t, regex(str_snippets_to_find, ignore_case = TRUE))) %>% 
+  select(-column_t)%>% 
+  mutate(search_method = "tag",
+         search_topic = "comment",
+         search_type = "snippet_list",
+         comment = search_in) 
+}
+
+get_data_comment_traces <- function(sphere_, search_in){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tags_id, t.tag, t.sphere, t.",search_in," as column_t FROM tags t WHERE t.sphere ='", sphere_,"' AND  t.missing IS NULL AND t.",search_in," ~* '", COMMENTS_IN_TAGS, "'"), check_interrupts = TRUE) %>% 
+  mutate(trace = str_extract(column_t, regex(COMMENTS_IN_TAGS, ignore_case = TRUE))) %>%
+  select(-column_t) %>%
+  mutate(search_method = "tag",
+         search_topic = "comment",
+         search_type = "generic",
+         comment = search_in)
+}
+
+get_traces_embedded <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site as sha1, t.trace, ts.tag, ts.attr, ts.value, ts.embedded, t.search_type, t.search_method, t.sphere FROM traces t INNER JOIN tags ts ON t.tags_id = ts.tags_id::text WHERE t.search_topic = 'comment' AND t.comment = 'embedded script' AND t.sphere = '",sphere_,"'"))
+}
+# df_traces_embedded <- get_traces_embedded("German")
+# test <- dbGetQuery(conn = con, "SELECT * FROM tags t WHERE tags_id = '3257c211-bb7e-49fb-ad50-36096dc439a2'")
+
+```
+
+## Snippets found - plain text and tags
+
+
+::: panel-tabset
+
+### German
+
+```{r}
+
+CURRENT_SPHERE <- "German"
+
+df_snippets_plain_de <- get_data_snippets_plain_text(CURRENT_SPHERE) 
+
+df_snippets_in_tags_de_value <- get_data_snippets_traces(CURRENT_SPHERE, "value")
+
+df_snippets_in_tags_de_attr_ <- get_data_snippets_traces(CURRENT_SPHERE, "attr")
+
+df_snippets_tags_de_embedds_ <- get_data_snippets_traces(CURRENT_SPHERE, "embedded")
+
+df_snippets_tags_de <- df_snippets_tags_de_embedds_ %>% 
+  # bind_rows(., df_snippets_in_tags_de_attr) %>% 
+  bind_rows(., df_snippets_in_tags_de_value) %>% bind_rows(., df_snippets_plain_de)
+
+```
+
+### International
+
+```{r}
+
+CURRENT_SPHERE <- "World"
+
+df_snippets_plain_world <- get_data_snippets_plain_text(CURRENT_SPHERE) 
+
+df_snippets_in_tags_world_value <- get_data_snippets_traces(CURRENT_SPHERE, "value")
+
+df_snippets_in_tags_world_attr_ <- get_data_snippets_traces(CURRENT_SPHERE, "attr")
+
+df_snippets_tags_world_embedds_ <- get_data_snippets_traces(CURRENT_SPHERE, "embedded")
+
+df_snippets_tags_world <- df_snippets_tags_world_embedds_ %>% 
+  # bind_rows(., df_snippets_in_tags_de_attr) %>% 
+  bind_rows(., df_snippets_in_tags_world_value) %>% 
+  bind_rows(., df_snippets_in_tags_world_attr_) %>% 
+  bind_rows(., df_snippets_plain_world)
+
+```
+
+### Dutch
+
+```{r}
+
+CURRENT_SPHERE <- "Dutch"
+
+df_snippets_plain_nl <- get_data_snippets_plain_text(CURRENT_SPHERE) 
+
+df_snippets_in_tags_nl_value <- get_data_snippets_traces(CURRENT_SPHERE, "value")
+
+df_snippets_in_tags_nl_attr <- get_data_snippets_traces(CURRENT_SPHERE, "attr")
+
+df_snippets_tags_nl_embedds_ <- get_data_snippets_traces(CURRENT_SPHERE, "embedded")
+
+df_snippets_tags_nl <- df_snippets_tags_nl_embedds_ %>% 
+  bind_rows(., df_snippets_in_tags_nl_attr) %>%
+  bind_rows(., df_snippets_in_tags_nl_value) %>% 
+  bind_rows(., df_snippets_plain_nl)
+
+```
+
+:::
+
+
+## Traces of "comment|komment" found
+
+
+::: panel-tabset
+
+### German
+
+```{r}
+
+CURRENT_SPHERE <- "German"
+# suche nach comment|komment in attr
+
+df_comment_traces_de_attr <- get_data_comment_traces(CURRENT_SPHERE, "attr")
+df_comment_traces_de_value <- get_data_comment_traces(CURRENT_SPHERE, "value")
+df_comment_traces_embedded_de <- get_data_comment_traces(CURRENT_SPHERE, "embedded")
+
+# # print_heatmap(df_comment_traces_de, "Comment traces",df_retranslate_domains)
+# 
+# check <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tags_id, t.sphere, t.tag, t.attr, t.value FROM tags t WHERE t.site ='00195ede40c7557bb951a82ff1956f2c854359a9'"))  
+# 
+# comments_overlap_tags <- df_comment_traces_de_value_ %>% filter(tags_id %in% df_comment_traces_de_$tags_id)  
+#   
+# # suche nach comment|komment in embedded scripts
+# 
+# df_comment_traces_embedded_de_ <- df_comment_traces_embedded_de%>%
+#   # mutate(finding = str_extract(embedded, regex(COMMENTS_IN_TAGS, ignore_case = TRUE))) %>%
+#   # select(-embedded)  %>%
+#   mutate(search_method = "tag",
+#          search_topic = "comment",
+#          search_type = "generic",
+#          comment = "embedded script")
+
+df_comment_traces_de <- df_comment_traces_de_attr %>% 
+  bind_rows(., df_comment_traces_de_value) %>% 
+  bind_rows(., df_comment_traces_embedded_de)
+
+df_comment_traces_de %>% reframe(counted = n(), .by=tags_id) %>% filter(counted > 1) %>% View()#distinct(tags_id) %>% nrow()
+
+df_comment_traces_de %>% select(tags_id) %>% distinct(tags_id) %>% View()
+
+
+df_traces_de <- df_comment_traces_de %>% 
+  bind_rows(., df_snippets_tags_de) %>% 
+  # rename(trace = finding) %>% 
+  arrange(site)
+
+df_traces_de %>% select(site) %>% distinct() %>% nrow()
+
+dbWriteTable(conn = con, name = "traces", df_traces_de, append = FALSE)
+
+
+```
+
+### International
+
+```{r}
+
+CURRENT_SPHERE <- "World"
+# suche nach comment|komment in attr
+
+df_comment_traces_world_attr <- get_data_comment_traces(CURRENT_SPHERE, "attr")
+df_comment_traces_world_value <- get_data_comment_traces(CURRENT_SPHERE, "value")
+df_comment_traces_embedded_world <- get_data_comment_traces(CURRENT_SPHERE, "embedded")
+
+df_comment_traces_world <- df_comment_traces_world_attr %>% 
+  bind_rows(., df_comment_traces_world_value) %>% 
+  bind_rows(., df_comment_traces_embedded_world)
+
+
+```
+
+### Dutch
+
+```{r}
+CURRENT_SPHERE <- "Dutch"
+# suche nach comment|komment in attr
+
+df_comment_traces_nl_attr <- get_data_comment_traces(CURRENT_SPHERE, "attr")
+df_comment_traces_nl_value <- get_data_comment_traces(CURRENT_SPHERE, "value")
+df_comment_traces_embedded_nl <- get_data_comment_traces(CURRENT_SPHERE, "embedded")
+
+df_comment_traces_nl <- df_comment_traces_nl_attr %>% 
+  bind_rows(., df_comment_traces_nl_value) %>% 
+  bind_rows(., df_comment_traces_embedded_nl)
+
+
+
+```
+
+:::
+
+## Write to db
+
+::: panel-tabset
+
+### German
+
+```{r}
+
+df_traces_de <- df_comment_traces_de %>% 
+  bind_rows(., df_snippets_tags_de) %>% 
+  # rename(trace = finding) %>% 
+  arrange(site)
+
+df_traces_de %>% select(site) %>% distinct() %>% nrow()
+
+dbWriteTable(conn = con, name = "traces", df_traces_de, append = TRUE)
+
+```
+
+### World
+
+```{r}
+
+df_traces_world <- df_comment_traces_world %>% 
+  bind_rows(., df_snippets_tags_world) %>% 
+  # rename(trace = finding) %>% 
+  arrange(site)
+
+dbWriteTable(conn = con, name = "traces", df_traces_world, append = TRUE)
+
+```
+
+
+### Dutch
+
+```{r}
+
+df_traces_nl <- df_comment_traces_nl %>% 
+  bind_rows(., df_snippets_tags_nl) %>% 
+  # rename(trace = finding) %>% 
+  arrange(site)
+
+dbWriteTable(conn = con, name = "traces", df_traces_nl, append = TRUE)
+# dbDisconnect(con)
+
+```
+
+
+:::

@@ -1,23 +1,20 @@
+---
+title: "Zweite Datenbank Tabelle: tags"
+execute:
+  eval: false
+---
+
 ```{r echo=FALSE, message=FALSE, error=FALSE}
 library(tidyverse)
 library(lubridate)
 library(urltools)
-# library(MetBrewer)
-# library(urltools)
 library(DBI)
 library(RPostgres)
 library(re2)
-# library(ggiraph)
-# library(googlesheets4)
-
-# gs4_auth(cache=".secrets")
-
-# extrafont::loadfonts(quiet = TRUE)
 
 # source("../config/config-secret.R")
-source("../config/config-secret-local.R")
-# source("../config/config-graphic.R")
-source("../config/config.R")
+source("../../config/config-secret-local.R")
+source("../../config/config.R")
 # dbDisconnect(con)
 con <- dbConnect(RPostgres::Postgres(), 
                  dbname = dsn_database,
@@ -34,28 +31,30 @@ Wie viele fehlen?
 Sieht die Datei in Ordnung aus?
 
 
+## Info
+
+Diese Schnipsel lesen die Dateien ein, die von dem Script `parsing-html.R` erzeugt wurden. Für jeden Tag und jede Sphere gibt es einen eigenen Datenordner. Hier wird außerdem eine kurze Prüfung des jeweiligen Datensatzes vorgenommen, bevor der Abschnitt in die Datenbank geladen wird.
+
+Inzwischen laufen die Abschnitte nicht mehr durch. Die einzelen Datensätze sind nur noch auf einer exterenen Festplatte gespeichert und nicht mehr auf dem Computer, auf dem die Datenbanktabellen erzeugt wurden. 
 
 ```{r}
-CURRENT_SPHERE <- "German"
+# Sinn der folgenden Zeilen unklar
+# file_list_db_de <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s WHERE s.sphere = '", CURRENT_SPHERE, "' AND s.of_interest = TRUE")) %>% 
+#   distinct() %>% 
+#   mutate(sha1 = paste0(sha1, ".html")) %>% 
+#   select(sha1) %>% pull()
+# save(sites_of_interest, file=("../../data/helper/file_list_db_de.RData"))
 
-file_list_db_de <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s WHERE s.sphere = '", CURRENT_SPHERE, "' AND s.of_interest = TRUE")) %>% 
-  distinct() %>% 
-  mutate(sha1 = paste0(sha1, ".html")) %>% 
-  select(sha1) %>% pull()
-save(sites_of_interest, file=("../../data/helper/file_list_db_de.RData"))
 sites_of_interest <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s WHERE s.sphere = '", CURRENT_SPHERE, "' AND s.of_interest = TRUE")) %>% 
   distinct() %>% 
   # mutate(sha1 = paste0(sha1, ".html")) %>% 
   select(sha1) %>% pull()
 
-# file_list_1 <- list.files(paste0("../../data/0-preprocessing/German-1/")) #%>% head(20)
-# file_list_2 <- list.files(paste0("../../data/0-preprocessing/German-2/")) #%>% head(20)
-
 header <- c("site","tag","search_date","attr","value","group","missing","sphere")
 
 ```
 
-### Formular - Tags
+## Formular - Tags
 
 #### German
 
@@ -84,7 +83,7 @@ sites_of_interest <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s W
   distinct() %>% 
   select(sha1) %>% pull()
 
-list_of_files <- list.files(path = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/", tag,"/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+list_of_files <- list.files(path = paste0("../../../data/1-parsing/tags/",CURRENT_SPHERE,"/", tag,"/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
 df_form_tags <- read_csv(list_of_files, id = "file_name", col_names = header)
 # in den Daten sind keine Duplikate
 df_form_tags %>% distinct() %>% nrow()
@@ -114,7 +113,7 @@ df_form_tags_old <- read_csv("../../data/1-parsing/tags/German/_deprecated/form-
 
 ```
 
-### Script- Tags
+## Script- Tags
 
 #### German
 
@@ -149,13 +148,11 @@ df_tags_embedded_2th <- df_tags_embedded_2th %>% rename(value = attr, attr = nam
 
 # df_tags_embedded_2th <- df_tags_embedded_2th %>% rename(embedded = content)
 
-
 df_tags_embedded_ <- df_tags_embedded %>% 
   select(-file_name ) %>% 
   mutate(tag = "script")
   bind_rows(., df_tags_embedded_2th) %>% 
   distinct()
-
 
 df_tags_db <- df_tags %>% 
   select(-file_name) %>% 
@@ -281,7 +278,7 @@ df_script_tags_old %>% arrange(desc(site)) %>% View()
 
 ```
 
-### iframes
+## iframes
 
 #### German
 
@@ -361,17 +358,8 @@ df_tags_old %>% arrange(desc(site)) %>% View()
 
 ```
 
-## Datenbankfütterung
 
-```{r}
-CURRENT_SPHERE <- "German"
-check_all <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sphere, t.tag, COUNT(*) as counted_rows FROM tags t GROUP BY t.sphere, t.tag"))
-
-check_spheres <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sphere, t.tag FROM tags t WHERE t.sphere = ''"))
-
-```
-
-### divs
+## divs
 
 #### German
 
@@ -425,3 +413,52 @@ load(file = paste0("../../data/1-parsing/tags/",CURRENT_SPHERE,"/df_tags_db_",ta
 dbWriteTable(conn = con, name = "tags", df_tags_db, append = TRUE)
 ```
 
+## doctype
+
+#### German
+
+```{r}
+CURRENT_SPHERE <- "German"
+# tag <- "form"
+
+```
+
+#### World
+
+```{r}
+CURRENT_SPHERE <- "World"
+# tag <- "form"
+```
+
+#### Dutch
+
+```{r}
+CURRENT_SPHERE <- "Dutch"
+# tag <- "form"
+```
+
+```{r}
+sites_of_interest <- dbGetQuery(conn = con, paste0("SELECT s.sha1 FROM sites s WHERE s.sphere = '", CURRENT_SPHERE, "' AND s.of_interest = TRUE")) %>% 
+  distinct() %>% 
+  select(sha1) %>% pull()
+
+list_of_files <- list.files(path = paste0("../../../data/1-parsing/doctype/",CURRENT_SPHERE,"/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+df_tags <- read_csv(list_of_files, id = "file_name")#, col_names = header)
+# in den Daten sind keine Duplikate
+df_tags %>% distinct() %>% nrow()
+# es sind mehr Seiten geparsed worden, als of interest sind
+df_tags %>% select(site) %>% distinct() %>% nrow()
+# Sichtcheck der Datei sieht auch gut aus. Alle hashes sehen gut aus, keine leeren Zeilen, keine einzelnen Zeichen 
+
+df_tags_db <- df_tags %>% 
+  filter(site %in% sites_of_interest) %>% 
+  mutate(tag = "doctype",
+         value = doctype,
+    sphere = CURRENT_SPHERE) %>% 
+  select(-file_name, -`...1`, -doctype)  
+
+# save(df_tags_db, file = (paste0("../../data/1-parsing/doctype/",CURRENT_SPHERE,"/db_doctype.RData")))
+# load(file = (paste0("../../data/1-parsing/doctype/",CURRENT_SPHERE,"/db_doctype.RData")))
+dbWriteTable(conn = con, name = "tags", df_tags_db, append = TRUE)
+
+```
