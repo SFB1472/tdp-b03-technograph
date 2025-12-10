@@ -63,10 +63,19 @@ df_snippet_detected <- future_walk(file_list, function(j){
 
   },.progress = TRUE)
   pid = Sys.getpid()
-  write_csv(snippets, paste0("data/1-parsing/snippet-detection/", CURRENT_SPHERE,"/tracker-all-snippets-", pid, ".csv"), append = TRUE)
+  write_csv(snippets, paste0("data/1-parsing/snippet-detection/", CURRENT_SPHERE,"/tracker/tracker-all-snippets-", pid, ".csv"), append = TRUE)
 })
 
 #2d83cf0072d3868f5aa4e725d734f24861393483
+
+header <-  c("site","search_date","snippet","detected")
+list_of_files <- list.files(path = paste0("data/1-parsing/snippet-detection/",CURRENT_SPHERE,"/tracker/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+already_parsed_sites <- read_csv(list_of_files, id = "file_name", col_names = header) %>% 
+  select(site) %>%
+  distinct() %>% 
+  # mutate(site = paste0(site, ".html")) %>%
+  pull()
+
 
 already_parsed_sites <- read_csv(paste0("data/1-parsing/snippet-detection/", CURRENT_SPHERE,"/snippets-2.csv"), col_select = c("site")) %>% #select(site) %>%
   distinct() %>% mutate(site = paste0(site, ".html")) %>%  pull()
