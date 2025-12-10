@@ -1,5 +1,6 @@
 ---
 title: "Commenting traces"
+
 ---
 
 ```{r}
@@ -12,11 +13,10 @@ library(tidyverse)
 library(DBI)
 library(RPostgres)
 library(urltools)
-library(googlesheets4)
 library(MetBrewer)
 library(ggforce)
 
-source("../config/config-secret.R")
+source("../config/config-secret-local.R")
 source("../config/config-graphic.R")
 source("../config/config.R")
 
@@ -28,6 +28,7 @@ con <- dbConnect(RPostgres::Postgres(),
                  user = dsn_uid, 
                  password = dsn_pwd
 )
+
 
 ```
 
@@ -51,26 +52,30 @@ get_domain_translation <- function(sphere_){
 
 tag_colors <- c("iframe" = "#c969a1", "script" = "#ee8577", "form" = "#ffbb44", "div" = "#62929a", "plain text" = "#000000")
 
-get_data_snippets_plain_text <- function(sphere_){
-  df_opinary <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.snippet, s.sphere FROM sites s INNER JOIN snippets_2 t ON s.sha1 = t.site WHERE t.detected = 1 AND s.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+type_colors <- c("generic" = "#62929a", "snippet_list" = "#c969a1")
+
+get_sites <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, s.sphere FROM sites s WHERE s.sphere = '",sphere_,"'"), check_interrupts = TRUE)
 }
 
-get_data_snippets_tags <- function(sphere_){
-  df_googletag <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~* '", str_snippets_to_find, "' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+get_data_traces_with_tags <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site as sha1, t.trace, t.tag, t.search_type, t.search_method, t.comment, t.sphere FROM traces t WHERE t.search_topic = 'comment' AND t.sphere = '",sphere_,"'"), check_interrupts = TRUE)
+}
+
+get_data_traces <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.search_method, t.search_type, t.trace FROM sites s INNER JOIN traces t ON s.sha1 = t.site WHERE t.search_topic='comment' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"), check_interrupts = TRUE)
 }
 
 get_data_comment_traces <- function(sphere_){
-  df_civey <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~* '", COMMENTS_IN_TAGS, "' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site as sha1, t.trace, t.tag, t.search_type, t.search_method, t.sphere FROM traces t WHERE t.search_topic = 'comment' AND t.sphere = '",sphere_,"'"), check_interrupts = TRUE)
 }
 
-df_test <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.name, t.attr, t.group, t.sphere FROM tags_2 t WHERE t.site = '0af3fb63a0116eb20cc5aa227088a6ecbdd7f7d7'"))
-
-get_all_sites_sphere <- function(sphere_){
-  dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, COUNT(s.sha1) as sites_per_day FROM sites s WHERE s.of_interest = TRUE AND s.sphere ='", sphere_, "' GROUP BY (s.crawl_date, s.site)")) %>% 
-    filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
-    mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% #View()
-    reframe(counted_sites = sum(sites_per_day), .by = c("year_month", "site"))
-  }
+# get_all_sites_sphere <- function(sphere_){
+#   dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, COUNT(s.sha1) as sites_per_day FROM sites s WHERE s.of_interest = TRUE AND s.sphere ='", sphere_, "' GROUP BY (s.crawl_date, s.site)")) %>% 
+#     filter(site %in% df_domains_to_analyse$cleaned_urls) %>% 
+#     mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% #View()
+#     reframe(counted_sites = sum(sites_per_day), .by = c("year_month", "site"))
+#   }
 
 print_heatmap <- function(df_data, snippet, df_retranslate_domains){
   # df_all_sites <- get_all_sites_sphere(sphere_)
@@ -78,20 +83,45 @@ print_heatmap <- function(df_data, snippet, df_retranslate_domains){
   df_data %>% 
     # head(30000) %>% 
     mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% 
-    reframe(counted = n(), .by = c(year_month, site, tag)) %>% #View()
+    reframe(counted = n(), .by = c(year_month, site, tag, search_type)) %>% #View()
     left_join(., df_retranslate_domains, by = c("site" = "cleaned_urls")) %>% 
         # left_join(., df_all_sites) %>%
-    # mutate(normalized = counted/counted_sites) %>% 
-    ggplot(., aes(x = year_month, y = tag, fill = tag)) +#, alpha = normalized)) +
+    mutate(tag = ifelse(is.na(tag), "plain text", tag)) %>%
+    ggplot(., aes(x = year_month, y = tag, fill = search_type)) +#, alpha = normalized)) +
     geom_tile() +
     ggtitle(paste0("Searching ",snippet , " in all tags")) + 
     facet_col(vars(Name), scales = "free", space = "free") +
     scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-06-01"))) +
-    scale_fill_manual(values = tag_colors) +
+    scale_y_discrete(position = "right") +
+    scale_fill_manual(values = type_colors) +
       theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
-    theme(axis.text.y = element_blank()) + theme_b03_timeline_faceted
+    # theme(axis.text.y = element_blank()) + 
+    theme_b03_timeline_faceted
 }
 
+print_heatmap_ <- function(df_data, df_retranslate_domains){
+  # df_all_sites <- get_all_sites_sphere(sphere_)
+
+  df_data %>% 
+    # head(30000) %>% 
+    mutate(year_month = paste0(year(crawl_date), "-", month(crawl_date), "-01") %>% ymd()) %>% 
+    reframe(counted = n(), .by = c(year_month, site, search_method, search_type)) %>% #View()
+    left_join(., df_retranslate_domains, by = c("site" = "cleaned_urls")) %>% 
+        # left_join(., df_all_sites) %>%
+    # mutate(normalized = counted/counted_sites) %>% 
+    ggplot(., aes(x = year_month, y = search_type, fill = search_type)) +#, alpha = normalized)) +
+    geom_tile() +
+    ggtitle(paste0("Searching for traces of all types")) + 
+    facet_col(vars(Name), scales = "free", space = "free") +
+    scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-06-01"))) +
+    scale_y_discrete(position = "right") +
+    scale_fill_manual(values = type_colors) +
+      theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+    # theme(axis.text.y = element_blank()) + 
+    theme_b03_timeline_faceted
+}
+
+# dbDisconnect(con)
 
 ```
 
@@ -123,36 +153,23 @@ Zwischen den beiden Datensätzen gibt es (zum Glück) eine große Überlappung. 
 #| warning: false
 #| error: false
 #| message: false
-#| fig-height: 20
+#| fig-height: 75
 #| fig-width: 10
 
-df_retranslate_domains <- get_domain_translation("German")
-df_snippets_plain_de <- get_data_snippets_plain_text("German") %>% 
-  mutate(tag = "plain text")
+df_retranslate_domains_de <- get_domain_translation("German")
+df_sites_de <- get_sites("German")
+df_snippets_de <- get_data_traces_with_tags("German") %>% left_join(., df_sites_de) #%>% View()
 
-df_snippets_in_tags_de <- get_data_snippets_tags("German")
+# df_snippets_de %>% select(trace, tag, search_type, search_method, comment) %>% distinct() %>% View()
 
-# 
-# overlapping_findings_sites <- df_snippets_plain %>% 
-#   filter(sha1 %in% df_snippets_in_tags$sha1) %>% 
-#   select(sha1) %>% distinct()
-# 
-non_overlapping_findings_sites_de <- df_snippets_plain_de %>%
-  filter(!sha1 %in% df_snippets_in_tags_de$sha1) #%>%
+findings_tags <- df_snippets_de %>% filter(search_method == "tag", search_type == "snippet_list") 
 
-df_snippets_in_tags_print_de <- df_snippets_in_tags_de %>% 
+non_overlapping_findings_sites_de <- df_snippets_de %>% filter(search_method == "plain_text", search_type == "snippet_list") %>% filter(!sha1 %in% findings_tags$sha1)
+
+df_snippets_in_tags_print_de <- df_snippets_de %>% 
   bind_rows(., non_overlapping_findings_sites_de)
 
-print_heatmap(df_snippets_in_tags_print_de, "snippets of commenting systems", df_retranslate_domains)
-
-#   select(site, snippet) %>% distinct()
-# 
-# distinct_plain_findings <- df_snippets_plain %>% select(sha1, site, snippet) %>% distinct()
-# 
-# distinct_plain_findings %>% select(site, snippet) %>% distinct() %>% View()
-# 
-# df_snippets_plain %>% filter(site == "fr", snippet == "disqus_thread", !sha1 %in% df_snippets_in_tags$sha1) %>% View()
-
+print_heatmap(df_snippets_in_tags_print_de, "snippets of commenting systems", df_retranslate_domains_de)
 
 ```
 
@@ -162,28 +179,26 @@ print_heatmap(df_snippets_in_tags_print_de, "snippets of commenting systems", df
 #| echo: false
 #| warning: false
 #| error: false
-#| fig-height: 45
+#| fig-height: 55
 #| fig-width: 10
 
-df_retranslate_domains <- get_domain_translation("World")
-df_snippets_plain_world <- get_data_snippets_plain_text("World") %>% 
-  mutate(tag = "plain text")
+df_retranslate_domains_world <- get_domain_translation("World")
+df_sites_world <- get_sites("World")
+df_snippets_world <- get_data_traces_with_tags("World") %>% left_join(., df_sites_world)
 
-df_snippets_in_tags_world <- get_data_snippets_tags("World")
+findings_tags_world <- df_snippets_world %>% filter(search_method == "tag", search_type == "snippet_list") 
 
-non_overlapping_findings_sites_world <- df_snippets_plain_world %>%
-  filter(!sha1 %in% df_snippets_in_tags_world$sha1) #%>%
+non_overlapping_findings_sites_world <- df_snippets_world %>% filter(search_method == "plain_text", search_type == "snippet_list") %>% filter(!sha1 %in% findings_tags_world$sha1)
 
-df_snippets_in_tags_world <- df_snippets_in_tags_world %>% 
+df_snippets_in_tags_print_world <- df_snippets_world %>% 
   bind_rows(., non_overlapping_findings_sites_world)
 
-print_heatmap(df_snippets_in_tags_world, "snippets of commenting systems",df_retranslate_domains)
-
+print_heatmap(df_snippets_in_tags_print_world, "snippets of commenting systems", df_retranslate_domains_world)
 ```
 
 ### Dutch
 
-Für die niederländische Sprachwelt wurden die div-Tags noch nicht extrahiert, deswegen kann es hier auch keine Spuren geben.
+
 
 ```{r}
 #| echo: false
@@ -192,19 +207,18 @@ Für die niederländische Sprachwelt wurden die div-Tags noch nicht extrahiert, 
 #| fig-height: 45
 #| fig-width: 10
 
-df_retranslate_domains <- get_domain_translation("Dutch")
-df_snippets_plain_nl <- get_data_snippets_plain_text("Dutch") %>% 
-  mutate(tag = "plain text")
+df_retranslate_domains_nl <- get_domain_translation("Dutch")
+df_sites_nl <- get_sites("Dutch")
+df_snippets_nl <- get_data_traces_with_tags("Dutch") %>% left_join(., df_sites_nl)
 
-df_snippets_in_tags_nl <- get_data_snippets_tags("Dutch")
+findings_tags_nl <- df_snippets_nl %>% filter(search_method == "tag", search_type == "snippet_list") 
 
-non_overlapping_findings_sites_nl <- df_snippets_plain_nl %>%
-  filter(!sha1 %in% df_snippets_in_tags_nl$sha1) #%>%
+non_overlapping_findings_sites_nl <- df_snippets_nl %>% filter(search_method == "plain_text", search_type == "snippet_list") %>% filter(!sha1 %in% findings_tags$sha1)
 
-df_snippets_in_tags_nl <- df_snippets_in_tags_nl %>% 
+df_snippets_in_tags_print_nl <- df_snippets_nl %>% 
   bind_rows(., non_overlapping_findings_sites_nl)
 
-print_heatmap(df_snippets_in_tags_nl, "snippets of commenting systems",df_retranslate_domains)
+print_heatmap(df_snippets_in_tags_print_nl, "snippets of commenting systems", df_retranslate_domains_nl)
 
 ```
 
@@ -225,9 +239,8 @@ print_heatmap(df_snippets_in_tags_nl, "snippets of commenting systems",df_retran
 #| fig-height: 42
 #| fig-width: 10
 
-df_retranslate_domains <- get_domain_translation("German")
-df_comment_traces_de <- get_data_comment_traces("German")
-print_heatmap(df_comment_traces_de, "Comment traces",df_retranslate_domains)
+df_comment_traces_de <- get_data_comment_traces("German") %>% left_join(., df_sites_de)
+print_heatmap(df_comment_traces_de, "Comment traces",df_retranslate_domains_de)
 
 ```
 
@@ -240,81 +253,42 @@ print_heatmap(df_comment_traces_de, "Comment traces",df_retranslate_domains)
 #| fig-height: 50
 #| fig-width: 10
 
-df_retranslate_domains <- get_domain_translation("World")
-df_comment_traces_world <- get_data_comment_traces("World")
-print_heatmap(df_comment_traces_world, "Comment traces",df_retranslate_domains)
+df_comment_traces_world <- get_data_comment_traces("World")%>% left_join(., df_sites_world)
+print_heatmap(df_comment_traces_world, "Comment traces",df_retranslate_domains_world)
 
 ```
 
 ### Dutch
 
-
-:::
-
-## Daten zum Export vorbereiten 
-
-Die hier gezeigten Spuren werden als nächstes zusammengefasst: Diese Funde sind Blitzlichter aus dem HTML-Code. Oft sind die Tags, die hier Blitzlichter zeigen, ineinander verschachtelt, manchmal stehen sie für sich. 
-
-Einzelne Tags machen noch keine Kommentarbereiche, aber sie enthalten womöglich diejenigen Tags die in Summe dann ein (strukturelles) Bild des Kommentarbreichs zeigen können. Die Idee ist, das prototypische Vorgehen bei den form-Tags hier auf alle Spuren anzuwenden: sind die Bereiche erst einmal identifiziert und extrahiert, können sie gehasht werden und Veränderungen zuverlässig gefunden werden. 
-
-Außerdem ist diese Datenverarbeitung auch Vorbereitung für den machine learning part der nächsten Förderphase. 
-
-In dieser Verarbeitung der Daten sind die Snippetfunde, die oben schwarz markiert sind, nicht enthalten. Sie sind ohne Kontext, abstrakte Spuren. 
-
-::: panel-tabset
-
-### German
-
 ```{r}
 #| echo: false
 #| warning: false
-#| message: false
 #| error: false
+#| fig-height: 40
+#| fig-width: 10
 
-# test_more_comments <- df_comment_traces_de %>% 
-#   filter(str_detect(attr, "morecomment"))
-# 
-# test_recomments <- df_comment_traces_de %>% 
-#   filter(str_detect(attr, "recomment") )
-# 
-# anti_join(test_recomments, test_more_comments) %>% View()
-
-df_tags_for_context_de <- df_comment_traces_de %>% 
-  bind_rows(., df_snippets_in_tags_de) %>% 
-  # filter(!str_detect(attr, "recomment") )%>% 
-  arrange(sha1) %>% 
-  select(-group) %>% 
-  distinct()
-
-df_tags_for_context_de %>% select(sha1) %>% distinct() %>% nrow()
-
-test <- df_tags_for_context_de %>% filter(sha1 == "00012777602a9a99e667f0e4b5416440a9d0f081")
-
-write_csv(test, file = "../../data/1-parsing/tags/German/sites-and-findings-for-context-parsing-test-3.csv")
-
-write_csv(df_tags_for_context_de, file = "../../data/1-parsing/tags/German/sites-and-findings-for-context-parsing.csv")
-
-```
-
-
-### International
-
-```{r}
-#| echo: false
-#| warning: false
-#| message: false
-#| error: false
-
-df_tags_for_context_world <- df_comment_traces_world %>% 
-  bind_rows(., df_snippets_in_tags_world) %>% 
-  filter(!str_detect(attr, "recomment") )%>% 
-  arrange(sha1)
-
-
-
-write_csv(df_tags_for_context_world, file = "../../data/1-parsing/tags/World/sites-and-findings-for-context-parsing.csv")
+df_comment_traces_nl <- get_data_comment_traces("Dutch") %>% left_join(., df_sites_nl)
+print_heatmap(df_comment_traces_nl, "Comment traces",df_retranslate_domains_nl)
 
 ```
 
 :::
+
+## Übersicht Kommentarspuren
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 42
+#| fig-width: 10
+
+
+# print_data <- get_data_traces("German") %>% filter(trace != "fyRe")
+# print_heatmap_(print_data, df_retranslate_domains_de)
+
+
+```
+
+
 

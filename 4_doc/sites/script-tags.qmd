@@ -20,19 +20,19 @@ source("../config/config.R")
 #   mutate(site = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.)) 
 # 
 
-# con <- dbConnect(RPostgres::Postgres(), 
-#                  dbname = dsn_database,
-#                  host = dsn_hostname, 
-#                  port = dsn_port,
-#                  user = dsn_uid, 
-#                  password = dsn_pwd
-# )
+con <- dbConnect(RPostgres::Postgres(),
+                 dbname = dsn_database,
+                 host = dsn_hostname,
+                 port = dsn_port,
+                 user = dsn_uid,
+                 password = dsn_pwd
+)
 
 # dbDisconnect(con)
 
-# get_script_tags <- function(sphere){
-#   df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.tag, fh.name, fh.attr FROM sites s INNER JOIN tags fh ON fh.site = s.sha1 WHERE s.sphere LIKE '", sphere, "' AND tag LIKE 'script' ORDER BY s.crawl_date"))
-# }
+get_script_tags <- function(sphere){
+  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.sha1, t.tag, t.name, t.attr, t.group FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere = '", sphere, "' AND t.tag = 'script' ORDER BY s.crawl_date"))
+}
 
 # 7a7680601a641ca3f1ad02053e6aa35fe53c111e
 
@@ -44,14 +44,22 @@ source("../config/config.R")
 ```
 
 ```{r}
+
+# scripts_embedded <- read_csv("../../data/1-parsing/scripts/German/scripts-raw-2th-delivery-groups-test.csv")
 # 
-# df_script_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, t.tag, t.name, t.attr FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere = 'German' AND t.tag = 'script'"))
+# scripts_called <- get_script_tags("German")
 
 ```
 
-```{r}
+wenn alles geparsed ist: 
+  - beide dateien zusammenführen - done
+  - distincten - done
+  - Datenbanktabelle erweitern um content-spalte - done
+  - aktuelle Tabelle abrufen mit tags-id - done
+  - joinen mit tatsächlichem content - done
+  - filtern auf !is.na(content) - done
+  - update table fahren
+  
 
-# df_script_tag <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, t.attr FROM tags t WHERE t.sphere = 'German' AND t.tag = 'script'"))
 
 
-```

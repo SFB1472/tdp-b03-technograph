@@ -45,13 +45,6 @@ make_df <- function(df, sphere_){
   return(df_return)
 }
 
-get_hashes <- function(sphere){
-  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.hashed_forms FROM sites s INNER JOIN findings_hashed fh ON fh.sha1 = s.sha1 WHERE s.sphere = '", sphere, "' AND s.export = 1 ORDER BY s.crawl_date"))
-  df_return <- make_df(df)
-}
-
-
-
 get_hashes_2 <- function(sphere_){
   df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.hashed_forms FROM sites s INNER JOIN findings_hashed_2 fh ON fh.sha1 = s.sha1 WHERE s.sphere = '", sphere_, "' AND fh.iteration = 1 ORDER BY s.crawl_date"))
   df_return <- make_df(df, sphere_)

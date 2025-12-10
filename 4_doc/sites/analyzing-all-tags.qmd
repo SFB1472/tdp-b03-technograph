@@ -12,7 +12,7 @@ library(tidyverse)
 library(DBI)
 library(RPostgres)
 library(urltools)
-library(googlesheets4)
+# library(googlesheets4)
 library(MetBrewer)
 library(ggforce)
 

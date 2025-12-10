@@ -9,7 +9,7 @@ library(DBI)
 library(RPostgres)
 library(urltools)
 
-source("../../config/config-secret.R")
+source("../config/config-secret-local.R")
 
 con <- dbConnect(RPostgres::Postgres(), 
                  dbname = dsn_database,
@@ -20,28 +20,27 @@ con <- dbConnect(RPostgres::Postgres(),
 )
 
 get_script_info <- function(sphere, tag){
-  
-  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.group, s.crawl_date, t.name, t.attr, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE'", sphere, "' AND t.tag LIKE '", tag, "'")) 
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.group, s.crawl_date, t.attr, t.value, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "' s.of_interest = 'TRUE'")) 
   
 }
 
 get_script_src <- function(sphere, tag){
-  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.group, s.crawl_date, t.name, t.attr, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere LIKE '", sphere, "' AND t.tag LIKE '", tag, "' AND t.name LIKE 'src'")) 
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site as sha1_site, t.tag, t.group, s.crawl_date, t.attr, t.value, s.sphere, s.site FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere = '", sphere, "' AND t.tag = '", tag, "' AND t.attr = 'src' AND s.of_interest = 'TRUE'")) 
 }
 
 get_nr_unique_sites <- function(sphere){
-  df <- dbGetQuery(conn = con, paste0("SELECT COUNT(DISTINCT s.sha1) FROM sites s WHERE s.sphere LIKE '", sphere,"'")) 
+  df <- dbGetQuery(conn = con, paste0("SELECT COUNT(DISTINCT s.sha1) FROM sites s WHERE s.sphere = '", sphere,"'  AND s.of_interest = 'TRUE'")) 
 }
 
 get_nr_unique_script_tags <- function(sphere){
-  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.attr FROM tags t WHERE t.sphere LIKE '", sphere,"' AND t.name LIKE 'src'")) 
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.value FROM tags t WHERE t.sphere = '", sphere,"' AND t.attr = 'src' AND t.tag = 'script'")) 
 }
 
 # get_nr_unique_sites("German")
 
-df_script_csv_de <- read_csv(file = "../../data/raw/German/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
-df_script_csv_nl <- read_csv(file = "../../data/raw/Dutch/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
-df_script_csv_world <- read_csv(file = "../../data/raw/World/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
+df_script_csv_de <- read_csv(file = "../../data/raw/German/1st/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
+df_script_csv_nl <- read_csv(file = "../../data/raw/Dutch/1st/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
+df_script_csv_world <- read_csv(file = "../../data/raw/World/1st/js-file-information.csv", col_select =c("crawl_date", "sha1", "url"))
 
 # df_script_csv_de %>% select(sha1) %>% distinct() %>% nrow()
 
@@ -51,6 +50,8 @@ df_script_csv_world <- read_csv(file = "../../data/raw/World/js-file-information
 
 ```
 
+to do: Gespräch mit Helge einarbeiten. Er sagt, dass er selbst verwundert wie wenig matches es gibt. Er meinte, er hätte das überprüft und wäre zu dem Ergebnis gekommen, dass das Archive einfach nicht mehr archiviert hat. Wichtig ist noch, er arbeitet mit den SURT-Pfaden den Dateien, vielleicht sollte ich das noch überprüfen. Er hat eine Funktion geschrieben, die URLs ins SURT-Format überträgt, allerdings in sparkl implementiert, vielleicht ließe sich das via copilot in eine R Funktion umwandeln. Helge hat auch einen Datensatz zu seinem Test, den er für mich gemacht hat, den wollte er mir noch zur Verfügung stellen. 
+
 ## Why analysing archived scripts?
 
 Die Datenlieferung umfasste unterschiedliche Tabellen, mit unterschiedlich archivierten Datentypen. Alle bisherige Analysen basieren auf den Tabellen, die die HTML-Seiten enthalten. Um die Einbettung der Kommentarsysteme besser verstehen zu können, ist aber noch eine andere Tabelle interessant. Nämlich diejenige, die archivierte javascript-Dateien enthält.
@@ -58,6 +59,8 @@ Die Datenlieferung umfasste unterschiedliche Tabellen, mit unterschiedlich archi
 Wären in dieser Tabelle alle Script-Dateien enthalten, die von den HTML-Seiten referenziert werden, wäre das für das Projekt eine große Bereicherung.
 
 ## Umfang der jeweiligen archivierten Datentypen
+
+In dieser Tabelle sind zunächst die beiden rechten Spalten interessant: es gibt sehr viel weniger Scripte in der CSV-Datei als externe Scripte in den Seiten verlinkt sind. 
 
 Für die letzte Spalte wurden nur solche Referenzen gezählt, die via `source`-Attribute eingebunden wurden.
 
@@ -74,38 +77,51 @@ Die nachfolgenden Tabellen zeigen, welche Script-Dateien archiviert wurden, die 
 In den Tabellen der archivierten javascript-Dateien sind die URLs der ursprünglichen Scripte enthalten. Diese Information kombiniert mit den URLs aus den `script`-tags der HTML-Dateien, gibt Auskunft über den Umfang der Überlappungen.
 
 ::: panel-tabset
-### German
+
+### German - Demo mismatch
+
+Zwar werden Script-URLs gefunden, die sowohl in HTML-Seiten als auch in der Script-CSV genannt werden, allerdings bleibt dann unklar, welcher der Hashes aus der Script-CSV der richtige für die HTML-Seite ist. Dafür soll die Tabelle ein Beispiel geben, sie zeigt, den Hash einer HTML-Seite, die ein Script mit dem URL in `value` referenziert. Die letzte Spalte zeigt die vielen unterschiedlichen Hashes, die für diese URL in der Script-CSV gelistet sind. 
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_script_src <- get_script_src("German", "script")
+df_script_src_de <- get_script_src("German", "script")
+df_script_csv_de_s <- df_script_csv_de %>% select(-crawl_date) %>% distinct()
 
-df_joined_scripts <- df_script_src %>% 
-  select(site, attr) %>% 
+df_joined_scripts <- df_script_src_de %>% 
+  select(sha1_site, site, value) %>% 
+  distinct() %>% 
   # mutate(attr = trimws(attr)) %>% 
-  left_join(., df_script_csv_de, by = c("attr" = "url")) %>% #View()
+  left_join(., df_script_csv_de_s, by = c("value" = "url")) %>% #View()
   distinct()
 
-DT::datatable(df_joined_scripts %>% filter(!is.na(sha1)) %>% select(attr) %>% distinct()) #%>% View())
+DT::datatable((df_joined_scripts %>% filter(sha1_site == "0000f2ba13059cd8996a312a5dfc7ea10a600605") %>% rename(sha1_script = sha1)))
 
 ```
+
+### German
+
+```{r}
+
+DT::datatable(df_joined_scripts %>% filter(!is.na(sha1)) %>% select(value) %>% distinct()) #%>% View())
+```
+
 
 ### Dutch
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
 
-df_script_src <- get_script_src("Dutch", "script")
+df_script_src_nl <- get_script_src("Dutch", "script")
 
-df_joined_scripts <- df_script_src %>% 
-  select(site, attr) %>% 
+df_joined_scripts <- df_script_src_nl %>% 
+  select(site, value) %>% 
   # mutate(attr = trimws(attr)) %>% 
-  left_join(., df_script_csv_nl, by = c("attr" = "url")) %>% #View()
+  left_join(., df_script_csv_nl, by = c("value" = "url")) %>% #View()
   distinct()
 
 
 
-DT::datatable(df_joined_scripts %>% filter(!is.na(sha1)) %>% select(attr) %>% distinct() )#%>% View()
+DT::datatable(df_joined_scripts %>% filter(!is.na(sha1)) %>% select(value) %>% distinct() )#%>% View()
 
 ```
 
@@ -114,17 +130,17 @@ DT::datatable(df_joined_scripts %>% filter(!is.na(sha1)) %>% select(attr) %>% di
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
 
-df_script_src <- get_script_src("World", "script")
+df_script_src_world <- get_script_src("World", "script")
 
-df_joined_scripts <- df_script_src %>% 
-  select(site, attr) %>% 
+df_joined_scripts <- df_script_src_world %>% 
+  select(site, value) %>% 
   # mutate(attr = trimws(attr)) %>% 
-  left_join(., df_script_csv_world, by = c("attr" = "url")) %>% #View()
+  left_join(., df_script_csv_world, by = c("value" = "url")) %>% #View()
   distinct()
 
 
 
-DT::datatable(df_joined_scripts %>% filter(!is.na(sha1)) %>% select(attr) %>% distinct() )#%>% View()
+DT::datatable(df_joined_scripts %>% filter(!is.na(sha1)) %>% select(value) %>% distinct() )#%>% View()
 
 
 
@@ -133,7 +149,7 @@ DT::datatable(df_joined_scripts %>% filter(!is.na(sha1)) %>% select(attr) %>% di
 
 ## Script URLs from HTML pages without matching from archived scripts
 
-Sind womöglich relative Pfadangaben schuld an der geringen Überlappung zwischen den Archiven?
+Sind womöglich relative Pfadangaben schuld an der geringen Überlappung zwischen den Archiven? - hab vergessen, warum ich mir die Frage gestellt hatte.
 
 Hier wird gezählt wie viele absolute bzw. relative Pfadangaben aus den HTML-Seiten extrahiert wurden.
 
@@ -142,16 +158,17 @@ Hier wird gezählt wie viele absolute bzw. relative Pfadangaben aus den HTML-Sei
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_script_src <- get_script_src("German", "script")
+# df_script_src <- get_script_src("German", "script")
+# df_script_csv_de_s <- df_script_csv_de %>% select(-crawl_date) %>% distinct()
 
-df_joined_scripts <- df_script_src %>% 
-  select(site, attr) %>% 
+df_joined_scripts <- df_script_src_de %>% 
+  select(site, value) %>% 
   # mutate(attr = trimws(attr)) %>% 
-  anti_join(., df_script_csv_de, by = c("attr" = "url")) %>% #View()
+  anti_join(., df_script_csv_de_s, by = c("value" = "url")) %>% #View()
   distinct()
 
-DT::datatable(df_joined_scripts %>% select(attr) %>% distinct() %>% #nrow()
-  mutate(is_relative = ifelse(str_detect(attr, "^http"), 0, 1)) %>% 
+DT::datatable(df_joined_scripts %>% select(value) %>% distinct() %>% #nrow()
+  mutate(is_relative = ifelse(str_detect(value, "^http"), 0, 1)) %>% 
   group_by(is_relative) %>% 
   summarise(count = n()))
 
@@ -161,16 +178,16 @@ DT::datatable(df_joined_scripts %>% select(attr) %>% distinct() %>% #nrow()
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_script_src <- get_script_src("Dutch", "script")
+# df_script_src <- get_script_src("Dutch", "script")
 
-df_joined_scripts <- df_script_src %>% 
-  select(site, attr) %>% 
+df_joined_scripts <- df_script_src_nl %>% 
+  select(site, value) %>% 
   # mutate(attr = trimws(attr)) %>% 
-  anti_join(., df_script_csv_nl, by = c("attr" = "url")) %>% #View()
+  anti_join(., df_script_csv_nl, by = c("value" = "url")) %>% #View()
   distinct()
 
-DT::datatable(df_joined_scripts %>% select(attr) %>% distinct() %>% #nrow()
-  mutate(is_relative = ifelse(str_detect(attr, "^http"), 0, 1)) %>% 
+DT::datatable(df_joined_scripts %>% select(value) %>% distinct() %>% #nrow()
+  mutate(is_relative = ifelse(str_detect(value, "^http"), 0, 1)) %>% 
   group_by(is_relative) %>% 
   summarise(count = n()))
 
@@ -180,16 +197,16 @@ DT::datatable(df_joined_scripts %>% select(attr) %>% distinct() %>% #nrow()
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_script_src <- get_script_src("World", "script")
+# df_script_src <- get_script_src("World", "script")
 
-df_joined_scripts <- df_script_src %>% 
-  select(site, attr) %>% 
+df_joined_scripts <- df_script_src_world %>% 
+  select(site, value) %>% 
   # mutate(attr = trimws(attr)) %>% 
-  anti_join(., df_script_csv_world, by = c("attr" = "url")) %>% #View()
+  anti_join(., df_script_csv_world, by = c("value" = "url")) %>% #View()
   distinct()
 
-DT::datatable(df_joined_scripts %>% select(attr) %>% distinct() %>% #nrow()
-  mutate(is_relative = ifelse(str_detect(attr, "^http"), 0, 1)) %>% 
+DT::datatable(df_joined_scripts %>% select(value) %>% distinct() %>% #nrow()
+  mutate(is_relative = ifelse(str_detect(value, "^http"), 0, 1)) %>% 
   group_by(is_relative) %>% 
   summarise(count = n()))
 

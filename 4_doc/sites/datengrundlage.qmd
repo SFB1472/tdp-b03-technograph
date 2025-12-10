@@ -22,6 +22,11 @@ con <- dbConnect(RPostgres::Postgres(),
 
 ```
 
+to do: 
+  Grafiken: - ein Bild für den gesamten Datensatz
+            - Legenden anpassen, alle sollten die gleiche Spanne umfassen
+
+
 Welche Fragen sind fürs Forschungsprojekt wichtig?
 
 -   ab wann haben wir überhaupt Daten: Weil das Projekt verspricht ab den späten 90ern zu untersuchen.
@@ -106,7 +111,7 @@ df_plot %>%
 #| fig-width: 10
 
 
-df_sites_2th_export <- dbGetQuery(conn = con, "SELECT * FROM sites WHERE export = 2") %>% 
+df_sites_2th_export <- dbGetQuery(conn = con, "SELECT * FROM sites s WHERE s.export = 2 AND s.of_interest = TRUE") %>% 
   mutate(year = ymd(crawl_date) %>% year(),
              site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
 
@@ -137,7 +142,7 @@ df_sites_2th_export %>%
 #| fig-width: 10
 
 
-df_sites_all <- dbGetQuery(conn = con, "SELECT s.crawl_date, s.sha1, s.sphere FROM sites s") %>% 
+df_sites_all <- dbGetQuery(conn = con, "SELECT s.crawl_date, s.sha1, s.sphere FROM sites s WHERE s.of_interest ='TRUE'") %>% 
   mutate(year = ymd(crawl_date) %>% year(),
          month = ymd(crawl_date) %>% month())#,
              # site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
@@ -169,10 +174,12 @@ df_sites_all %>%
 
 df_sites_all %>%
   mutate(month = ymd(crawl_date) %>% month()) %>% 
-  summarise(counted_sites = n(), .by = c(month, sphere)) %>% #View()
-  ggplot(., aes(x = month, y = sphere, fill = counted_sites)) +
-  geom_tile() +
-  scale_x_continuous(breaks = c(2,4,6,8,10,12), expand = c(0, NA), name = "crawl_month") +
+  summarise(counted_sites = n(), .by = c(month, sphere)) %>% 
+  mutate(date = paste0("2025-",month, "-01") %>% ymd())%>% #View()
+  ggplot(., aes(x = date, y = sphere, fill = counted_sites)) +
+  geom_raster() +
+  # scale_x_continous(breaks = c(2,4,6,8,10,12), expand = c(0, NA), name = "crawl_month") +
+    scale_x_date(date_breaks = "month", date_labels = "%b", expand = c(0, NA), name = "crawl_month") +
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
   scale_y_discrete(expand = c(0, NA)) +
   theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets  +
@@ -195,13 +202,15 @@ df_sites_timestamp <- dbGetQuery(conn = con, "SELECT s.crawl_timestamp, s.sha1, 
 
 df_sites_timestamp %>%
   mutate(hour = hour(crawl_timestamp)) %>%
-  reframe(., counted = n(), .by = c(hour,sphere)) %>%
-  ggplot(., aes(x = hour, y = sphere, fill = counted)) +
+  reframe(., counted = n(), .by = c(hour,sphere)) %>% #View()
+  mutate(fake_date = paste0("2025-08-14 ", hour, ":00:00") %>% as_datetime()) %>% 
+  ggplot(., aes(x = fake_date, y = sphere, fill = counted)) +
   geom_tile() +
   scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
-  scale_x_continuous(expand = c(0, NA)) +
+  # scale_x_continuous(expand = c(0, NA)) +
+    scale_x_datetime(date_breaks = "2 hours", date_labels = "%I%p", expand = c(0, NA)) +
   scale_y_discrete(expand = c(0, NA)) +
-  theme(axis.text.x = element_text( hjust = 1)) + theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets  +
+  theme(axis.text.x = element_text( hjust = 0.5)) + theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets  +
   guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
 
 ```

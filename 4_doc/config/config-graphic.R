@@ -1,16 +1,21 @@
 
 library(ggtext)
 library(gdtools)
-# library(extrafont)
-# extrafont::loadfonts(quiet = TRUE)
+library(extrafont)
+library(systemfonts)
+extrafont::loadfonts(quiet = TRUE)
 gdtools::register_gfont("Roboto Mono")
 
-typo_sfb_mono <- "GT America Mono LC Rg"
+# typo_sfb_mono <- "GT America Mono LC Rg"
+typo_sfb_mono <- "Menlo"
 typo_sfb_mono_ggiraph <- "Roboto Mono"
 
 # systemfonts::register_font(typo_sfb_mono)
 # typo_sfb_mono_remote <- "GT America Mono LC Rg"
 # typo_sfb_mono_bold_remote <- "GT America Mono Rg"
+
+fonts <- system_fonts()
+# View(fonts[fonts$monospace, ])
 
 sfb_black <- "#000000"
 sfb_grey <- "#E5E5E5"
