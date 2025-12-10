@@ -41,6 +41,8 @@ data/*
 !data/index/
 
 **/config-secret.R
+**/config-secret-local.R
+backup*
 **.svg
 **.ai
 
