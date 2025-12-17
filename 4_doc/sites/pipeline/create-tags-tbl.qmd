@@ -462,3 +462,27 @@ df_tags_db <- df_tags %>%
 dbWriteTable(conn = con, name = "tags", df_tags_db, append = TRUE)
 
 ```
+
+## Appendix: plain text / snippet table
+
+```{r}
+
+CURRENT_SPHERE <- "German"
+CURRENT_SPHERE <- "Dutch"
+CURRENT_SPHERE <- "World"
+
+header <-  c("site","search_date","snippet","detected")
+list_of_files <- list.files(path = paste0("../../../data/1-parsing/snippet-detection/",CURRENT_SPHERE,"/comments/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+df_snippets <- read_csv(list_of_files, id = "file_name", col_names = header)
+
+df_snippets_db <- df_snippets %>% 
+  # filter(site %in% sites_of_interest) %>% # already done before parsing
+  mutate(sphere = CURRENT_SPHERE) %>% 
+  select(-file_name)  
+
+
+dbWriteTable(conn = con, name = "snippets", df_snippets_db, append = TRUE)
+
+```
+
+
