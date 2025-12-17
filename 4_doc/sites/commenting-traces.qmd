@@ -1,6 +1,6 @@
 ---
 title: "Commenting traces"
-
+code-fold: true
 ---
 
 ```{r}
@@ -15,6 +15,8 @@ library(RPostgres)
 library(urltools)
 library(MetBrewer)
 library(ggforce)
+library(reactable)
+library(BAMMtools)
 
 source("../config/config-secret-local.R")
 source("../config/config-graphic.R")
@@ -32,7 +34,7 @@ con <- dbConnect(RPostgres::Postgres(),
 
 ```
 
-# Combining both approaches
+## Combining both approaches
 
 ```{r}
 #| echo: false
@@ -58,12 +60,14 @@ get_sites <- function(sphere_){
   df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, s.sphere FROM sites s WHERE s.sphere = '",sphere_,"'"), check_interrupts = TRUE)
 }
 
+
+
 get_data_traces_with_tags <- function(sphere_){
   df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site as sha1, t.trace, t.tag, t.search_type, t.search_method, t.comment, t.sphere FROM traces t WHERE t.search_topic = 'comment' AND t.sphere = '",sphere_,"'"), check_interrupts = TRUE)
 }
 
 get_data_traces <- function(sphere_){
-  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.search_method, t.search_type, t.trace FROM sites s INNER JOIN traces t ON s.sha1 = t.site WHERE t.search_topic='comment' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"), check_interrupts = TRUE)
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site as sha1, t.trace, t.tag, t.search_type, t.search_method, t.comment, t.sphere FROM traces t WHERE t.search_topic = 'comment' AND t.sphere = '",sphere_,"'"), check_interrupts = TRUE)
 }
 
 get_data_comment_traces <- function(sphere_){
@@ -125,24 +129,299 @@ print_heatmap_ <- function(df_data, df_retranslate_domains){
 
 ```
 
-## Snippets found - plain text and tags
+## Statistik: wie unterscheiden sich die Funde der verschiedenen Sprachräume?
+
+Was hier auffällt: die Snippetliste findet in den Tags viel mehr, als über die plain text Suche. Das ist ein false friend, wahrscheinlich wurden die Spuren aus der plain-text-Suche reduziert auf eine Spur, selbst wenn es mehrere in einer Seite gegeben hätte. Bei dieser Methode liefert die Information darüber, wie oft ein Snippet gefunden wurde keinen Mehrwert, im Gegensatz zur Suche in den Tags, denn daraus lassen sich Rückschlüsse auf Programmierpraktiken schließen und diese Kenntnis können wiederum hilfreich sein für den Übersetzungprozess den Wandel von Kommentaroptionen zu visualisieren. 
+
+Außerdem waren die Snippetliste(n) nicht die gleichen. Für die Suche in den Tags, wurde die Liste stark vereinfacht. Wobei es im internationalen Sprachraum fast auf die Zahl genau gleich viele Funde sind. Hier ist also noch einmal Recherche notwendig, was da in der Datenbank ist und ob irgendeine andere Unregelmäßigkeit vorliegt.
 
 
-Ein stichprobenartiger Vergleich der Spuren der verschiedenen Ansätze zeigt interessante "Lücken" auf. Generell gibt es mehr Funde wenn HTML als Text verstanden wird. 
+```{r}
+
+df_stats_1 <- dbGetQuery(conn = con, "SELECT t.sphere, t.search_type, t.search_method, COUNT(*) as counted FROM traces t GROUP BY (t.sphere, t.search_method, t.search_type)")
+
+reactable(df_stats_1, defaultSorted = c("sphere", "search_type"))
+
+```
+
+## Statistik: in welchen Elementen wurden die Spuren gefunden
+
+Die Beantwortung der Frage zielt hier noch auf die Struktur der HTML-Elemente. Tags dienen zur Strukturierung der Seite und ermöglichen so eine zielgerichtetere Ausrichtung der Methode. Tags selbst sind aber auch Informationsträger, sie können eine ganze Reihe Eigenschaften aufweisen, die Spuren auf Kommentaroptionen enthalten. 
+
+Solche Eigenschaften werden in sog. Attribut:Value Kombinationen notiert, z.b. `<div width = "100%" disqus-id = "1234">`. Dieses div tag enthält eine Attribut-Wert-Kombination, die besagt, dass dieses Element eine Breite von 100% in der Webseite einnehmen soll. Außerdem gibt es ein Attribut mit dem Namen disqus-id. Der Wert dieser Kombination ist für die Forschung irrelevant, das Attribut aber wichtig.
+Andere Websiten könnten die gleiche Information wie folgt kodieren `<div width = "100%" data = "disqus-id-1234">`. An der Funktionalität ändern das nichts, unterschiedliche Webseiten-Entwickler implementieren die notwendige Information auf verschiedene Weise. 
+
+Das Beispiel zeigt unterschiedliche Praktiken des Programmierens, für die Recherche nach den Spuren der Kommentaroptionen zeigt es, dass alle Datenfelder für die Auswertung relevant sind. Zunächst werden die Tag identifiziert, daraus die Attribut-Wert-Kombinationen entnommen und in den resultierenden Spalten nach Spuren gesucht. Die folgenden Tabellen fächern die obigen Informationen noch etwas weiter auf und zeigen welche Teile eines Tags Spurenträger sind. 
+
+Warum ist diese Detailtiefe wichtig? Um von hier aus weiter in Richtung Forschungsfrage zu arbeiten, ist es relevant zu wissen, ob sich über die unterschiedlichen Sprachräume verschiedene Praktiken des Programmierens zeigen, die dann nicht auf gleiche Weise übersetzt werden können, wenn es darum geht Veränderungen ausfindig zu machen. 
+
+Zum oben formulieren Rechercheauftrag: vielleicht ein Ansatzpunkt zu schauen, ob die Snippets in plain-text alle unique sind, aber in den tags obviously not. 
+
+Steht in der Spalte `comment` "embedded", wurde die Spur in einem eingebetteten Script-Tag gefunden.  
+
+```{r}
+
+df_stats_comment <- dbGetQuery(conn = con, paste0("SELECT t.sphere, t.search_type, t.search_method, t.comment, COUNT(*) as counted FROM traces t  GROUP BY (t.sphere, t.search_method, t.search_type, t.comment)"))
+
+orange_pal <- function(x) rgb(colorRamp(c("#eff4f5", "#62929a"))(x), maxColorValue = 255)
+
+
+```
+
+
+::: panel-tabset
+
+### German
+
+```{r}
+
+SPHERE_FOR_TABSET <- "German"
+df_print <- df_stats_comment %>% 
+  filter(sphere == SPHERE_FOR_TABSET) %>% 
+  arrange(search_type) %>% 
+  select(-sphere)
+
+reactable(df_print, columns = list(
+    counted = colDef(
+      style = function(value) {
+        normalized <- (value - min(df_stats_comment$counted)) / (max(df_stats_comment$counted) - min(df_stats_comment$counted))
+        color <- orange_pal(normalized)
+        list(background = color)
+      }
+    )
+  ))
+
+```
+
+### International
+
+```{r}
+SPHERE_FOR_TABSET <- "World"
+
+df_print <- df_stats_comment %>% 
+  filter(sphere == SPHERE_FOR_TABSET) %>% 
+  arrange(search_type) %>% 
+  select(-sphere)
+
+reactable(df_print, columns = list(
+    counted = colDef(
+      style = function(value) {
+        normalized <- (value - min(df_stats_comment$counted)) / (max(df_stats_comment$counted) - min(df_stats_comment$counted))
+        color <- orange_pal(normalized)
+        list(background = color)
+      }
+    )
+  ))
+```
+
+### Dutch
+
+```{r}
+SPHERE_FOR_TABSET <- "Dutch"
+
+df_print <- df_stats_comment %>% 
+  filter(sphere == SPHERE_FOR_TABSET) %>% 
+  arrange(search_type) %>% 
+  select(-sphere)
+
+reactable(df_print, columns = list(
+    counted = colDef(
+      style = function(value) {
+        normalized <- (value - min(df_stats_comment$counted)) / (max(df_stats_comment$counted) - min(df_stats_comment$counted))
+        color <- orange_pal(normalized)
+        list(background = color)
+      }
+    )
+  ))
+
+```
+
+:::
+
+## Statistik: Kleinteiligste Darstellung
+
+```{r}
+
+df_stats_tags <- dbGetQuery(conn = con, paste0("SELECT t.sphere, t.search_type, t.search_method, t.comment, t.tag, COUNT(*) as counted FROM traces t  GROUP BY (t.sphere, t.search_method, t.search_type, t.comment, t.tag)"))
+
+
+```
+
+
+::: panel-tabset
+
+
+### German
+
+```{r}
+SPHERE_FOR_TABSET <- "German"
+
+df_print <- df_stats_tags %>% 
+  filter(sphere == SPHERE_FOR_TABSET) %>% 
+  arrange(search_type) %>% 
+  select(-sphere)
+
+reactable(df_print, columns = list(
+    counted = colDef(
+      style = function(value) {
+        normalized <- (value - min(df_stats_tags$counted)) / (max(df_stats_tags$counted) - min(df_stats_tags$counted))
+        color <- orange_pal(normalized)
+        list(background = color)
+      }
+    )
+  ), defaultPageSize = 12)
+
+```
+
+### International
+
+```{r}
+SPHERE_FOR_TABSET <- "World"
+
+df_print <- df_stats_tags %>% 
+  filter(sphere == SPHERE_FOR_TABSET) %>% 
+  arrange(search_type) %>% 
+  select(-sphere)
+
+reactable(df_print, columns = list(
+    counted = colDef(
+      style = function(value) {
+        normalized <- (value - min(df_stats_tags$counted)) / (max(df_stats_tags$counted) - min(df_stats_tags$counted))
+        color <- orange_pal(normalized)
+        list(background = color)
+      }
+    )
+  ), defaultPageSize = 14)
+# reactable(df_stats_world %>% arrange(search_type), 
+
+```
+
+### Dutch
+
+```{r}
+SPHERE_FOR_TABSET <- "Dutch"
+
+df_print <- df_stats_tags %>% 
+  filter(sphere == SPHERE_FOR_TABSET) %>% 
+  arrange(search_type) %>% 
+  select(-sphere)
+
+reactable(df_print, columns = list(
+    counted = colDef(
+      style = function(value) {
+        normalized <- (value - min(df_stats_tags$counted)) / (max(df_stats_tags$counted) - min(df_stats_tags$counted))
+        color <- orange_pal(normalized)
+        list(background = color)
+      }
+    )
+  ), defaultPageSize = 11)
+
+```
+
+:::
+
+## Zeitverlauf
+
+```{r}
+#| fig-height: 9
+#| fig-width: 10
+
+get_plot <- function(sphere_){
+# sphere_ <- "World"
+  df_stats_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, t.sphere, t.search_type, t.search_method, t.comment, t.tag FROM traces t LEFT JOIN sites s ON t.site = s.sha1 WHERE t.sphere = '",sphere_,"'"))
+  
+  
+  df_print_ <- df_stats_tags %>% 
+    mutate(group = cur_group_id(), .by = c(search_type, search_method, comment, tag)) %>% #View()
+    mutate(year_cleaned = year(crawl_date), 
+           title = paste(search_type, search_method, comment, tag, sep = "-")) %>% 
+    reframe(counted = n(), .by = c(year_cleaned, search_type, search_method, comment, tag, group, title)) 
+  
+  breaks <- getJenksBreaks(df_print_$counted, 5)
+  
+  df_print <- df_print_ %>% 
+    mutate(color_breaks = cut(counted, breaks = breaks, include.lowest = TRUE, right = FALSE, labels = FALSE),
+           color_labels = cut(counted, breaks = breaks, include.lowest = TRUE))# %>% as.character()) #%>% View()
+  
+  color_labels <- breaks[-5]
+  
+  ggplot(df_print, aes(x = year_cleaned, y = 1, fill= color_breaks)) +
+    geom_tile() +
+    facet_col(vars(title), scales = "free_y", space = "free") +
+    scale_x_continuous(expand = c(0,NA), limits = c(1997,2021)) +
+    # scale_fill_manual(values = met.brewer("Hokusai2"), na.value = "grey90", name = "number of traces found" ) +
+    scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", labels = color_labels, name = "number of websites available" ) +
+    guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines"))) +
+    theme_b03_base + 
+    theme_b03_base_typo_static +
+    theme_b03_heatmap +
+    theme_b03_facets +
+    theme_b03_legend_discrete +
+    theme_b03_panel_spacing +
+    theme(axis.text.y = element_blank()
+          )
+}
+```
+
+
+:::panel-tabset
+
+### German
+
+```{r}
+#| fig-height: 9
+#| fig-width: 10
+#| warning: false
+
+get_plot("German")
+
+```
+### International
+
+```{r}
+#| fig-height: 9
+#| fig-width: 10
+#| warning: false
+
+get_plot("World")
+
+```
+
+### Dutch
+
+```{r}
+#| fig-height: 7
+#| fig-width: 10
+#| warning: false
+
+get_plot("Dutch")
+
+```
+
+:::
+
+
+
+## Vergleich der unterschiedlichen Ansätze auf Unternehmensebene
+
+Ein stichprobenartiger Vergleich der Spuren der verschiedenen Ansätze zeigt interessante "Lücken" auf. 
 
 Im Fall der SZ gibt es beispielsweise 13 Seiten, in denen das Snippet "disqus_thread" in der Textsuche gefunden wurde, aber nicht in den Tags. In diesem Fall wurde im eingebetteten CSS der Seite eine Klasse mit diesem Namen definiert. Sie kommt aber in der Seite nicht zum Einsatz. Diese Spur kann man deuten als einen Überrest eines Tests: vorübergehend wurde hier zusätzliche Styles definiert, die in den Seiten noch zu finden sind, die Funktionalität aber nicht. 
 
-Gigya wird nur über die plain-text-Suche gefunden. Alle Spuren darauf sind in einem Script-Tag direkt in die Seiten geschrieben. Auch gibt es hiervon nur eine Handvoll Seiten. 
-
-Bei der Welt gibt es Spuren auf Disqus in einem Link-Tag, diese habe ich nicht extra geparst. Meine (womöglich falsche) Annahme, dass alle Verlinkungen einen Bezug zu div-Tags haben würden geht hier schief. Ein span-Tag trägt hier noch eine Information "commentCount". 
+Bei der Welt gibt es Spuren auf Disqus in einem Link-Tag (`<a>`), diese habe ich nicht extra geparst. Meine (womöglich falsche) Annahme, dass alle Verlinkungen einen Bezug zu div-Tags haben würden geht hier schief. Ein span-Tag trägt hier noch eine Information "commentCount". 
 
 Frankfurter Rundschau auch in a- und span-tags Spuren auf disqus. 
 
 Grobes Fazit: in dem gröberen Ansatz der Textsuche im HTML finden sich mehr Spuren auf Kommentarsysteme. Das liegt daran, dass hier auch Bereiche durchsucht werden, die bei der Selektion der Tags außen vor bleiben. Was eine interessante Perspektive ist, denn das Argument für das Parsen der Tags lautet ja, dass es die Perspektive weitet. Diese Beobachtung führt zu einer weiteren Differenzierung der Spuren. Das Auffinden einer nicht verwendeten CSS-Klasse ohne Verwendung ist noch abstrakter, als das ein div-Tag, das zwar noch "disqus-threat" heißt, aber keinerlei Daten der Kommentare und Interaktionsmöglichkeiten mehr enthält. Einzig die Tatsache, dass es einige Funde in Link-tags gibt, die nicht einzeln geparst wurden, gibt zu denken, ob diese nicht noch zusätzlich extrahiert werden sollten.
 
+
+## Grafik zu allen Kommentarspuren in dem Datensatz
+
 Wie die Grafik zu lesen ist: Die Grafik verbindet beide Ansätze miteinander. Die Liste der vordefinierten Snippets wird hier auf die Tags angewendet. Das bringt einen enormen Vorteil für das weitere Vorgehen, denn über die Funde der Snippets in der Struktur des HTML, können diese Spuren auch für das machine learning verwendet werden.
 
 Zwischen den beiden Datensätzen gibt es (zum Glück) eine große Überlappung. Finden sich die Spuren aus der plain-text-suche innerhalb von Tags, werden sie in der Farbe des Tags gezeichnet. Befinden sie sich außerhalb, werden sie schwarz eingezeichnet.
+
+Darstellung sehr methodisch, interessanter: welche Spuren werden wann gefunden? Also, wenn Snippets gefunden werden, welche? Die generischen ... hm, wenn sich die schreibweise ändert, sagt das auch was, wenn sich tags ändern auch. Was wäre hier eine gute darstellung?
 
 ::: panel-tabset
 
@@ -153,15 +432,14 @@ Zwischen den beiden Datensätzen gibt es (zum Glück) eine große Überlappung. 
 #| warning: false
 #| error: false
 #| message: false
-#| fig-height: 75
+#| fig-height: 65
 #| fig-width: 10
 
 df_retranslate_domains_de <- get_domain_translation("German")
 df_sites_de <- get_sites("German")
-df_snippets_de <- get_data_traces_with_tags("German") %>% left_join(., df_sites_de) #%>% View()
+df_snippets_de <- get_data_traces("German") %>% left_join(., df_sites_de)
 
 # df_snippets_de %>% select(trace, tag, search_type, search_method, comment) %>% distinct() %>% View()
-
 findings_tags <- df_snippets_de %>% filter(search_method == "tag", search_type == "snippet_list") 
 
 non_overlapping_findings_sites_de <- df_snippets_de %>% filter(search_method == "plain_text", search_type == "snippet_list") %>% filter(!sha1 %in% findings_tags$sha1)
@@ -179,12 +457,12 @@ print_heatmap(df_snippets_in_tags_print_de, "snippets of commenting systems", df
 #| echo: false
 #| warning: false
 #| error: false
-#| fig-height: 55
+#| fig-height: 65
 #| fig-width: 10
 
 df_retranslate_domains_world <- get_domain_translation("World")
 df_sites_world <- get_sites("World")
-df_snippets_world <- get_data_traces_with_tags("World") %>% left_join(., df_sites_world)
+df_snippets_world <- get_data_traces("World") %>% left_join(., df_sites_world)
 
 findings_tags_world <- df_snippets_world %>% filter(search_method == "tag", search_type == "snippet_list") 
 
@@ -204,12 +482,12 @@ print_heatmap(df_snippets_in_tags_print_world, "snippets of commenting systems",
 #| echo: false
 #| warning: false
 #| error: false
-#| fig-height: 45
+#| fig-height: 65
 #| fig-width: 10
 
 df_retranslate_domains_nl <- get_domain_translation("Dutch")
 df_sites_nl <- get_sites("Dutch")
-df_snippets_nl <- get_data_traces_with_tags("Dutch") %>% left_join(., df_sites_nl)
+df_snippets_nl <- get_data_traces("Dutch") %>% left_join(., df_sites_nl)
 
 findings_tags_nl <- df_snippets_nl %>% filter(search_method == "tag", search_type == "snippet_list") 
 
@@ -225,8 +503,33 @@ print_heatmap(df_snippets_in_tags_print_nl, "snippets of commenting systems", df
 :::
 
 
-## Traces of "comment|komment" found
+## Häufigkeitsverteilung: Wie viele Spuren pro Seite
 
+```{r}
+
+df_stats_2 <- dbGetQuery(conn = con, "SELECT t.sphere, t.site, search_method, COUNT(*) as counted FROM traces t GROUP BY (t.sphere, t.site, t.search_method)")
+
+```
+
+Kommt mir so unsinnig vor, wenn ich auf die Fragmente schaue
+
+```{r}
+SPHERE_FOR_TABSET <- "German"
+
+df_stats_2 %>% 
+  filter(sphere == SPHERE_FOR_TABSET) %>% 
+  ggplot(aes(x = counted)) +
+  geom_bar() +
+  scale_x_continuous(limits = c(0, 250))+
+  facet_wrap(~search_method)
+
+```
+
+
+
+## Vergleich der unterschiedlichen Methoden
+
+to do
 
 ::: panel-tabset
 
@@ -239,8 +542,8 @@ print_heatmap(df_snippets_in_tags_print_nl, "snippets of commenting systems", df
 #| fig-height: 42
 #| fig-width: 10
 
-df_comment_traces_de <- get_data_comment_traces("German") %>% left_join(., df_sites_de)
-print_heatmap(df_comment_traces_de, "Comment traces",df_retranslate_domains_de)
+# findings_tags <- df_snippets_de %>% filter(search_method == "tag", search_type == "snippet_list") 
+# findings_plain_text <- df_snippets_de %>% filter(search_method == "plain_text", search_type == "snippet_list")
 
 ```
 
@@ -253,8 +556,8 @@ print_heatmap(df_comment_traces_de, "Comment traces",df_retranslate_domains_de)
 #| fig-height: 50
 #| fig-width: 10
 
-df_comment_traces_world <- get_data_comment_traces("World")%>% left_join(., df_sites_world)
-print_heatmap(df_comment_traces_world, "Comment traces",df_retranslate_domains_world)
+# findings_tags_world <- df_snippets_world %>% filter(search_method == "tag", search_type == "snippet_list") 
+# findings_plain_text_world <- df_snippets_world %>% filter(search_method == "plain_text", search_type == "snippet_list")
 
 ```
 
@@ -267,8 +570,8 @@ print_heatmap(df_comment_traces_world, "Comment traces",df_retranslate_domains_w
 #| fig-height: 40
 #| fig-width: 10
 
-df_comment_traces_nl <- get_data_comment_traces("Dutch") %>% left_join(., df_sites_nl)
-print_heatmap(df_comment_traces_nl, "Comment traces",df_retranslate_domains_nl)
+# findings_tags_nl <- df_snippets_nl %>% filter(search_method == "tag", search_type == "snippet_list") 
+# findings_plain_text_nl <- df_snippets_nl %>% filter(search_method == "plain_text", search_type == "snippet_list")
 
 ```
 
@@ -291,4 +594,6 @@ print_heatmap(df_comment_traces_nl, "Comment traces",df_retranslate_domains_nl)
 ```
 
 
+## random Notes
+Schönere Tabellendarstellung in quarto-Dokumenten: https://glin.github.io/reactable/articles/examples.html
 
