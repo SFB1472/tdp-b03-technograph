@@ -43,6 +43,21 @@ To do: Vorschausnippets auf die Tabellen erstellen, bspw die ersten zehn zeilen,
 snippets_to_find <- read.csv("../../../data/helper/24-07-12-Commenting-system-detection-patterns.csv", sep = ";")
 str_snippets_to_find <- snippets_to_find %>% select(regex) %>% pull(.) %>% paste(collapse = "|")
 
+
+
+get_data_snippets_traces_ <- function(search_in){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tags_id, t.tag, t.",search_in," as column_t, t.sphere FROM tags t WHERE t.missing IS NULL AND t.",search_in," ~* '", special_snippet, "'"), check_interrupts = TRUE) %>% 
+    mutate(trace = str_extract(column_t, regex(special_snippet, ignore_case = TRUE))) %>% 
+  select(-column_t)%>% 
+  mutate(search_method = "tag",
+         search_topic = "comment",
+         search_type = "snippet_list",
+         comment = search_in) 
+}
+
+
+
+
 get_data_snippets_plain_text <- function(sphere_){
   df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.snippet, s.sphere FROM sites s INNER JOIN snippets_2 t ON s.sha1 = t.site WHERE t.detected = 1 AND s.sphere ='", sphere_,"' AND s.of_interest = TRUE"), check_interrupts = TRUE) %>% 
   mutate(
@@ -147,6 +162,29 @@ df_snippets_tags_nl <- df_snippets_tags_nl_embedds_ %>%
   bind_rows(., df_snippets_plain_nl)
 
 ```
+
+### Snippet specification
+
+```{r}
+special_snippet <- "fyre-comment"
+
+attrs <- get_data_snippets_traces_("attr")
+values <- get_data_snippets_traces_("value")
+embedded <- get_data_snippets_traces_("embedded")
+
+better_fyre_trace <- attrs %>% 
+  bind_rows(., values) %>% 
+  bind_rows(., embedded)
+
+
+# get_special_snippet <- function(sphere_){
+df_test <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site as sha1, t.trace, t.tag, t.search_type, t.search_method, t.comment, t.sphere, t.traces_id FROM traces t WHERE LOWER(t.trace) = ('fyre')"), check_interrupts = TRUE)
+
+
+dbWriteTable(conn = con, name = "traces", better_fyre_trace, append = TRUE)
+
+```
+
 
 :::
 
