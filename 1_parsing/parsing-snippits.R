@@ -1,11 +1,10 @@
 library(tidyverse)
 library(lubridate)
-# library(vroom)
 library(furrr)
 library(future)
-source("config/config.R")
 library(DBI)
 library(RPostgres)
+source("config/config.R")
 # source("config/config-secret.R")
 source("config/config-secret-local.R")
 CURRENT_SPHERE <- "German"
@@ -21,19 +20,24 @@ future::plan(multisession)
 
 search_date <- lubridate::today()
 # files to parse ---------------------------
-# file_list <- list.files(paste0("data/0-preprocessing/", CURRENT_SPHERE, "-2/"))
-df_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sha1, s.export FROM sites s WHERE s.of_interest = TRUE AND s.sphere ='German'")) #%>%
+df_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sha1, s.export FROM sites s WHERE s.of_interest = TRUE AND s.sphere ='",CURRENT_SPHERE,"'")) #%>%
 file_list <- df_sites %>% select(sha1) %>% pull()
-
+ 
 # snippets to search for --------------------
-# snippets_to_search_for <- read_csv("data/helper/23-01-13-Commenting-system-detection-patterns.csv") %>% 
-#   select("system" = `Commenting system`, "snippet" = Snippet) %>% 
-#   filter(!is.na(system)) %>% select(snippet) %>% pull(.)
+snippets_to_search_for <- read.csv("data/helper/25-12-12-Commenting-system-detection-patterns.csv", sep = ";") %>% 
+  select("system" = `Commenting.system`, snippet) %>%
+  filter(!is.na(system)) %>% select(snippet) %>% pull(.)
+
+broken_files <- list.files(path = paste0("data/0-preprocessing/",CURRENT_SPHERE,"-fail"), full.names = FALSE) %>% 
+  enframe() %>% 
+  mutate(value = str_remove(value, ".html")) %>% pull(value)
+
+file_list <- setdiff(file_list, broken_files)
 
 # load(file="data/helper/tracker-domains.RData")
 # load(file="data/helper/tracker-snippets/tracker-pattern.RData")
 # load(file="data/helper/tracker-snippets/easylist-general-hide.RData")
-load(file = "data/helper/tracker-snippets/all-snippets.RData")
+# load(file = "data/helper/tracker-snippets/all-snippets.RData")
 
 df_snippet_detected <- future_walk(file_list, function(j){
   # print(j)
@@ -63,13 +67,26 @@ df_snippet_detected <- future_walk(file_list, function(j){
 
   },.progress = TRUE)
   pid = Sys.getpid()
-  write_csv(snippets, paste0("data/1-parsing/snippet-detection/", CURRENT_SPHERE,"/tracker/tracker-all-snippets-", pid, ".csv"), append = TRUE)
+  write_csv(snippets, paste0("data/1-parsing/snippet-detection/", CURRENT_SPHERE,"/comments/traces-all-snippets-", pid, ".csv"), append = TRUE)
 })
 
 #2d83cf0072d3868f5aa4e725d734f24861393483
 
 header <-  c("site","search_date","snippet","detected")
-list_of_files <- list.files(path = paste0("data/1-parsing/snippet-detection/",CURRENT_SPHERE,"/tracker/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+list_of_files <- list.files(path = paste0("data/1-parsing/snippet-detection/",CURRENT_SPHERE,"/comments/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
+already_parsed_sites <- read_csv(list_of_files, id = "file_name", col_names = header) %>% 
+  select(site) %>%
+  distinct() %>% 
+  # mutate(site = paste0(site, ".html")) %>%
+  pull()
+
+file_list <- setdiff(file_list, already_parsed_sites)
+
+
+
+
+
+list_of_files <- list.files(path = paste0("data/1-parsing/snippet-detection/",CURRENT_SPHERE,"/comments/"), recursive = FALSE, pattern = "\\.csv$", full.names = TRUE)
 already_parsed_sites <- read_csv(list_of_files, id = "file_name", col_names = header) %>% 
   select(site) %>%
   distinct() %>% 
