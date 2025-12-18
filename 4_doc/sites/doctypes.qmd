@@ -21,26 +21,26 @@ con <- dbConnect(RPostgres::Postgres(),
 )
 
 
-df_doctype_legend <- dbGetQuery(conn = con, paste0("SELECT DISTINCT(name) FROM tags WHERE tag = 'doctype'")) %>% 
+df_doctype_legend <- dbGetQuery(conn = con, paste0("SELECT DISTINCT(value) FROM tags WHERE tag = 'doctype'")) %>% 
   mutate(doctype_cleaned = 
            # str_extract(name, "(HTML|html|HTM|htm)\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?(transitional|strict|frameset|final)?(TRANSITIONAL|STRICT|FRAMESET|FINAL)?\\s{0,}?(\\/\\/\\w{2})?$"))  #,
-           str_extract(name, "-\\/\\/?(W2C|W30|W3C|wc3|IETF|IEFT|w3c|ietf)?\\/\\/?(DTD|dtd|Dtd)\\s(W3\\s)?(X|x)?(HTML|html|HTM|htm)\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?(transitional|strict|frameset|final)?(TRANSITIONAL|STRICT|FRAMESET|FINAL)?\\s{0,}?(\\/\\/\\w{2})?"),
-         doctype_cleaned = ifelse(str_detect(name, "^html$|^HTML$"), str_extract(name, "^html$|^HTML$"), doctype_cleaned),
-         doctype_cleaned = ifelse(str_detect(name,"html SYSTEM"), name, doctype_cleaned),
+           str_extract(value, "-\\/\\/?(W2C|W30|W3C|wc3|IETF|IEFT|w3c|ietf)?\\/\\/?(DTD|dtd|Dtd)\\s(W3\\s)?(X|x)?(HTML|html|HTM|htm)\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?(transitional|strict|frameset|final)?(TRANSITIONAL|STRICT|FRAMESET|FINAL)?\\s{0,}?(\\/\\/\\w{2})?"),
+         doctype_cleaned = ifelse(str_detect(value, "^html$|^HTML$"), str_extract(value, "^html$|^HTML$"), doctype_cleaned),
+         doctype_cleaned = ifelse(str_detect(value,"html SYSTEM"), value, doctype_cleaned),
          doctype_cleaned = str_remove(doctype_cleaned, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\s"),
          doctype_cluster = str_extract(doctype_cleaned, "X?(HTML|html)\\s?(\\d{1}\\.\\d{1,})?"),
          doctype_cluster = ifelse(str_detect(doctype_cluster,"html\\s{0,}"), trimws(str_to_upper(doctype_cluster)), doctype_cluster)) %>%
   
-  select(name,doctype_cleaned, doctype_cluster) #%>% 
+  select(value,doctype_cleaned, doctype_cluster) #%>% 
   # distinct() %>% 
   # group_by(doctype_cluster) %>% 
   # mutate(group = row_number())
 
 get_doctype_info <- function(sphere, tag){
-  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "'")) %>% 
-    mutate(doctype_cleaned = str_extract(name, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\sX?HTML\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?\\/\\/\\w{2}"),
-           doctype_cleaned = ifelse(str_detect(name, "^html$|^HTML$"), str_extract(name, "^html$|^HTML$"), doctype_cleaned),
-           doctype_cleaned = ifelse(str_detect(name,"html SYSTEM"), name, doctype_cleaned),
+  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.value, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "'")) %>% #View
+    mutate(doctype_cleaned = str_extract(value, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\sX?HTML\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?\\/\\/\\w{2}"),
+           doctype_cleaned = ifelse(str_detect(value, "^html$|^HTML$"), str_extract(value, "^html$|^HTML$"), doctype_cleaned),
+           doctype_cleaned = ifelse(str_detect(value,"html SYSTEM"), value, doctype_cleaned),
            doctype_cleaned = str_remove(doctype_cleaned, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\s"),
            doctype_cluster = str_extract(doctype_cleaned, "X?(HTML|html)\\s?(\\d{1}\\.\\d{1,})?"),
            doctype_cluster = ifelse(str_detect(doctype_cluster,"html\\s{0,}"), trimws(str_to_upper(doctype_cluster)), doctype_cluster),
@@ -63,10 +63,10 @@ get_doctype_info_relative <- function(sphere, tag){
     # mutate(date = paste0(year, "- ",month, "-01") %>% ymd(.)) %>% 
     ungroup()
   
-  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "'")) %>% 
-    mutate(doctype_cleaned = str_extract(name, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\sX?HTML\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?\\/\\/\\w{2}"),
-           doctype_cleaned = ifelse(str_detect(name, "^html$|^HTML$"), str_extract(name, "^html$|^HTML$"), doctype_cleaned),
-           doctype_cleaned = ifelse(str_detect(name,"html SYSTEM"), name, doctype_cleaned),
+  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.value, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "'")) %>% 
+    mutate(doctype_cleaned = str_extract(value, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\sX?HTML\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?\\/\\/\\w{2}"),
+           doctype_cleaned = ifelse(str_detect(value, "^html$|^HTML$"), str_extract(value, "^html$|^HTML$"), doctype_cleaned),
+           doctype_cleaned = ifelse(str_detect(value,"html SYSTEM"), value, doctype_cleaned),
            doctype_cleaned = str_remove(doctype_cleaned, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\s"),
            doctype_cluster = str_extract(doctype_cleaned, "X?(HTML|html)\\s?(\\d{1}\\.\\d{1,})?"),
            doctype_cluster = ifelse(str_detect(doctype_cluster,"html\\s{0,}"), trimws(str_to_upper(doctype_cluster)), doctype_cluster),

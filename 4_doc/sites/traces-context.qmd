@@ -1,0 +1,55 @@
+---
+title: "Traces context"
+---
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+library(ggforce)
+library(reactable)
+
+source("../config/config-secret-local.R")
+# source("../config/config-secret.R")
+source("../config/config-graphic.R")
+source("../config/config.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+# dbDisconnect(con)
+df_traces_per_site <- dbGetQuery(conn = con, "SELECT t.sphere, t.site as sha1, COUNT(*) as counted_traces FROM traces t WHERE t.search_method = 'tag' AND t.sphere = 'German' GROUP BY (t.sphere, t.site)")
+
+df_traces_context_site <- dbGetQuery(conn = con, "SELECT t.sphere, t.sha1, t.id_sha1_group, COUNT(*) as counted_context_rows FROM traces_context t WHERE t.sphere = 'German' GROUP BY (t.sphere, t.sha1, t.id_sha1_group)")
+
+testing <- dbGetQuery(conn = con, "SELECT * FROM traces_context WHERE id_sha1_group = '2e3bbffe33afc9b09aa4f2944bd9b8c5ae61b7ab_1'")
+
+df_traces_to_context <- df_traces_per_site %>% 
+  left_join(., df_traces_context_site) %>% 
+  arrange(desc(counted_traces))
+
+```
+
+
+## Zusammenhang der `traces` und `traces context` Tabellen
+
+Das Argument für die Erstellung der Tabelle traces context war, die traces für sich alleine so etwas wie Schlaglichter in den HTML-Seiten sind. Lichtpunkte, die signalisieren, hier gibt es eine Spur auf vergangene Kommentaroptionen. Abseits von der Unterscheidung zwischen generischen Spuren und solchen mit Hinweis auf Kommentarsysteme sind die Spuren nicht weiter untersuchbar, auf anderweitige Optionen, mit der Seite zu interagieren. 
+
+Diese Spuren sind einem Element innerhalb der Baumstruktur des HTML zu zu ordnen und das ermöglicht es aus dem Schlaglicht einen etwas breiten Lichtkegel zu machen. Ausgehend von der einzelnen Spur, wird in dem Zweig des Baums, in dem die Spur gefunden wurde, gesucht, ob es oberhalb, also zentraler im Baum weitere Spuren auf Kommentaroptionen gibt. So werden viele einzelne Spuren zusammen gefasst. 
+
+Die folgende Tabelle illustriert den Zusammenhang: Sie zeigt für den deutschen Sprachraum die 10 Seiten mit den meisten Spuren auf Kommentaroptionen. Die ID in der darauffolgenden Spalte steht für einen Kontextblock, die letzte Spalte zeigt, wieviele Zeilen dieser Kontextblock umfasst. 
+
+Anders formuliert, die 1951 Spuren in der obersten Zeile, sind alle Teil einen einzigen Kontextblocks und dieser Kontextblock besteht nicht nur aus den Spuren auf Kommentaroptionen, sondern noch aus 4817 weiteren Zeilen an Informationen. Diese können beispielsweise Indikatoren darauf liefern, dass Kommentierende registriert sein sollten, aber auch sehr viele, für die Fragestellung irrelevante Informationen. 
+
+```{r}
+
+reactable(df_traces_to_context %>% head(10))
+
+```
+

@@ -39,22 +39,22 @@ website:
             file: sites/approaches.qmd
           - text: "All commenting traces"
             file: sites/commenting-traces.qmd
-          - text: "Analyzing doctype"
+          - text: "Doctype"
             file: sites/doctypes.qmd
-          - text: "Analyzing form tags"
+          - text: "Form tags"
             file: sites/form-tags.qmd
           - text: "Context of form tags"
             file: sites/form-context.qmd
-          - text: "Analyzing script tags"
+          - text: "Script tags"
             file: sites/script-tags.qmd
-          - text: "Analyzing iframes"
+          - text: "Iframes"
             file: sites/iframes.qmd
-          - text: "Analyzing specific snippets"
+          - text: "Specific snippets"
             file: sites/special-snippets.qmd
           - text: "Context of all traces"
-            file: sites/tag-context.qmd
-          - text: "Understanding the Hashes"
-            file: sites/understanding-hashes.qmd
+            file: sites/traces-context.qmd
+          - text: "Hashes"
+            file: sites/hashes.qmd
 
 format:
   html:
