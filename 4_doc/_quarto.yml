@@ -37,20 +37,20 @@ website:
         contents:
           - text: "Different approaches how to interpret HTML"
             file: sites/approaches.qmd
+          - text: "All commenting traces"
+            file: sites/commenting-traces.qmd
           - text: "Analyzing doctype"
-            file: sites/analyzing-doctypes.qmd
+            file: sites/doctypes.qmd
           - text: "Analyzing form tags"
-            file: sites/analyzing-form-tags.qmd
+            file: sites/form-tags.qmd
           - text: "Context of form tags"
             file: sites/form-context.qmd
           - text: "Analyzing script tags"
-            file: sites/analyzing-script-tags.qmd
+            file: sites/script-tags.qmd
           - text: "Analyzing iframes"
-            file: sites/analyzing-iframes.qmd
+            file: sites/iframes.qmd
           - text: "Analyzing specific snippets"
-            file: sites/analyzing-all-tags.qmd
-          - text: "All commenting traces"
-            file: sites/commenting-traces.qmd
+            file: sites/special-snippets.qmd
           - text: "Context of all traces"
             file: sites/tag-context.qmd
           - text: "Understanding the Hashes"

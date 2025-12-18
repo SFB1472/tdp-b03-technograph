@@ -9,7 +9,7 @@ library(DBI)
 library(RPostgres)
 library(MetBrewer)
 
-source("../config/config-secret.R")
+source("../config/config-secret-local.R")
 source("../config/config-graphic.R")
 
 con <- dbConnect(RPostgres::Postgres(), 
@@ -21,7 +21,7 @@ con <- dbConnect(RPostgres::Postgres(),
 )
 
 
-df_doctype_legend <- dbGetQuery(conn = con, paste0("SELECT DISTINCT(name) FROM tags_2 WHERE tag LIKE 'doctype'")) %>% 
+df_doctype_legend <- dbGetQuery(conn = con, paste0("SELECT DISTINCT(name) FROM tags WHERE tag = 'doctype'")) %>% 
   mutate(doctype_cleaned = 
            # str_extract(name, "(HTML|html|HTM|htm)\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?(transitional|strict|frameset|final)?(TRANSITIONAL|STRICT|FRAMESET|FINAL)?\\s{0,}?(\\/\\/\\w{2})?$"))  #,
            str_extract(name, "-\\/\\/?(W2C|W30|W3C|wc3|IETF|IEFT|w3c|ietf)?\\/\\/?(DTD|dtd|Dtd)\\s(W3\\s)?(X|x)?(HTML|html|HTM|htm)\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?(transitional|strict|frameset|final)?(TRANSITIONAL|STRICT|FRAMESET|FINAL)?\\s{0,}?(\\/\\/\\w{2})?"),
@@ -37,7 +37,7 @@ df_doctype_legend <- dbGetQuery(conn = con, paste0("SELECT DISTINCT(name) FROM t
   # mutate(group = row_number())
 
 get_doctype_info <- function(sphere, tag){
-  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere LIKE'", sphere, "' AND t.tag LIKE '", tag, "'")) %>% 
+  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "'")) %>% 
     mutate(doctype_cleaned = str_extract(name, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\sX?HTML\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?\\/\\/\\w{2}"),
            doctype_cleaned = ifelse(str_detect(name, "^html$|^HTML$"), str_extract(name, "^html$|^HTML$"), doctype_cleaned),
            doctype_cleaned = ifelse(str_detect(name,"html SYSTEM"), name, doctype_cleaned),
@@ -63,7 +63,7 @@ get_doctype_info_relative <- function(sphere, tag){
     # mutate(date = paste0(year, "- ",month, "-01") %>% ymd(.)) %>% 
     ungroup()
   
-  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "'")) %>% 
+  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "'")) %>% 
     mutate(doctype_cleaned = str_extract(name, "-\\/\\/(W3C|IETF)?\\/\\/DTD\\sX?HTML\\s?(\\d{1}\\.\\d{1,})?\\s?(Transitional|Strict|Frameset|Final)?\\/\\/\\w{2}"),
            doctype_cleaned = ifelse(str_detect(name, "^html$|^HTML$"), str_extract(name, "^html$|^HTML$"), doctype_cleaned),
            doctype_cleaned = ifelse(str_detect(name,"html SYSTEM"), name, doctype_cleaned),

@@ -12,7 +12,7 @@ library(ggiraph)
 library(ggforce)
 
 source("../config/config-secret-local.R")
-source("../config/config-secret.R")
+# source("../config/config-secret.R")
 source("../config/config-graphic.R")
 source("../config/config.R")
 

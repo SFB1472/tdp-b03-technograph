@@ -20,7 +20,7 @@ library(shiny)
 
 extrafont::loadfonts(quiet = TRUE)
 
-source("../config/config-secret.R")
+source("../config/config-secret-local.R")
 source("../config/config-graphic.R")
 source("../config/config.R")
 
@@ -35,37 +35,17 @@ con <- dbConnect(RPostgres::Postgres(),
                  password = dsn_pwd
 )
 
-
-gs4_auth(cache=".secrets")
-
-get_domains_to_analyse <- function(sphere){
-  gs_domain_to_look <- read_sheet(SPREADSHEET_PATH_GENERELL, sheet = SPREADSHEET_PATH_DOMAINS[[{{sphere}}]]) %>% 
-  select(Name, URL) %>% 
-  mutate(site = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.),
-         site = ifelse(re2_detect(URL, SUBDOMAINS_TO_INKLUDE), re2_match(URL, SUBDOMAINS_TO_INKLUDE), site)
-          ) 
-
-}
-
-df_domains_to_analyse <- get_domains_to_analyse("German") %>% 
-  mutate(sphere = "German") %>% 
-  bind_rows(., get_domains_to_analyse("Dutch")) %>% 
-  mutate(sphere = ifelse(is.na(sphere), "Dutch", sphere)) %>% 
-  bind_rows(., get_domains_to_analyse("World")) %>% 
-  mutate(sphere = ifelse(is.na(sphere), "World", sphere))# %>% 
-
-
 ```
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
 get_sites_per_day <- function(sphere){
-  df_sites_per_day <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, COUNT(s.sha1) as sites_per_day FROM sites s  WHERE s.sphere LIKE '", sphere, "' GROUP BY s.crawl_date"))
+  df_sites_per_day <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, COUNT(s.sha1) as sites_per_day FROM sites s  WHERE s.sphere = '", sphere, "' AND s.of_interest = true GROUP BY s.crawl_date"))
 }
 
 get_form_info <- function(sphere, tag){
   
-  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.group, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "'")) %>% 
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.group, s.crawl_date, s.sha1, s.sphere FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere, "' AND t.tag = '", tag, "' AND s.of_interest = true")) %>% 
   group_by(crawl_date) %>% 
   summarise(nr_tags = n()) %>% 
   left_join(., get_sites_per_day(sphere)) %>% 
@@ -131,6 +111,14 @@ get_form_info("World", "form") %>%
 
 ## Zeitverlauf Seiten ohne form tags
 
+```{r}
+get_sites_with_form <- function(sphere_){
+  dbGetQuery(conn = con, paste0("SELECT DISTINCT s.sha1, s.crawl_date, s.site, t.tag FROM tags t INNER JOIN sites s on t.site = s.sha1 WHERE t.tag = 'form' AND t.sphere = 'German' AND s.of_interest = true"))
+}
+
+```
+
+
 ::: panel-tabset
 
 ### German
@@ -139,18 +127,8 @@ Die deutsche Sphere unterscheidet sich hier massiv von den anderen beiden.
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_german_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sha1, s.site FROM sites s WHERE s.sphere = 'German'"))
-df_german_sites_with_form <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag FROM tags_2 t WHERE t.tag = 'form' AND t.sphere = 'German'"))
-
-df <- df_german_sites %>% 
-  left_join(., df_german_sites_with_form, by =c("sha1" = "site")) %>% 
-  filter(is.na(tag)) %>% 
-  left_join(., df_domains_to_analyse ) %>% 
-  filter(!is.na(Name)) 
-
-# DT::datatable(df)
-
-df %>% 
+SPHERE_FOR_TABSET <- "German"
+get_sites_with_form(SPHERE_FOR_TABSET) %>% 
   mutate(crawl_date = ymd(crawl_date)) %>% 
   group_by(crawl_date) %>% 
   summarise(nr_tags = n()) %>% 
@@ -167,17 +145,8 @@ Nur in `r df %>% nrow()` Seiten enthalten überhaupt keine `form`-Tags enthalten
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sha1, s.site FROM sites s WHERE s.sphere LIKE 'Dutch'"))
-df_german_sites_with_form <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag FROM tags t WHERE t.tag LIKE 'form' AND t.sphere LIKE 'Dutch'"))
-
-df <- df_sites %>% 
-  left_join(., df_german_sites_with_form, by =c("sha1" = "site")) %>% filter(is.na(tag)) %>% 
-  left_join(., df_domains_to_analyse ) %>% 
-  filter(!is.na(Name)) 
-
-# DT::datatable(df)
-
-df %>% 
+SPHERE_FOR_TABSET <- "Dutch"
+get_sites_with_form(SPHERE_FOR_TABSET) %>%
   mutate(crawl_date = ymd(crawl_date)) %>% 
   group_by(crawl_date) %>% 
   summarise(nr_tags = n()) %>% 
@@ -194,17 +163,9 @@ In `r df %>% nrow()` Seiten sind keine Tags enthalten.
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df_german_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sha1, s.site FROM sites s WHERE s.sphere LIKE 'World'"))
-df_german_sites_with_form <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag FROM tags t WHERE t.tag LIKE 'form' AND t.sphere LIKE 'World'"))
+SPHERE_FOR_TABSET <- "World"
 
-df <- df_german_sites %>% 
-  left_join(., df_german_sites_with_form, by =c("sha1" = "site")) %>% filter(is.na(tag)) %>% 
-  left_join(., df_domains_to_analyse ) %>% 
-  filter(!is.na(Name)) 
-
-# DT::datatable(df)
-
-df %>% 
+get_sites_with_form(SPHERE_FOR_TABSET) %>%
   mutate(crawl_date = ymd(crawl_date)) %>% 
   group_by(crawl_date) %>% 
   summarise(nr_tags = n()) %>% 
@@ -230,7 +191,7 @@ Ob uns das in der Analyse zu den Kommentar(systemen) weiterhilft, kann ich noch 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
 get_form_attr_info <- function(sphere, tag, attr){
-  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.name, s.crawl_date, s.sphere, t.attr, t.group FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere = '", sphere, "' AND t.tag = '", tag, "' AND t.name = '", attr, "'")) 
+  df <- dbGetQuery(conn = con, paste0("SELECT t.site, t.tag, t.attr, t.value, s.crawl_date, s.sphere, t.group FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere = '", sphere, "' AND t.tag = '", tag, "' AND t.attr = '", attr, "' AND s.of_interest = true")) 
     
 }
 
@@ -326,7 +287,7 @@ Die folgende Tabelle soll zeigen, wie die URLs aussehen, die in der oberen Grafi
 get_first_lines_of_NAs <- function(sphere_){
   get_form_attr_info(sphere_, "form", "action") %>%
   mutate(script_detected = re2_match(attr, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>%
-  filter(is.na(script_detected)) %>% select(crawl_date, "attr" = "name", "value" = "attr", group, site) %>% head(100)
+  filter(is.na(script_detected)) %>% select(crawl_date, attr, value, group, site) %>% head(100)
 }
 
 ```
@@ -394,16 +355,16 @@ Jetzt wird es konkret, hier wird innerhalb der form-tags nach generischen Wort(t
 
 get_form_with_comment <- function(sphere_, tag){
   # print(sphere_)
-  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, t.site as sha1, s.url, s.sphere, t.tag, s.site, t.name, t.attr, t.group, regexp_matches(t.attr, '", COMMENTS_IN_TAGS, "') as matches FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere = '", sphere_, "' AND t.tag = '", tag, "' AND s.export = 2"))%>%
+  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, t.site as sha1, s.url, s.sphere, t.tag, s.site, t.attr, t.value, t.group, regexp_matches(t.value, '", COMMENTS_IN_TAGS, "') as matches FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere = '", sphere_, "' AND t.tag = '", tag, "' AND s.of_interest = true"))%>%
     mutate(year = year(crawl_date))
 }
 
 get_tags_printing <- function(sphere){
   df_counted_attrs_with <- get_form_with_comment(sphere, "form") %>%
-  group_by(name) %>%
+  group_by(attr) %>%
   summarise(with_comments = n())
 
-  df_counted_attrs <- dbGetQuery(conn = con, paste0("SELECT t.name, COUNT(s.sha1) as counted_attrs FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere = '", sphere, "'AND t.tag = 'form' GROUP BY t.name"))
+  df_counted_attrs <- dbGetQuery(conn = con, paste0("SELECT t.attr, COUNT(s.sha1) as counted_attrs FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere = '", sphere, "'AND t.tag = 'form' AND s.of_interest = true GROUP BY t.attr"))
   
   df_counted_attrs %>%
     left_join(., df_counted_attrs_with) %>% #View()
@@ -414,7 +375,7 @@ get_tags_printing <- function(sphere){
            order = row_number()) %>% #View()
     pivot_longer(cols = "with_comments":"without_comments", names_to = "cat", values_to = "value") %>%
     mutate(cat = ordered(cat, levels = c("without_comments", "with_comments"))) %>% 
-  ggplot(., aes(x = value, y = reorder(name, desc(order)), fill = cat, label = value)) +
+  ggplot(., aes(x = value, y = reorder(attr, desc(order)), fill = cat, label = value)) +
   geom_col() +
   geom_text(position = "stack", hjust = 0, color = "black", family = typo_sfb_mono) +
   scale_x_continuous(labels = label_number(), expand = c(0, NA)) +
@@ -465,9 +426,9 @@ get_tags_printing("World")
 get_print <-  function(sphere_){
   df_current_sphere_with_comment <- get_form_with_comment(sphere_, "form") %>%# View()
     group_by(year, site) %>%
-    summarise(counted = n()) %>% #View()
-    left_join(., df_domains_to_analyse) %>% #View()
-    filter(!is.na(Name), sphere == sphere_)
+    summarise(counted = n()) #%>% #View()
+    # left_join(., df_domains_to_analyse) %>% #View()
+    # filter(!is.na(Name), sphere == sphere_)
 
 jenks_color_breaks <- getJenksBreaks(df_current_sphere_with_comment %>% select(counted) %>% pull(.), 4)
 jenks_color_breaks <- c(jenks_color_breaks, 2) %>% sort(.)
@@ -478,7 +439,7 @@ df_current_sphere_with_comment %>%
                             include.lowest = TRUE,
                             right = TRUE,
                             ordered_result = FALSE)) %>% 
-  ggplot(., aes(x = year, y = Name, fill = color_breaks, tooltip = paste0(counted, "\nsite: ", Name))) +
+  ggplot(., aes(x = year, y = site, fill = color_breaks, tooltip = paste0(counted, "\nsite: ", site))) +
   geom_tile_interactive() +
   scale_fill_manual(values = met.brewer("Hokusai2", type="discrete"), na.value = "grey90", name = "traces of commenting possibilities" ) +
   theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets  + theme(plot.margin = margin(0, .4, 0, 0, "in")) +
@@ -543,14 +504,14 @@ get_print("World")
 get_df <- function(sphere_){
   # sphere_ = "German"
   
-  df_all_form_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sphere, s.site, t.site as sha1, s.url, t.tag, t.name, t.attr, t.group FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere_, "' AND t.tag = 'form'"))
+  df_all_form_tags <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.sphere, s.site, t.site as sha1, s.url, t.tag, t.attr, t.value, t.group FROM sites s INNER JOIN tags t ON t.site = s.sha1 WHERE s.sphere ='", sphere_, "' AND t.tag = 'form'"))
 
   # df_form_comments <- get_form_with_comment(sphere_, "form") %>% 
   #   mutate(matches = as.character(matches),
   #          found = ifelse(!is.na(matches), 1, NA))
   
   df_all_forms_with_finding <- df_all_form_tags %>%
-    mutate(matches = str_detect(attr, "comment|komment")) %>% #View()
+    mutate(matches = str_detect(value, "comment|komment")) %>% #View()
     # left_join(., df_form_comments, by = "sha1") %>% View()
     mutate(found = ifelse(matches, 1, NA)) %>%
     group_by(sha1, group) %>%
@@ -559,7 +520,7 @@ get_df <- function(sphere_){
     filter(!is.na(found)) %>%
     ungroup() %>%
     filter(!is.na(matches)) %>%
-    group_by(name) %>%
+    group_by(attr) %>%
     summarise(counted = n()) %>%
     arrange(desc(counted))#%>% View()
 }

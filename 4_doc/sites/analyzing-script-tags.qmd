@@ -1,6 +1,0 @@
----
-title: "Analyzing script Tags"
----
-
-
-# To Do
