@@ -27,35 +27,35 @@ con <- dbConnect(RPostgres::Postgres(),
 # dbDisconnect(con)
 
 get_context_data <- function(sphere_){
-  df <- dbGetQuery(conn = con, paste0("SELECT tc.sha1, tc.tag, tc.attr, tc.value, tc.context_path, tc.context_path_cleaned, tc.id_sha1_group, tc.tag_context_id FROM tag_context tc  WHERE tc.sphere = '", sphere_, "'"))
+  df <- dbGetQuery(conn = con, paste0("SELECT tc.sha1, tc.tag, tc.attr, tc.value, tc.context_path, tc.context_path_cleaned, tc.id_sha1_group, tc.traces_context_id FROM traces_context tc  WHERE tc.sphere = '", sphere_, "'"))
   
 }
 
 get_context_data_ <- function(sphere_){
-  df <- dbGetQuery(conn = con, paste0("SELECT tc.attr, tc.value, COUNT(*) as counted FROM tag_context tc  WHERE tc.sphere = '", sphere_, "' GROUP BY tc.attr, tc.value"))
+  df <- dbGetQuery(conn = con, paste0("SELECT tc.attr, tc.value, COUNT(*) as counted FROM traces_context tc  WHERE tc.sphere = '", sphere_, "' GROUP BY tc.attr, tc.value"))
   
 }
 
 # testing <- get_context_data_("German")
 
 get_context_data_partiell <- function(sphere_, special_id){
-  df <- dbGetQuery(conn = con, paste0("SELECT tc.sha1, tc.tag, tc.attr, tc.value, tc.context_path, tc.id_sha1_group, tc.tag_context_id FROM tag_context tc  WHERE tc.sphere = '", sphere_, "' AND id_sha1_group = '", special_id,"'"))
+  df <- dbGetQuery(conn = con, paste0("SELECT tc.sha1, tc.tag, tc.attr, tc.value, tc.context_path, tc.id_sha1_group, tc.traces_context_id FROM traces_context tc  WHERE tc.sphere = '", sphere_, "' AND id_sha1_group = '", special_id,"'"))
   
 }
 
 get_context_data_partiell_ids <- function(sphere_, special_ids){
-  df <- dbGetQuery(conn = con, paste0("SELECT tc.sha1, tc.tag, tc.attr, tc.value, tc.context_path, tc.id_sha1_group, tc.tag_context_id FROM tag_context tc  WHERE tc.sphere = '", sphere_, "' AND id_sha1_group ~ '", special_ids,"'"))
+  df <- dbGetQuery(conn = con, paste0("SELECT tc.sha1, tc.tag, tc.attr, tc.value, tc.context_path, tc.id_sha1_group, tc.traces_context_id FROM traces_context tc  WHERE tc.sphere = '", sphere_, "' AND id_sha1_group ~ '", special_ids,"'"))
   
 }
 
 
 # get_context_data <- function(sphere_, site_){
-#   df <- dbGetQuery(conn = con, paste0("SELECT s.site, tc.sha1, tc.tag, tc.attr, tc.value, tc.context_path, tc.id_sha1_group, tc.tag_context_id FROM site s INNER JOIN tag_context tc ON s.sha1 = tc.sha1 WHERE tc.sphere = '", sphere_, "' AND s.site = '", site,"'"))
+#   df <- dbGetQuery(conn = con, paste0("SELECT s.site, tc.sha1, tc.tag, tc.attr, tc.value, tc.context_path, tc.id_sha1_group, tc.traces_context_id FROM site s INNER JOIN traces_context tc ON s.sha1 = tc.sha1 WHERE tc.sphere = '", sphere_, "' AND s.site = '", site,"'"))
 #   
 # }
 
 get_context_info_site <- function(sphere_, site_){
-  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.context_path_cleaned, t.context_path, t.id_sha1_group FROM sites s INNER JOIN  tag_context t ON s.sha1 = t.sha1 WHERE t.sphere = '", sphere_,"' AND s.site ='", site_,"'"))
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.context_path_cleaned, t.context_path, t.id_sha1_group FROM sites s INNER JOIN  traces_context t ON s.sha1 = t.sha1 WHERE t.sphere = '", sphere_,"' AND s.site ='", site_,"'"))
 }
 
 make_df <- function(df, sphere_){
@@ -763,7 +763,7 @@ DT::datatable(df_hashes_sites %>% arrange(desc(distinct_hashes)) %>% select(iter
 
 ```{r}
 
-df_handelsblatt <- dbGetQuery(conn = con, paste0("SELECT s.sha1, s.site, s.url, tc.id_sha1_group, tc. tag, tc.attr, tc.value_cleaned_whitelist, tc.context_path, tc.context_path_cleaned FROM sites s INNER JOIN tag_context tc ON s.sha1 = tc.sha1 WHERE s.site = 'handelsblatt'")) %>% 
+df_handelsblatt <- dbGetQuery(conn = con, paste0("SELECT s.sha1, s.site, s.url, tc.id_sha1_group, tc. tag, tc.attr, tc.value_cleaned_whitelist, tc.context_path, tc.context_path_cleaned FROM sites s INNER JOIN traces_context tc ON s.sha1 = tc.sha1 WHERE s.site = 'handelsblatt'")) %>% 
   mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
                    site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.))
 

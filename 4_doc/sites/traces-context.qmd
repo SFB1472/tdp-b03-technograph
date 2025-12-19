@@ -28,8 +28,6 @@ df_traces_per_site <- dbGetQuery(conn = con, "SELECT t.sphere, t.site as sha1, C
 
 df_traces_context_site <- dbGetQuery(conn = con, "SELECT t.sphere, t.sha1, t.id_sha1_group, COUNT(*) as counted_context_rows FROM traces_context t WHERE t.sphere = 'German' GROUP BY (t.sphere, t.sha1, t.id_sha1_group)")
 
-testing <- dbGetQuery(conn = con, "SELECT * FROM traces_context WHERE id_sha1_group = '2e3bbffe33afc9b09aa4f2944bd9b8c5ae61b7ab_1'")
-
 df_traces_to_context <- df_traces_per_site %>% 
   left_join(., df_traces_context_site) %>% 
   arrange(desc(counted_traces))
@@ -45,11 +43,95 @@ Diese Spuren sind einem Element innerhalb der Baumstruktur des HTML zu zu ordnen
 
 Die folgende Tabelle illustriert den Zusammenhang: Sie zeigt für den deutschen Sprachraum die 10 Seiten mit den meisten Spuren auf Kommentaroptionen. Die ID in der darauffolgenden Spalte steht für einen Kontextblock, die letzte Spalte zeigt, wieviele Zeilen dieser Kontextblock umfasst. 
 
-Anders formuliert, die 1951 Spuren in der obersten Zeile, sind alle Teil einen einzigen Kontextblocks und dieser Kontextblock besteht nicht nur aus den Spuren auf Kommentaroptionen, sondern noch aus 4817 weiteren Zeilen an Informationen. Diese können beispielsweise Indikatoren darauf liefern, dass Kommentierende registriert sein sollten, aber auch sehr viele, für die Fragestellung irrelevante Informationen. 
+Anders formuliert, die 1951 Spuren in der obersten Zeile, sind alle Teil einen einzigen Kontextblocks und dieser Kontextblock besteht nicht nur aus den Spuren auf Kommentaroptionen, sondern noch aus 4817 weiteren Zeilen an Informationen. Diese können beispielsweise Indikatoren darauf liefern, dass Kommentierende registriert sein sollten, aber auch sehr viele, für die Fragestellung irrelevante Informationen.
+
 
 ```{r}
 
 reactable(df_traces_to_context %>% head(10))
 
 ```
+
+## Struktur eines Kontextblocks
+
+Die nächste Tabelle zeigt, wie die Daten des ersten Kontextblocks aus der oberen Tabelle aussehen. Die vielen Zeilen ergeben sich dadurch, dass jedes Attribut eines jeden Tags in diesem Bereich eine eigene Zeile bekommt. 
+
+Beim schnellen Durchblättern der Zeilen ist zu erkennen, dass es sich um einen Kommentarbereich auf der Seite des Freitag handelt, kommentiert wurde im April 2021. Neben einer ganzen Reihe von generischen Spuren, lässt sich beispielsweise ablesen, dass es möglich war auf Kommentare zu antworten, außerdem konnte man sich anmelden zum kommentieren. Auch Bilder/Fotos für Autoren für Kommentatoren waren möglich. 
+
+```{r}
+sites <- dbGetQuery(conn = con, "SELECT s.sha1, s.site FROM sites s WHERE of_interest = true AND s.sphere = 'German'")
+
+traces_details <- dbGetQuery(conn = con, "SELECT * FROM traces WHERE site = '02e7e845ca265b0d0863a78aced439d5192bcc14'")
+
+overview_with_sites <- sites %>% 
+  left_join(., df_traces_to_context) %>% 
+  filter(!is.na(id_sha1_group))
+  
+
+excample <- dbGetQuery(conn = con, "SELECT sha1, tag, attr, value, text, context_path, id_sha1_group FROM traces_context WHERE id_sha1_group = '885581a927263d45956b5f0f14f06323031b8374_5'")
+reactable(excample, searchable = TRUE)
+
+```
+
+## Überlegungen
+
+Sollte ich eine Liste von Vokabeln anlegen, die innerhalb dieser Abschnitte nach relevanten Informationen suchen? Eigentlich die einzig logische Schlussfolgerung, wenn es darum geht ein qualitatives Weiterarbeiten mit den contextdaten zu überlegen. Dass sie nur Grundlage für die Hashes oder irgendeine Netzwerk-Nähe-Untersuchung wird, ist zu abstrakt. Da verstehe ich die Daten nicht gut genug. 
+
+```{r}
+
+seiten anschauen für schlagworte suchen: 
+  "2e3bbffe33afc9b09aa4f2944bd9b8c5ae61b7ab_1"
+"8869a987453191a607f793ca86f99966188bbb24_1"
+"02e7e845ca265b0d0863a78aced439d5192bcc14_1"
+"025e0ec598b371c7e5ae731d9dbcc2f3158c11e9_1"
+"b62f40f7492fc194c2696627e4c14759f4fb80ec_1"
+"25c8836d78dada3d4fffe4db094efabd301bab11_1"
+"db2d179b7b0f626f109d63ecbfac797ebc8792ab_1"
+"2217335ee08864df76b2e05df4403178528487fb_4"
+"2217335ee08864df76b2e05df4403178528487fb_2"
+"2217335ee08864df76b2e05df4403178528487fb_3"
+"1c6d35211d5ef662b341ee9e1df809aeefdc49ba_1"
+"09dc213da45d1f098a2b0347d204b8adc87c0e1d_2" badische-zeitung, scheint hinter user namen die bisher geschriebene Anzahl an Kommentaren auszustellen, leider kein eindeutiger indikator in den daten
+"9895eccc56d05972c9d892624d55e4ac1202d7b0_1" - live fussballkommentierung bei der sz (sptlContentAreaTickerRow, div {'id': 'mc_content_modul2_commentary'})
+"885581a927263d45956b5f0f14f06323031b8374_1"
+reply
+respond
+depth
+even / odd
+login
+password
+author
+count
+overlay__count
+shorten(-comments)
+reveal(-item)
+toggleAllComments
+(gr)avatar
+charsLeft
+reaction
+report
+quote
+empfehlen
+recommended
+rating
+rateBad
+rateGood
+ratingImage
+LesermeinungenAnzahl
+Richtlinien
+regeln
+commentnumber
+reportcomment
+sorting
+
+pagination
+
+Kombinationen mit img-tag
+
+taz: guest vs member person
+faz (so viel in de): sortChanger, empfehlen, LesermeinungenAnzahl, Richtlinien, Kurzansicht
+
+```
+
+
 
