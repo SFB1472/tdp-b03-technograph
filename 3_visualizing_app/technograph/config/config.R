@@ -1,5 +1,7 @@
 CURRENT_SPHERE <- "German"
 
+load(file="data/helper/subdomain-list-of-comment-findings.RData")
+
 SELECT_MENU_SITE <- list()
 SELECT_MENU_SITE$German <- c('abendblatt', 'augsburger-allgemeine', 'badische-zeitung', 'berliner-zeitung', 'bild', 'deutschlandfunk', 'faz', 'focus', 'fr', 'freiepresse', 'freitag', 'ftd', 'handelsblatt', 'haz', 'hna', 'jungefreiheit', 'ksta', 'lvz', 'mads', 'mainpost', 'merkur', 'mopo', 'morgenpost', 'nwzonline', 'rheinpfalz', 'rp-online', 'spiegel', 'stern', 'stuttgarter-nachrichten', 'stuttgarter-zeitung', 'sueddeutsche', 'swr', 'tagesspiegel', 'taz', 'tz', 'volksstimme', 'welt', 'wn', 'zdf', 'zeit')
 SELECT_MENU_SITE$Dutch <- c('bd', 'bndestem', 'bnr', 'businessinsider', 'dagelijksestandaard', 'destentor', 'dutchnews', 'dvhn', 'ed', 'fd', 'geenstijl', 'gelderlander', 'groene', 'haarlemsdagblad', 'hpdetijd', 'jeugdjournaal', 'joop', 'leidschdagblad', 'limburger', 'metronieuws', 'ninefornews', 'noordhollandsdagblad', 'nos', 'nrc', 'oneworld', 'parool', 'powned', 'pzc', 'quotenet', 'sargasso', 'telegraaf', 'trouw', 'tubantia', 'vn', 'volkskrant', 'welingelichtekringen', '1limburg', 'ad', 'hartvannederland', 'lc', 'nhnieuws', 'nieuws', 'nu', 'rtlnieuws', 'tpo')
@@ -9,6 +11,7 @@ SELECT_MENU_SITE$World <- c('abc', 'bbc', 'cbc', 'cbsnews', 'channelnewsasia', '
 
 df_systems_color_legend <- read_csv(file = "data/helper/colors-systems.csv", show_col_types = FALSE)
 
+df_timespan_day <- seq(ymd("1997-01-01"), ymd("2021-06-01"), by = "day") %>% as_tibble()
 df_timespan_month <- seq(ymd("1997-01-01"), ymd("2021-06-01"), by = "month") %>% as_tibble()
 df_timespan_year <- seq(ymd("1996-01-01"), ymd("2021-06-01"), by = "year") %>% as_tibble()
 
