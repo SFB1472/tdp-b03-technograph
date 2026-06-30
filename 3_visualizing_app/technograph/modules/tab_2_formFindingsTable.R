@@ -40,8 +40,8 @@ formFindingsTableServer <- function(id, tab_, site_to_load) {
       get_form_finding_data <- function(){
         
         df_table <- tbl(pool, "sites") %>%
-          inner_join(., tbl(pool, "findings_hashed_2")) %>%
-          filter(site == !!current_data$site_to_load, iteration == 2) %>% 
+          inner_join(., tbl(pool, "context_hashed")) %>%
+          filter(site == !!current_data$site_to_load, iteration == "cleaned_whitelist") %>% 
           collect()
         
         df_sites <- tbl(pool, "sites") %>%
@@ -58,30 +58,30 @@ formFindingsTableServer <- function(id, tab_, site_to_load) {
                    type = "traces via form tags") %>%
             arrange(crawl_date) %>% 
             mutate(
-              # nr_unique_hashes = dense_rank(hashed_forms), .by = c(site, subdomain)
-              nr_unique_hashes = match(hashed_forms, unique(hashed_forms))
+              # nr_unique_hashes = dense_rank(hashed_context), .by = c(site, subdomain)
+              nr_unique_hashes = match(hashed_context, unique(hashed_context))
               ) 
-          
+          # View(df_table_filled_)
           df_table_filled <- df_table_filled_ %>% 
-            reframe(first_crawl_date = min(crawl_date), first_id_sha1_form_group = first(id_sha1_form_group), first_url = first(url), .by = c("site", "hashed_forms", "nr_unique_hashes")) #%>% View()
+            reframe(first_crawl_date = min(crawl_date), first_id_sha1_group = first(id_sha1_group), first_url = first(url), .by = c("site", "hashed_context", "nr_unique_hashes")) #%>% View()
           
-          ids_to_look_at <- df_table_filled %>% select(first_id_sha1_form_group) %>% pull(.)
+          ids_to_look_at <- df_table_filled %>% select(first_id_sha1_group) %>% pull(.)
           
-          df_return_table <- tbl(pool, "tag_context_2") %>% 
-            filter(id_sha1_form_group %in% ids_to_look_at) %>% 
+          df_return_table <- tbl(pool, "tag_context") %>% 
+            filter(id_sha1_group %in% ids_to_look_at) %>% 
             collect() %>% 
-            left_join(., df_table_filled, by = c("id_sha1_form_group" = "first_id_sha1_form_group")) %>% 
-            arrange(id_sha1_form_group, nr_unique_hashes) %>% 
+            left_join(., df_table_filled, by = c("id_sha1_group" = "first_id_sha1_group")) %>% 
+            arrange(id_sha1_group, nr_unique_hashes) %>% 
             mutate(
               first_crawl_date = as.character(first_crawl_date) %>% str_remove_all(., "-"),
               archive_url = paste0('<a href= "http://web.archive.org/web/', first_crawl_date, '/', first_url,'"  target="_blank">Link ins Archive</a>')) %>% 
-            select(nr_unique_hashes, name, attr, text, archive_url) # %>% 
+            select(nr_unique_hashes, tag, attr, text, archive_url) # %>% 
             # rename("Kommentar- index" = "nr_unique_hashes")
           
         return(df_return_table)
       }
       
-      # print the viz --------------------------------------------------------------
+      # build table --------------------------------------------------------------
       
       get_colors <- reactive({
         # print("recalc colors")
@@ -105,7 +105,7 @@ formFindingsTableServer <- function(id, tab_, site_to_load) {
         # print(paste0("form findings table ", is.null((current_data$form_data)) ))
         if (!is.null(nrow(current_data$form_data))){
           if(nrow(current_data$form_data) > 0) {
-            datatable(current_data$form_data, rownames= FALSE, filter = "top", escape=F, colnames=c("formindex", "name", "attr", "text", "archive link"),
+            datatable(current_data$form_data, rownames= FALSE, filter = "top", escape=F, colnames=c("tagindex", "tag", "attr", "text", "archive link"),
                     options = list(order = list(0, 'asc'))
                     ) %>%
                           formatStyle(columns = "nr_unique_hashes", 
@@ -113,7 +113,7 @@ formFindingsTableServer <- function(id, tab_, site_to_load) {
                                       backgroundColor = styleEqual(levels = current_data$colors["nr_unique_hashes"] %>% pull(.), values = current_data$colors["hex"] %>% pull(.))
                           )
         } else {
-          datatable(current_data$form_data, rownames= FALSE, filter = "top", escape=F, colnames=c("formindex", "name", "attr", "text", "archive link"),
+          datatable(current_data$form_data, rownames= FALSE, filter = "top", escape=F, colnames=c("tagindex", "tag", "attr", "text", "archive link"),
                     options = list(order = list(0, 'asc'))
           )
         }

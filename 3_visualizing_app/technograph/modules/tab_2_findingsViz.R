@@ -92,20 +92,20 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
       get_form_finding_data <- function(){
         
         df_return <- tbl(pool, "sites") %>%
-          inner_join(., tbl(pool, "findings_hashed_2")) %>%
-          filter(site == !!current_data$site_to_load, iteration == 2) %>% 
+          inner_join(., tbl(pool, "context_hashed")) %>%
+          filter(site == !!current_data$site_to_load, iteration == "cleaned_whitelist") %>% 
           collect() %>% 
           mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
                  site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.),
-                 type = "traces via form tags") %>%
+                 type = "traces via tag findings") %>%
           arrange(crawl_date) %>% 
           mutate(
-            nr_unique_hashes = match(hashed_forms, unique(hashed_forms)), 
-            # nr_unique_hashes = dense_rank(hashed_forms), .by = c(site, subdomain),
+            nr_unique_hashes = match(hashed_context, unique(hashed_context)), 
+            # nr_unique_hashes = dense_rank(hashed_context), .by = c(site, subdomain),
                  shape_color = nr_unique_hashes,
                  shape_fill = NA,
                  shape_nr = 19,
-                 tooltip_info = paste0("formindex: ", nr_unique_hashes)) %>%  
+                 tooltip_info = paste0("tagindex: ", nr_unique_hashes)) %>%  
           select(crawl_date, site_subdomain, type, shape_color, shape_fill, shape_nr, tooltip_info)
         # View(df_return)
         # print(head(df_return))

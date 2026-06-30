@@ -17,7 +17,7 @@ tab_1_aggregatedBarchartServer <- function(id, tab_, sphere_) {
         
         df_snippets_traces <- tbl(pool, "sites") %>%
           filter(sphere == !!current_data$sphere_to_load, of_interest == TRUE) %>% 
-          inner_join(., tbl(pool, "snippets_2"), by = c("sha1" = "site")) %>%
+          inner_join(., tbl(pool, "snippets"), by = c("sha1" = "site")) %>%
           filter(detected == 1) %>%
           distinct(site) %>%
           collect()
@@ -26,7 +26,7 @@ tab_1_aggregatedBarchartServer <- function(id, tab_, sphere_) {
         
         df_form_tag_findings <- tbl(pool, "sites") %>% 
           filter(sphere == !!current_data$sphere_to_load, of_interest == TRUE) %>% 
-          inner_join(., tbl(pool, "findings_hashed_2"), by = "sha1") %>%
+          inner_join(., tbl(pool, "context_hashed"), by = "sha1") %>%
           # filter(str_detect(attr, "comment|komment")) %>%
           distinct(site) %>% 
           collect() 

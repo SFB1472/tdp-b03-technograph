@@ -33,7 +33,7 @@ modCrawlTimeServer <- function(id, tab_, site_to_load) {
         current_data$site_timestamps %>% 
           ggplot(., aes(x = year, y = hour, fill = counted)) +
           geom_tile() +
-          scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+          scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available", labels = scales::label_number() ) +
           scale_x_continuous(expand = c(0, NA), limits = c(1996, 2021), breaks = c(1996:2021)) +
           scale_y_continuous(breaks = c(0, 6, 12, 18), labels = c("00:00", "06:00", "12:00", "18:00"), trans = "reverse") +
           coord_cartesian(clip = "off")+

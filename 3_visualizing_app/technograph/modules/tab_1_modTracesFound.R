@@ -90,7 +90,7 @@ tab_1_overviewTracesFoundServer <- function(id, tab_, sphere) {
         
         db_form_finings <- tbl(pool, "sites") %>%
           select(sites_id, sha1, crawl_date, site, of_interest) %>%
-          inner_join(., tbl(pool, "findings_hashed_2"), by = "sha1") %>%
+          inner_join(., tbl(pool, "context_hashed"), by = "sha1") %>%
           filter(sphere == !!current_data$sphere_to_load, of_interest == TRUE) %>%
           mutate(year = year(crawl_date),
                  system = "forms parsed") %>%

@@ -39,14 +39,14 @@ tab_1_archivedSitesServer <- function(id, tab_, sphere) {
         
         db_snippet_findings <- tbl(pool, "sites") %>%
           select(sites_id, sha1, crawl_date, sphere, site, of_interest) %>% 
-          inner_join(., tbl(pool, "snippets_2"), by = c("sha1" = "site")) %>% #collect()
+          inner_join(., tbl(pool, "snippets"), by = c("sha1" = "site")) %>% #collect()
           filter(sphere == !!current_data$sphere_to_load, of_interest == TRUE, detected == 1) %>% #collect()
           distinct(site) %>% 
           collect() #%>% #View()
           
         db_form_finings <- tbl(pool, "sites") %>%
           select(sites_id, sha1, crawl_date, site, of_interest) %>%
-          inner_join(., tbl(pool, "findings_hashed_2"), by = "sha1") %>%
+          inner_join(., tbl(pool, "context_hashed"), by = "sha1") %>%
           filter(sphere == !!current_data$sphere_to_load, of_interest == TRUE) %>%
           mutate(year = year(crawl_date),
                  system = "forms parsed") %>%

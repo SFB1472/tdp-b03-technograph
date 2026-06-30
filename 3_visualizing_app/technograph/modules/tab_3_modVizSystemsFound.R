@@ -25,10 +25,11 @@ tab_3_modVizSystemFoundServer <- function(id, tab_, sphere) {
       
       get_counted_systems <- function(){
         # print("3 tab, 1 vis, systems counted")
+        # print("get_counted_systems 1 ")
         retranslate_snippets <- read_csv("data/helper/23-01-13-Commenting-system-detection-patterns.csv", show_col_types = FALSE) %>% 
           select("system" = `Commenting system`, "snippet" = Snippet) %>% 
           filter(!is.na(system)) %>% select(snippet, system)
-        
+        # print("get_counted_systems 2 ")
         db_systems_counted <- tbl(pool, "sites") %>%
           select(sites_id, sha1, crawl_date, sphere, site, of_interest) %>% 
           inner_join(., tbl(pool, "snippets_2"), by = c("sha1" = "site")) %>% #collect()
@@ -41,7 +42,7 @@ tab_3_modVizSystemFoundServer <- function(id, tab_, sphere) {
           select(year, system, site) %>% 
           distinct() %>%
           reframe(counted_domains = n(), .by = c(year, system))
-          
+        # print("get_counted_systems 3 ")  
         # View(db_systems_counted)
         return(db_systems_counted)
       }
@@ -58,7 +59,7 @@ tab_3_modVizSystemFoundServer <- function(id, tab_, sphere) {
         minheight_one_row = 0.5
         
         sum_height <- minheight_one_facet + minheight_one_row + (minheight_one_row * nr_systems)
-        print(sum_height)
+        # print(sum_height)
         
         return(sum_height)
         

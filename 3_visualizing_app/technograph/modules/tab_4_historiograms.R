@@ -38,7 +38,7 @@ tab_4_historiogramServer <- function(id, tab_) {
           summarise(start_date = first(date), end_date = last(date), .by = c(site, index, type)) %>% 
           mutate(blurry_start = start_date - months(6),
                  blurry_end = end_date + months(6))
-        
+        View(df_plot_segments)
         return(df_plot_segments)
       }
       
