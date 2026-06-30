@@ -63,7 +63,7 @@ tab_5_compareHashesServer <- function(id, tab_, subdomain, hash_1, hash_2) {
             select(tag, attr, value, context_path) %>% 
             collect()
           
-          View(df_hash_readable)
+          # View(df_hash_readable)
           return(df_hash_readable)
         } 
       }

@@ -20,89 +20,38 @@ tab_5_contextVizServer <- function(id, tab_, site_to_load, sphere) {
       
       ## get the data ----------------------------------------------------------
       
-      ### google doc data -------------------------------------------------------
-      
-      ANNOTATION_IS_EMPTY <- TRUE
-      
-      check_gs_empty <- function(gs){
-        ANNOTATION_IS_EMPTY <<- gs %>% nrow() == 0
-      }
-      
-      get_gs_annoted_data <- function(sphere){
-        
-        # print(paste0("get_gs_annoted_data ", sphere, " current site to load ", current_data$site_to_load))
-        # googlesheets4::gs4_deauth()
-        # gs_annotation_raw <- googlesheets4::read_sheet(SPREADSHEET_ANNOTATION_DATA, sheet = SPREADSHEET_ANNOTATION[[{{sphere}}]]) %>% 
-        gs_annotation_raw <- read_csv(paste0("data/", SPREADSHEET_ANNOTATION[[{sphere}]]), show_col_types = FALSE) %>% 
-          filter(site == !!current_data$site_to_load)
-        # print("sheet loaded")
-        check_gs_empty(gs_annotation_raw)
-        if(!ANNOTATION_IS_EMPTY) {
-          gs_annotation <- gs_annotation_raw %>% 
-            filter(site == !!current_data$site_to_load, tooltip_info != "") %>% 
-            mutate(type = "manual research",
-                   date = paste0(year, "-", ifelse(is.na(month), "1", month), "-", ifelse(is.na(day), "1", day)) %>% ymd(.),
-                   # technology = ifelse(is.na(technology), "other", technology),
-                   shape_color = 9999999,
-                   shape_fill = NA,
-                   shape_nr = 19
-                   ) %>% 
-            rename("crawl_date" = "date", "site_subdomain" = "Name") %>% 
-            select(crawl_date, site_subdomain, type, shape_color, shape_fill, shape_nr, tooltip_info)
-        }
-        else{
-          # print("no annotations")
-          # print(gs_annotation_raw)
-          gs_annotation <- gs_annotation_raw %>% 
-            mutate(type = "manual research",
-                   date = NA_Date_,
-                   Name = NA_character_,
-                   tooltip_info = NA_character_,
-                   shape_color = NA,
-                   shape_fill = NA,
-                   shape_nr = NA) %>% 
-            rename("crawl_date" = "date", "site_subdomain" = "Name") %>% 
-            select(crawl_date, site_subdomain, type, shape_color, shape_fill, shape_nr, tooltip_info) 
-        }
-        return(gs_annotation)
-      }
       
       ### context data ------------------------------------------------------------
       
-      find_dup <- function(string, thres) {
-        purrr::map_lgl(seq_along(string), function(i) {
-          sim <- stringdist::stringsim(string[i], string[0:(i - 1)], method = "lcs") #  method = "dl" -> schlecht
-          any(sim > thres)
-        })
-      }
       
       get_context_data <- function(){
         
-        # df_context_info_view <- tbl(pool, "sites") %>%
-        #   filter(site == !!current_data$site_to_load) %>%
+        # df_context_info <- tbl(pool, "sites") %>%
         #   inner_join(., tbl(pool, "tag_context")) %>% 
-        #   inner_join(., tbl(pool, "context_hashed")) %>% 
+        #   filter(site == !!current_data$site_to_load) %>% 
+        #   select(sha1, id_sha1_group, context_path_cleaned, context_path) %>%
+        #   distinct() %>% 
         #   collect()
-        
         df_context_info <- tbl(pool, "sites") %>%
-          inner_join(., tbl(pool, "tag_context")) %>% 
-          filter(site == !!current_data$site_to_load) %>% 
-          group_by(id_sha1_group) %>%
-          # arrange(., .by_group = TRUE) %>% 
-          window_order(tag, attr) %>% 
-          mutate(group_rows = row_number()) %>%
-          ungroup() %>%
-          filter(group_rows == 1) %>%
-          select(sha1, id_sha1_group, tag, attr, value_cleaned, context_path) %>% 
-          collect()
+          inner_join(., tbl(pool, "traces_context")) %>%
+          filter(site == !!current_data$site_to_load) %>%
+          window_order(crawl_timestamp) %>%
+          mutate(
+            group_size = n(), .by = id_sha1_group
+            ) %>%
+          # ungroup() %>%
+          # filter(group_rows == 1) %>%
+          select(sha1, id_sha1_group, context_path_cleaned, context_path, group_size) %>%
+          distinct() %>% 
+          collect() #%>%
         
-        View(df_context_info)
+        # View(df_context_info)
         
         df_return <- tbl(pool, "sites") %>%
           filter(site == !!current_data$site_to_load) %>% 
           inner_join(., tbl(pool, "context_hashed")) %>%
           filter(iteration == "cleaned_whitelist") %>% 
-          select(sha1, site, url, crawl_date, id_sha1_group, hashed_context) %>% 
+          select(sha1, site, url, crawl_date, agg_id, hashed_context) %>% 
           collect() %>% 
           left_join(., df_context_info) %>% 
           mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
@@ -110,53 +59,53 @@ tab_5_contextVizServer <- function(id, tab_, site_to_load, sphere) {
           arrange(crawl_date) %>% 
           mutate(
             nr_unique_hashes = match(hashed_context, unique(hashed_context)), 
-            new_y = paste0(tag, "_", attr, "_", value_cleaned),
-            # nr_unique_hashes = dense_rank(hashed_forms), .by = c(site, subdomain),
-                 shape_color = nr_unique_hashes,
-                 shape_fill = NA,
-                 shape_nr = 19,
-                 tooltip_info = paste0("tag: ", tag, " context: ", context_path, " hashnr: ", nr_unique_hashes)
-            # context_path_to_hash = row_number(), .by = hashed_context
+            shape_color = nr_unique_hashes,
+            tooltip_info = paste0("context: ", context_path, " hashnr: ", nr_unique_hashes, " umfang: " + group_size)
             ) %>%  
-          select(crawl_date, site_subdomain, hashed_context, context_path, nr_unique_hashes,id_sha1_group,shape_color,new_y, shape_fill, shape_nr, tooltip_info)
+          select(crawl_date, site_subdomain, hashed_context, context_path, nr_unique_hashes, id_sha1_group, context_path_cleaned, group_size, tooltip_info)
+          # select(crawl_date, site_subdomain, hashed_context, context_path, nr_unique_hashes, id_sha1_group, context_path_cleaned, tooltip_info)
         
-        # df_context_pathes_counted <- df_return_ %>% 
-        #   select(site_subdomain, hashed_context, context_path) %>% 
-        #   distinct() %>% 
-        #   reframe(counted_pathes = n(), .by = c(hashed_context, site_subdomain)) %>% #View()
-        #   arrange(desc(counted_pathes)) %>% 
-        #   mutate(hash_pathes_combi = paste0("context_path_", row_number()) )
-        # 
-        # df_context_pathes_counted_ <- df_return_ %>% 
-        #   select(site_subdomain, hashed_context, context_path) %>% 
-        #   distinct() %>%
-        #   arrange(context_path) %>% 
-        #   mutate(dup = find_dup(context_path, 0.87),
-        #          group_ = ifelse(lead(dup) == TRUE & dup == FALSE, paste0("group_", row_number()), NA),
-        #          group_ = ifelse(dup == FALSE & lag(dup) == TRUE, paste0("group_", row_number()), group_)#,
-        #          
-        #          # ifelse(dup == TRUE & lead(dup)==TRUE, lag(group_), NA))
-        #   ) %>% #View()
-        #   fill(group_) %>% 
-        #   mutate(group_ = ifelse(is.na(group_), paste0("group_", row_number()), group_),
-        #          group_ = ifelse(dup == FALSE & lag(dup) == FALSE, paste0("group_", row_number()), group_)) #%>% 
-          # reframe(counted_pathes = n(), .by = group_)
-        
-        
-        # hashes_context_path_combis <- df_return_ %>% 
-        #   # select(hashed_context, context_path) %>% 
-        #   # distinct() %>% 
-        #   reframe(counted_combis = n(), .by = c(hashed_context, context_path))
-        
-        # df_return <- df_return_ %>% 
-        #   left_join(., df_context_pathes_counted) %>%
-        #   mutate(new_y = ifelse(counted_pathes > 1, hash_pathes_combi, context_path))
-        
-        # View(hashes_context_path_combis)
-        # View(df_context_pathes_counted_)
-        View(df_return)
-        # print(head(df_return))
+        # View(df_return)
         return(df_return)
+      }
+      
+      
+      # get archivied sites ----------------------------------------------------
+      
+      get_sites <- function(){
+        # print("1 tab, 2 vis, aggregating data for printing missing archived data")
+        
+        db_sites <- tbl(pool, "sites") %>% 
+          filter(site == !!current_data$site_to_load) %>% 
+          select(site, crawl_date, sha1, url) %>% 
+          distinct() %>% 
+          collect() %>% 
+          mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+                 site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.)) %>% 
+          select(crawl_date, sha1, site_subdomain) %>% distinct()
+
+        # day <- df_timespan_day %>% mutate(year = year(value)) %>% select(year) %>% pull(.)
+        # year <- df_timespan_year %>% select(value) %>% pull(.)
+        site <- tbl(pool, "sites") %>%
+          filter(site == !!current_data$site_to_load) %>%
+          distinct(site, url) %>%
+          collect() %>% #View()
+          mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+                 site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.)) %>% 
+          select(site_subdomain) %>% 
+          distinct() 
+        
+        # str(db_sites)
+        # str(site)
+        
+        df_na_sites <- tidyr::expand_grid(df_timespan_day, site) %>%
+          left_join(., db_sites, by = c("value" = "crawl_date", "site_subdomain")) %>% #View()
+          filter(is.na(sha1)) %>%
+          mutate(sha1 = "no sites archived") %>% 
+          rename(crawl_date = value)
+        
+        # View(df_na_sites)
+        return(df_na_sites)
       }
       
       # calc height ------------------------------------------------------------
@@ -165,7 +114,7 @@ tab_5_contextVizServer <- function(id, tab_, site_to_load, sphere) {
        # print("calc height")
        # nr_snippets <- as.numeric(current_data$snippet_data %>% select(site_subdomain) %>% distinct() %>% nrow())
        nr_site_subdomain <- as.numeric(current_data$context_data %>% select(site_subdomain) %>% distinct() %>% nrow())
-       nr_forms <- as.numeric(current_data$context_data %>% select(new_y) %>% distinct() %>% nrow())
+       nr_forms <- as.numeric(current_data$context_data %>% select(context_path_cleaned) %>% distinct() %>% nrow())
        has_sites_subdomains <- ifelse(nr_site_subdomain > 0, 1, 0)
        # has_snippets <- ifelse(nr_snippets > 0, 1, 0)
        
@@ -193,9 +142,20 @@ tab_5_contextVizServer <- function(id, tab_, site_to_load, sphere) {
         print("viz aufgerufen")
         # View(current_data$context_data)
         if(!is.null(current_data$context_data)) {
-          plot <- ggplot(data = current_data$context_data, aes(x = crawl_date, y = new_y, color = as.character(nr_unique_hashes), tooltip = paste0(tooltip_info, "\nDatum: ", crawl_date))) +
-            geom_point_interactive() +
+          pathes <- current_data$context_data %>% select(context_path_cleaned) %>% distinct()
+          
+          df_na <- current_data$sites %>% 
+            filter(site_subdomain %in% current_data$context_data$site_subdomain) %>% 
+            expand_grid(., pathes) #%>% 
+          
+          # View(df_na)
+          
+          plot <- ggplot() +
+          # plot <- ggplot(data = current_data$context_data, aes(x = crawl_date, y = context_path_cleaned, color = as.character(nr_unique_hashes), tooltip = paste0(tooltip_info, "\nDatum: ", crawl_date))) +
+            geom_point(data = df_na, aes(x = crawl_date, y = context_path_cleaned), color = "grey90", size=.2, shape = 20) +
+            geom_point_interactive(data = current_data$context_data, aes(x = crawl_date, y = context_path_cleaned, color = as.character(nr_unique_hashes), size = as.numeric(group_size), tooltip = paste0(tooltip_info, "\nDatum: ", crawl_date))) +
             scale_x_date(date_breaks = "year", date_labels = "%Y", limits = c(ymd("1997-01-01"), ymd("2021-01-01"))) +
+            scale_size_area(max_size = 6) +
             theme_b03_base + theme_b03_facets_individual + theme(legend.position = "none", axis.text.y = element_blank()) + 
             facet_col(vars(site_subdomain), scales = "free_y", space = "free") +
             coord_cartesian(clip = "off")
@@ -215,7 +175,7 @@ tab_5_contextVizServer <- function(id, tab_, site_to_load, sphere) {
       
       rebuild_df <- function(){
         current_data$site_to_load = site_to_load()
-        # current_data$annotation = get_gs_annoted_data(sphere())
+        current_data$sites = get_sites()
         # current_data$snippet_data = get_snippet_traces_data()
         current_data$context_data = get_context_data()
         current_data$height = get_height()
