@@ -1,6 +1,6 @@
 library(pool)
 library(RPostgres)
-source("../../shiny-conf/config-secret.R")
+source("../../shiny-conf/config-secret-local.R")
 
 pool <- dbPool(
   drv = RPostgres::Postgres(),
