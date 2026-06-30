@@ -14,9 +14,6 @@ typo_sfb_mono_ggiraph <- "Roboto Mono"
 # typo_sfb_mono_remote <- "GT America Mono LC Rg"
 # typo_sfb_mono_bold_remote <- "GT America Mono Rg"
 
-fonts <- system_fonts()
-# View(fonts[fonts$monospace, ])
-
 sfb_black <- "#000000"
 sfb_grey <- "#E5E5E5"
     
