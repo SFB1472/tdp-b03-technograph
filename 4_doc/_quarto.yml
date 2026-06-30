@@ -7,7 +7,7 @@ website:
     style: "docked"
     search: true
     contents:
-      - section: "Basics: data export from the internet archive"
+      - section: "Basics: data export from the Internet Archive"
         contents:
           - text: "Data basis: sampling and structure"
             file: sites/datengrundlage.qmd
@@ -33,28 +33,30 @@ website:
             file: sites/pipeline/create-traces-context-tbl.qmd
           - text: "5 db tabelle: hashes"
             file: sites/pipeline/create-traces-hashes-tbl.qmd
+      - section: Historic development of tags
+        contents: 
+          - text: "Doctype"
+            file: sites/historic/doctypes.qmd
+          - text: "Form tags"
+            file: sites/historic/form-tags.qmd
+          - text: "Context of form tags"
+            file: sites/historic/form-context.qmd
+          - text: "Script tags"
+            file: sites/historic/script-tags.qmd
+          - text: "Iframes"
+            file: sites/historic/iframes.qmd
       - section: "Analysing: How to find commenting possibilities in HTML?"
         contents:
           - text: "Different approaches how to interpret HTML"
-            file: sites/approaches.qmd
-          - text: "All commenting traces"
-            file: sites/commenting-traces.qmd
-          - text: "Doctype"
-            file: sites/doctypes.qmd
-          - text: "Form tags"
-            file: sites/form-tags.qmd
-          - text: "Context of form tags"
-            file: sites/form-context.qmd
-          - text: "Script tags"
-            file: sites/script-tags.qmd
-          - text: "Iframes"
-            file: sites/iframes.qmd
+            file: sites/analyzing/approaches.qmd
+          - text: "Commenting traces - spotlights"
+            file: sites/analyzing/commenting-traces.qmd
           - text: "Specific snippets"
-            file: sites/special-snippets.qmd
-          - text: "Context of all traces"
-            file: sites/traces-context.qmd
+            file: sites/analyzing/special-snippets.qmd
           - text: "Hashes"
-            file: sites/hashes.qmd
+            file: sites/analyzing/hashes.qmd
+          - text: "Commenting traces - segments"
+            file: sites/analyzing/traces-context.qmd
 
 format:
   html:

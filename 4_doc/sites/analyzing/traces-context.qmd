@@ -1,0 +1,592 @@
+---
+title: "Traces context"
+---
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+library(ggforce)
+library(reactable)
+library(MetBrewer)
+
+source("../../config/config-secret-local.R")
+# source("../config/config-secret.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+# dbDisconnect(con)
+df_traces_per_site <- dbGetQuery(conn = con, "SELECT t.sphere, t.site as sha1, COUNT(*) as counted_traces FROM traces t WHERE t.search_method = 'tag' AND t.sphere = 'German' GROUP BY (t.sphere, t.site)")
+
+df_traces_context_site <- dbGetQuery(conn = con, "SELECT t.sphere, t.sha1, t.id_sha1_group, COUNT(*) as counted_context_rows FROM traces_context t WHERE t.sphere = 'German' GROUP BY (t.sphere, t.sha1, t.id_sha1_group)")
+
+df_traces_to_context <- df_traces_per_site %>% 
+  left_join(., df_traces_context_site) %>% 
+  arrange(desc(counted_traces))
+
+
+
+```
+
+
+## Zusammenhang der `traces` und `traces context` Tabellen
+
+Das Argument für die Erstellung der Tabelle traces context war, dass die traces für sich alleine nur so etwas wie Schlaglichter in den HTML-Seiten sind. Lichtpunkte, die signalisieren, hier gibt es eine Spur auf vergangene Kommentaroptionen. Unabhängig von der Unterscheidung zwischen generischen Spuren und solchen mit Hinweis auf Kommentarsysteme sind die Spuren nicht weiter untersuchbar, auf anderweitige Optionen, mit der Seite zu interagieren. 
+
+Diese Spuren sind einem Element innerhalb der Baumstruktur des HTML zu zuordnen und das ermöglicht es aus dem Schlaglicht einen etwas breiten Lichtkegel zu machen. Ausgehend von der einzelnen Spur, wird in dem Zweig des Baums, in dem die Spur gefunden wurde, gesucht, ob es oberhalb, also zentraler im Baum weitere Spuren auf Kommentaroptionen gibt. So werden viele einzelne Spuren zusammen gefasst. 
+
+Die folgende Tabelle illustriert den Zusammenhang: Sie zeigt für den deutschen Sprachraum die 10 Seiten mit den meisten Spuren auf Kommentaroptionen. Die ID in der darauffolgenden Spalte steht für einen Kontextblock, die letzte Spalte zeigt, wieviele Zeilen dieser Kontextblock umfasst. 
+
+Anders formuliert, die 1951 Spuren in der obersten Zeile, sind alle Teil einen einzigen Kontextblocks und dieser Kontextblock besteht nicht nur aus den Spuren auf Kommentaroptionen, sondern noch aus 4817 weiteren Zeilen an Informationen. Diese können beispielsweise Indikatoren darauf liefern, dass Kommentierende registriert sein sollten, aber auch sehr viele, für die Fragestellung irrelevante Informationen.
+
+
+```{r}
+
+reactable(df_traces_to_context %>% head(10))
+
+```
+
+## Struktur eines Kontextblocks
+
+Die nächste Tabelle zeigt, wie die Daten des ersten Kontextblocks aus der oberen Tabelle aussehen. Die vielen Zeilen ergeben sich dadurch, dass jedes Attribut eines jeden Tags in diesem Bereich eine eigene Zeile bekommt. 
+
+Beim schnellen Durchblättern der Zeilen ist zu erkennen, dass es sich um einen Kommentarbereich auf der Seite des Freitag handelt, kommentiert wurde im April 2021. Neben einer ganzen Reihe von generischen Spuren, lässt sich beispielsweise ablesen, dass es möglich war auf Kommentare zu antworten, außerdem konnte man sich anmelden zum kommentieren. Auch Bilder/Fotos für Autoren für Kommentatoren waren möglich. 
+
+```{r}
+sites <- dbGetQuery(conn = con, "SELECT s.sha1, s.site FROM sites s WHERE of_interest = true AND s.sphere = 'German'")
+
+traces_details <- dbGetQuery(conn = con, "SELECT * FROM traces WHERE site = '4b692fc229edf212b558cee7e53e5c57edd33894'")
+
+overview_with_sites <- sites %>% 
+  left_join(., df_traces_to_context) %>% 
+  filter(!is.na(id_sha1_group))
+  
+
+excample <- dbGetQuery(conn = con, "SELECT sha1, tag, attr, value, text, context_path, id_sha1_group FROM traces_context WHERE id_sha1_group = '4b692fc229edf212b558cee7e53e5c57edd33894_1'")
+reactable(excample, searchable = TRUE)
+
+```
+
+## Überlegungen
+
+Sollte ich eine Liste von Vokabeln anlegen, die innerhalb dieser Abschnitte nach relevanten Informationen suchen? Eigentlich die einzig logische Schlussfolgerung, wenn es darum geht ein qualitatives Weiterarbeiten mit den contextdaten zu überlegen. Dass sie nur Grundlage für die Hashes oder irgendeine Netzwerk-Nähe-Untersuchung wird, ist zu abstrakt. Da verstehe ich die Daten nicht gut genug. 
+
+```{r}
+#| eval: FALSE
+#| echo: true
+#| code-fold: true
+
+# seiten anschauen für schlagworte suchen: 
+  "2e3bbffe33afc9b09aa4f2944bd9b8c5ae61b7ab_1"
+"8869a987453191a607f793ca86f99966188bbb24_1"
+"02e7e845ca265b0d0863a78aced439d5192bcc14_1"
+"025e0ec598b371c7e5ae731d9dbcc2f3158c11e9_1"
+"b62f40f7492fc194c2696627e4c14759f4fb80ec_1"
+"25c8836d78dada3d4fffe4db094efabd301bab11_1"
+"db2d179b7b0f626f109d63ecbfac797ebc8792ab_1"
+"2217335ee08864df76b2e05df4403178528487fb_4"
+"2217335ee08864df76b2e05df4403178528487fb_2"
+"2217335ee08864df76b2e05df4403178528487fb_3"
+"1c6d35211d5ef662b341ee9e1df809aeefdc49ba_1"
+"09dc213da45d1f098a2b0347d204b8adc87c0e1d_2" "badische-zeitung, scheint hinter user namen die bisher geschriebene Anzahl an Kommentaren auszustellen, leider kein eindeutiger indikator in den daten"
+"9895eccc56d05972c9d892624d55e4ac1202d7b0_1" - "live fussballkommentierung bei der sz (sptlContentAreaTickerRow, div {'id': 'mc_content_modul2_commentary'})"
+"885581a927263d45956b5f0f14f06323031b8374_1"
+reply
+respond
+depth
+even / odd
+login
+password
+author
+count
+overlay__count
+shorten(-comments)
+reveal(-item)
+toggleAllComments
+(gr)avatar
+charsLeft
+reaction
+report
+quote
+empfehlen
+recommended
+rating
+rateBad
+rateGood
+ratingImage
+LesermeinungenAnzahl
+Richtlinien
+regeln
+commentnumber
+reportcomment
+sorting
+
+pagination
+
+Kombinationen mit img-tag
+
+taz: guest vs member person
+faz (so viel in de): sortChanger, empfehlen, LesermeinungenAnzahl, Richtlinien, Kurzansicht
+
+```
+
+## Liste von Schlagworten
+
+```{r}
+
+sub_traces <- read.csv("../../../data/helper/26-02-26-search-list-comment-functions.csv", header = FALSE) 
+sub_traces_light <- sub_traces$V1[!sub_traces$V1 %in% c("even", "odd")] %>% paste(., collapse=("|"))
+
+reactable(sub_traces)
+
+```
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+exclude_side_subdomain <- read.csv("../../../data/helper/exclude-side-subdomain.csv", header = FALSE) %>% pull(.) #%>%  paste(., collapse=("|"))
+sub_traces <- sub_traces %>% pull(.) %>% paste(., collapse=("|"))
+
+snippets_to_find <- read.csv("../../../data/helper/24-07-12-Commenting-system-detection-patterns.csv", sep = ";")
+str_snippets_to_find <- snippets_to_find %>% select(regex) %>% pull(.) %>% paste(collapse = "|")
+
+get_data_snippets_traces_ <- function(search_in, sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.sphere, t.tag, t.",search_in," as raw_trace FROM traces_context t WHERE t.sphere = '", sphere_,"' AND t.",search_in," ~* '", str_snippets_to_find, "'"), check_interrupts = TRUE) %>% #View()
+    mutate(trace = str_extract(raw_trace, regex(str_snippets_to_find, ignore_case = TRUE))) %>% 
+  # select(-column_t) %>% 
+  mutate(search_type = "snippet_list",
+         comment = search_in) 
+}
+
+df_sites <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.crawl_date, t.site, t.url, t.sphere FROM sites t WHERE t.sphere ='", sphere_,"' AND t.of_interest = TRUE"), check_interrupts = TRUE) %>% 
+    mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+           site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.))
+}
+
+get_data_comment_traces <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.sphere, t.id_date_site_subdomain FROM traces_context t WHERE t.sphere ='", sphere_,"' "), check_interrupts = TRUE) %>% 
+  mutate(simple_date = str_extract(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01") %>% as_date(.),
+         site_subdomain = str_remove(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01_")) %>%
+  reframe(counted_comments = n(), .by = c(site_subdomain, simple_date))
+}
+
+# sphere_ <- "German"
+# df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.sphere, t.id_date_site_subdomain, t.tag, t.attr, t.value FROM traces_context t WHERE t.sphere ='", sphere_,"' "), check_interrupts = TRUE) %>% 
+#   mutate(simple_date = str_extract(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01") %>% as_date(.),
+#          site_subdomain = str_remove(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01_")) 
+
+get_data_sub_traces <- function(sphere_, search_in){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.tag, t.sphere, t.",search_in," as raw_trace FROM traces_context t WHERE t.sphere ='", sphere_,"' AND t.",search_in," ~* '", sub_traces, "'"), check_interrupts = TRUE) %>% 
+  mutate(trace = str_extract(raw_trace, regex(sub_traces, ignore_case = TRUE))) %>%
+  # select(-column_t) 
+  mutate(search_type = "sub_traces",
+         comment = search_in) 
+}
+```
+
+## Grafik: Konjunkturen verschiedener Funktionalitäten innerhalb von Kommentaroptionen
+
+::: panel-tabset
+
+### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 15
+#| fig-width: 10
+
+df_sites_de <- df_sites("German") %>% 
+  mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+         site_subdomain = paste(site, subdomain, sep = "_"),
+         simple_date = paste0(year(crawl_date),"-", month(crawl_date), "-01") %>% ymd(.))
+
+get_script_sub_traces <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.sphere, t.value FROM tags t WHERE t.sphere ='", sphere_,"' AND t.tag = 'script' AND t.embedded is not null AND t.value ~* '", sub_traces_light, "'"), check_interrupts = TRUE) %>% 
+  mutate(trace = str_extract(value, regex(sub_traces_light, ignore_case = TRUE))) %>%
+  # select(-column_t) 
+  mutate(search_type = "sub_traces",
+         comment = "value") 
+}
+
+df_script_sub_traces_traces <- get_script_sub_traces("German") %>% 
+  left_join(., df_sites_de, by = c("site" = "sha1")) %>% 
+  arrange(simple_date) %>% 
+  reframe(counted = n(), .by = c(site_subdomain, simple_date, trace, search_type)) %>% 
+  filter(!site_subdomain %in% exclude_side_subdomain)
+
+df_sub_traces_de <- get_data_sub_traces("German", "value") %>% 
+  bind_rows(., get_data_sub_traces("German", "attr")) %>% 
+  bind_rows(., get_data_snippets_traces_("value", "German")) %>% 
+  bind_rows(., get_data_snippets_traces_("attr", "German")) %>% 
+  # mutate(site_subdomain = str_remove(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01_")) %>% 
+  left_join(., df_sites_de) %>% 
+  arrange(simple_date) 
+
+df_sub_traces_de__ <- df_sub_traces_de %>% 
+  reframe(counted = n(), .by = c(site_subdomain, simple_date, trace, search_type)) %>% 
+  filter(!site_subdomain %in% exclude_side_subdomain)
+
+just_traces <- df_script_sub_traces_traces %>% 
+  bind_rows(., df_sub_traces_de__) %>% 
+  reframe(counted_traces = sum(counted), .by = c(simple_date, trace))
+
+found_traces <- just_traces %>% select(trace) %>% distinct()# %>% pull(.)
+
+df_comment_traces_ <- get_data_comment_traces("German") %>% 
+  reframe(sum_comments = sum(counted_comments), .by = simple_date)
+
+df_sites_de_histo <- df_sites_de %>% 
+  reframe(counted_sites = n(), .by = c(simple_date)) %>% 
+  left_join(., df_comment_traces_)
+
+df_meta_info <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>% 
+  as_tibble() %>% 
+  rename(simple_date = value) %>% 
+  expand_grid(., found_traces) %>% # View()
+  left_join(., df_sites_de_histo) %>% 
+  left_join(., just_traces) %>% 
+  mutate(is_set = ifelse(!is.na(counted_traces), 1, NA)) %>% 
+  group_by(trace) %>% 
+  fill(is_set, .direction = "updown") %>% 
+  ungroup() %>% 
+  filter(is_set == 1)#%>% 
+  # filter(!site_subdomain %in% exclude_side_subdomain)
+
+color_search_type <- c("snippet_list"= "black", "sub_traces" = "white")
+shape_search_type <- c("snippet_list"= 18, "sub_traces" = 19)
+
+ggplot() +
+  geom_tile(data = df_meta_info, aes(x = simple_date, y = trace, fill = counted_sites)) +
+  geom_point(data = df_meta_info, aes(x = simple_date, y = trace, size = sum_comments), color = "#31eccd", shape = 15) +
+  geom_point(data = just_traces, aes(x = simple_date, y = trace, size = counted_traces), color = "black") +
+  # facet_col(vars(site_subdomain), scales = "free", space = "free") +
+  scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-09-01")), expand = c(0,NA)) +
+  scale_color_manual(values = color_search_type) +
+  scale_shape_manual(values = shape_search_type) +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90") +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted +  theme(legend.position = "none", panel.grid.major.y = element_line(color = "grey70", linewidth = .2))
+
+```
+
+### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 25
+#| fig-width: 10
+
+
+translation_int_sites <- read_csv("../../../data/4-doc/sites/world_site_subdomain_category.csv")
+
+df_sites_int <- df_sites("World") %>% 
+  mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+         site_subdomain = paste(site, subdomain, sep = "_"),
+         simple_date = paste0(year(crawl_date),"-", month(crawl_date), "-01") %>% ymd(.))
+
+df_script_sub_traces_int <- get_script_sub_traces("World") %>% 
+  left_join(., df_sites_int, by = c("site" = "sha1")) %>% 
+  arrange(simple_date) %>% 
+  reframe(counted = n(), .by = c(site_subdomain, simple_date, trace, search_type)) %>% 
+  filter(!site_subdomain %in% exclude_side_subdomain)
+
+df_sub_traces_int <- get_data_sub_traces("World", "value") %>% 
+  bind_rows(., get_data_sub_traces("World", "attr")) %>% 
+  bind_rows(., get_data_snippets_traces_("value", "World")) %>% 
+  bind_rows(., get_data_snippets_traces_("attr", "World")) %>% 
+  # mutate(site_subdomain = str_remove(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01_")) %>% 
+  left_join(., df_sites_int) %>% 
+  arrange(simple_date) 
+
+# get_data_sub_traces("World", "value") %>% View()
+
+df_sub_traces_int__ <- df_sub_traces_int %>% 
+  reframe(counted = n(), .by = c(site_subdomain, site, simple_date, trace, search_type)) %>% 
+  left_join(., translation_int_sites) %>% 
+  mutate(site_category = if_else(!is.na(category), paste0(site,"_", category), site_subdomain))
+
+just_traces_int <- df_script_sub_traces_int %>% 
+  bind_rows(., df_sub_traces_int__) %>% 
+  reframe(counted_traces = sum(counted), .by = c(simple_date, trace))
+
+found_traces_int <- just_traces_int %>% select(trace) %>% distinct()# %>% pull(.)
+
+df_comment_traces_int <- get_data_comment_traces("World") %>% 
+  reframe(sum_comments = sum(counted_comments), .by = simple_date)
+
+df_sites_int_histo <- df_sites_int %>% 
+  reframe(counted_sites = n(), .by = c(simple_date)) %>% 
+  left_join(., df_comment_traces_int)
+
+df_meta_info_int <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>% 
+  as_tibble() %>% 
+  rename(simple_date = value) %>% 
+  expand_grid(., found_traces_int) %>% # View()
+  left_join(., df_sites_int_histo) %>% 
+  left_join(., just_traces_int) %>% 
+  mutate(is_set = ifelse(!is.na(counted_traces), 1, NA)) %>% 
+  group_by(trace) %>% 
+  fill(is_set, .direction = "updown") %>% 
+  ungroup() %>% 
+  filter(is_set == 1)#%>% 
+  # filter(!site_subdomain %in% exclude_side_subdomain)
+
+color_search_type <- c("snippet_list"= "black", "sub_traces" = "white")
+shape_search_type <- c("snippet_list"= 18, "sub_traces" = 19)
+
+ggplot() +
+  geom_tile(data = df_meta_info_int, aes(x = simple_date, y = trace, fill = counted_sites)) +
+  geom_point(data = df_meta_info_int, aes(x = simple_date, y = trace, size = sum_comments), color = "#31eccd", shape = 15) +
+  geom_point(data = just_traces_int, aes(x = simple_date, y = trace, size = counted_traces), color = "black") +
+  # facet_col(vars(site_category), scales = "free", space = "free") +
+  scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-09-01")), expand = c(0,NA)) +
+  scale_color_manual(values = color_search_type) +
+  scale_shape_manual(values = shape_search_type) +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90") +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted +  theme(legend.position = "none", panel.grid.major.y = element_line(color = "grey70", linewidth = .2))
+
+```
+
+:::
+
+## Grafik: Funktionalitäten innerhalb von Kommentaroptionen
+
+
+
+Auf der x-Achse zeigt die Grafik einen Zeitverlauf. Für solche Zeitabschnitte, zu dienen archivierte Webseiten existieren, sind bläulich markiert, je mehr desto blauer. 
+Rosafarbene Markierungen zeigen, dass es zu diesem Zeitpunkt Kommentarbereiche extrahiert wurden. Beide Informationen werden unabhängig zur y-Achse gezeichnet.
+
+Die y-Achse zeigt für jede der Nachrichtenseiten die Stichworte, die für die jeweilige Seite gefunden wurden. Diese werden durch die schwarzen Kreise dargestellt. Je größer ein Kreis gezeichnet ist, desto häufiger wurde das Wort gezählt.
+
+::: panel-tabset
+
+### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 110
+#| fig-width: 10
+
+df_sub_traces_de_ <- df_sub_traces_de %>% 
+  reframe(counted = n(), .by = c(site_subdomain, simple_date, trace, raw_trace, search_type)) %>% 
+  filter(!site_subdomain %in% exclude_side_subdomain) #%>%  View()
+
+found_traces <- df_sub_traces_de__ %>% select(trace) %>% distinct()# %>% pull(.)
+df_comment_traces <- get_data_comment_traces("German")
+
+df_sites_de_histo <- df_sites_de %>% 
+  reframe(counted_sites = n(), .by = c(site_subdomain, simple_date)) %>% 
+  left_join(., df_comment_traces)
+
+df_meta_info <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>% 
+  as_tibble() %>% 
+  rename(simple_date = value) %>% 
+  expand_grid(., found_traces) %>% # View()
+  left_join(., df_sites_de_histo) %>% 
+  left_join(., df_sub_traces_de__) %>% 
+  mutate(is_set = ifelse(!is.na(counted), 1, NA)) %>% 
+  group_by(site_subdomain, trace) %>% 
+  fill(is_set, .direction = "updown") %>% 
+  ungroup() %>% 
+  filter(is_set == 1) %>% 
+  filter(!site_subdomain %in% exclude_side_subdomain)
+
+ggplot() +
+  geom_tile(data = df_meta_info, aes(x = simple_date, y = trace, fill = counted_sites)) +
+  geom_point(data = df_meta_info, aes(x = simple_date, y = trace, size = counted_comments), color = "#31eccd", shape = 15) +
+  geom_point(data = df_sub_traces_de__, aes(x = simple_date, y = trace, size = counted)) + #, color = search_type)) +
+  facet_col(vars(site_subdomain), scales = "free", space = "free") +
+  scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-09-01")), expand = c(0,NA)) +
+  scale_color_manual(values = color_search_type) +
+  scale_shape_manual(values = shape_search_type) +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90") +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted +  theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+
+```
+
+### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 250
+#| fig-width: 10
+
+# df_sub_traces_int__ <- df_sub_traces_int %>% 
+#   reframe(counted = n(), .by = c(site_subdomain, simple_date, trace, raw_trace, search_type)) %>% 
+#   filter(!site_subdomain %in% exclude_side_subdomain) #%>%  View()
+
+# subdomains_counted_int <- df_sub_traces_int__ %>% select(site_subdomain) %>% reframe(count = n(), .by = site_subdomain)# %>% View()
+# subdomains_counted_de <- df_sub_traces_de__ %>% select(site_subdomain) %>% reframe(count = n(), .by = site_subdomain) #%>% View()
+
+# subdomains_counted_int %>% select(site_subdomain) %>% arrange(site_subdomain) %>%  clipr::write_clip()
+
+# found_traces <- df_sub_traces_int__ %>% select(trace) %>% distinct()# %>% pull(.)
+# df_comment_traces <- get_data_comment_traces("World")
+
+df_sites_int_histo_sub <- df_sites_int %>% 
+  reframe(counted_sites = n(), .by = c(site_subdomain, site, simple_date)) %>% 
+  left_join(., df_comment_traces_int) %>% 
+  left_join(., translation_int_sites) %>% 
+  mutate(site_category = if_else(!is.na(category), paste0(site,"_", category), site_subdomain))
+
+
+df_meta_info_int_sub <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>% 
+  as_tibble() %>% 
+  rename(simple_date = value) %>% 
+  expand_grid(., found_traces_int) %>% # View()
+  left_join(., df_sites_int_histo_sub) %>% #View()
+  left_join(., df_sub_traces_int__) %>% 
+  mutate(is_set = ifelse(!is.na(counted), 1, NA)) %>% 
+  group_by(site_category, trace) %>% 
+  fill(is_set, .direction = "updown") %>% 
+  ungroup() %>% 
+  filter(is_set == 1) #%>% 
+  # filter(!site_subdomain %in% exclude_side_subdomain)
+
+ggplot() +
+  geom_tile(data = df_meta_info_int_sub, aes(x = simple_date, y = trace, fill = counted_sites)) +
+  geom_point(data = df_meta_info_int_sub, aes(x = simple_date, y = trace, size = sum_comments), color = "#31eccd", shape = 15) +
+  geom_point(data = df_sub_traces_int__, aes(x = simple_date, y = trace, size = counted)) + #, color = search_type)) +
+  facet_col(vars(site_category), scales = "free", space = "free") +
+  scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-09-01")), expand = c(0,NA)) +
+  scale_color_manual(values = color_search_type) +
+  scale_shape_manual(values = shape_search_type) +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90") +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted +  theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+
+```
+
+:::
+
+## Wildness of snippet traces
+
+```{r}
+
+tbl_snippets <- df_sub_traces_de %>% 
+  filter(search_type == "snippet_list") %>% 
+  select(site_subdomain, trace, tag, raw_trace) %>% 
+  distinct()
+
+reactable(tbl_snippets)
+
+```
+
+
+## Grafik: Funktionalitäten innerhalb von eingebettende Skripten
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 8
+#| fig-width: 10
+
+found_traces <- df_script_sub_traces_traces %>% select(trace) %>% distinct()# %>% pull(.)
+
+df_meta_info <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>% 
+  as_tibble() %>% 
+  rename(simple_date = value) %>% 
+  expand_grid(., found_traces) %>% # View()
+  left_join(., df_sites_de_histo) %>% 
+  left_join(., df_script_sub_traces_traces) %>% 
+  mutate(is_set = ifelse(!is.na(counted), 1, NA)) %>% 
+  group_by(site_subdomain, trace) %>% 
+  fill(is_set, .direction = "updown") %>% 
+  ungroup() %>% 
+  filter(is_set == 1) %>% 
+  filter(!site_subdomain %in% exclude_side_subdomain)
+
+ggplot() +
+  geom_tile(data = df_meta_info, aes(x = simple_date, y = trace, fill = counted_sites)) +
+  geom_point(data = df_meta_info, aes(x = simple_date, y = trace, size = counted_comments), color = "#31eccd", shape = 15) +
+  geom_point(data = df_script_sub_traces_traces, aes(x = simple_date, y = trace, size = counted), color = "black") +
+  facet_col(vars(site_subdomain), scales = "free", space = "free") +
+  scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-09-01")), expand = c(0,NA)) +
+  scale_color_manual(values = color_search_type) +
+  scale_shape_manual(values = shape_search_type) +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90") +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted +  theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+
+```
+
+### Grafik international filtered domains
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 50
+#| fig-width: 10
+
+
+include_side_category <- c("thehindu_www", "thehindy_other", "sputniknews_NA", "scmp_www", "rt_www", "rt_rtd", "rt_NA", "indiatimes_www", "indiatimes_blogs", "indiatimes_other", "foxnews_www", "foxnews_blog", "foxnews_other", "chinadaily_www", "chinadaily_NA", "chinadaily_other", "chinadaily_community", "aljazeera_www", "aljazeera_NA", "aljazeera_blog")
+
+df_meta_info_int_sub_f <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>% 
+  as_tibble() %>% 
+  rename(simple_date = value) %>% 
+  expand_grid(., found_traces_int) %>% # View()
+  left_join(., df_sites_int_histo_sub) %>% #View()
+  left_join(., df_sub_traces_int__) %>% 
+  mutate(is_set = ifelse(!is.na(counted), 1, NA)) %>% 
+  group_by(site_category, trace) %>% 
+  fill(is_set, .direction = "updown") %>% 
+  ungroup() %>% 
+  filter(is_set == 1) %>% 
+  filter(site_category %in% include_side_category)
+
+print_data <- df_sub_traces_int__ %>% filter(site_category %in% include_side_category)
+
+ggplot() +
+  geom_tile(data = df_meta_info_int_sub_f, aes(x = simple_date, y = trace, fill = counted_sites)) +
+  geom_point(data = df_meta_info_int_sub_f, aes(x = simple_date, y = trace, size = sum_comments), color = "#31eccd", shape = 15) +
+  geom_point(data = print_data, aes(x = simple_date, y = trace, size = counted)) + #, color = search_type)) +
+  facet_col(vars(site_category), scales = "free", space = "free") +
+  scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-09-01")), expand = c(0,NA)) +
+  scale_color_manual(values = color_search_type) +
+  scale_shape_manual(values = shape_search_type) +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90") +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted +  theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+
+
+
+```
+## Notes
+
+```{r}
+
+# https://wazemaradio.com/wp-content/uploads/2018/05/Mappingthe-Ethiopian-Media_Wazema-Briefing-2018.pdf
+```
+

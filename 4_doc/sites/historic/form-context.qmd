@@ -1,5 +1,5 @@
 ---
-title: "Analyzing form context"
+title: "Deprecated: Analyzing form context"
 ---
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
@@ -9,24 +9,24 @@ library(RPostgres)
 library(urltools)
 library(googlesheets4)
 
-source("../config/config-secret.R")
-source("../config/config-graphic.R")
-source("../config/config.R")
+# source("../../config/config-secret.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
 
 
 
-con <- dbConnect(RPostgres::Postgres(), 
-                 dbname = dsn_database,
-                 host = dsn_hostname, 
-                 port = dsn_port,
-                 user = dsn_uid, 
-                 password = dsn_pwd
-)
-
+# con <- dbConnect(RPostgres::Postgres(), 
+#                  dbname = dsn_database,
+#                  host = dsn_hostname, 
+#                  port = dsn_port,
+#                  user = dsn_uid, 
+#                  password = dsn_pwd
+# )
+# 
 # dbDisconnect(con)
-
 make_df <- function(df, sphere_){
   gs4_auth(cache=".secrets")
+
   gs_domain_to_look <- read_sheet(SPREADSHEET_PATH_GENERELL, sheet = SPREADSHEET_PATH_DOMAINS[[{{sphere_}}]]) %>% 
     select(Name, URL) %>% 
     mutate(site = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.)) 
@@ -45,28 +45,41 @@ make_df <- function(df, sphere_){
   return(df_return)
 }
 
-get_hashes_2 <- function(sphere_){
-  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.hashed_forms FROM sites s INNER JOIN findings_hashed_2 fh ON fh.sha1 = s.sha1 WHERE s.sphere = '", sphere_, "' AND fh.iteration = 1 ORDER BY s.crawl_date"))
-  df_return <- make_df(df, sphere_)
-  return(df_return)
-}
+# get_hashes_2 <- function(sphere_){
+#   df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.hashed_forms FROM sites s INNER JOIN findings_hashed_2 fh ON fh.sha1 = s.sha1 WHERE s.sphere = '", sphere_, "' AND fh.iteration = 1 ORDER BY s.crawl_date"), check_interrupts = TRUE)
+#   df_return <- make_df(df, sphere_)
+#   return(df_return)
+# }
+# 
+# 
+# get_hashes_3 <- function(sphere_){
+#   # print(sphere_)
+#   df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.hashed_forms FROM sites s INNER JOIN findings_hashed_2 fh ON fh.sha1 = s.sha1 WHERE s.sphere = '", sphere_, "' AND fh.iteration = 2 ORDER BY s.crawl_date"), check_interrupts = TRUE)
+#   df_return <- make_df(df, sphere_)
+#   return(df_return)
+# }
 
+## zu Dokumentationszwecken werden hier die alten Daten gespeichert. Die Datenbank war hier noch in einer sich entwickeldend Struktur, diese wurde überarbeitet. Damit der Report noch durchlaufen kann, wurden die Daten lokal gespeichert.
 
-get_hashes_3 <- function(sphere_){
-  # print(sphere_)
-  df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.url, s.sha1, fh.hashed_forms FROM sites s INNER JOIN findings_hashed_2 fh ON fh.sha1 = s.sha1 WHERE s.sphere = '", sphere_, "' AND fh.iteration = 2 ORDER BY s.crawl_date"))
-  df_return <- make_df(df, sphere_)
-  return(df_return)
-}
+# df_hashed_form_1th_iteration_de <- get_hashes_2("German")
+# save(df_hashed_form_1th_iteration_de, file = "../../../data/4-doc/form-context/df_hashed_form_1th_iteration_de.RData")
+# df_hashed_form_1th_iteration_nl <- get_hashes_2("Dutch")
+# save(df_hashed_form_1th_iteration_nl, file = "../../../data/4-doc/form-context/df_hashed_form_1th_iteration_nl.RData")
+# df_hashed_form_1th_iteration_world <- get_hashes_2("World")
+# save(df_hashed_form_1th_iteration_world, file = "../../../data/4-doc/form-context/df_hashed_form_1th_iteration_world.RData")
+# 
+# df_hashed_form_2th_iteration_de <- get_hashes_3("German")
+# save(df_hashed_form_2th_iteration_de, file = "../../../data/4-doc/form-context/df_hashed_form_2th_iteration_de.RData")
+# df_hashed_form_2th_iteration_nl <- get_hashes_3("Dutch")
+# save(df_hashed_form_2th_iteration_nl, file = "../../../data/4-doc/form-context/df_hashed_form_2th_iteration_nl.RData")
+# df_hashed_form_2th_iteration_world <- get_hashes_3("World")
+# save(df_hashed_form_2th_iteration_world, file = "../../../data/4-doc/form-context/df_hashed_form_2th_iteration_world.RData")
 
-# 7a7680601a641ca3f1ad02053e6aa35fe53c111e
-
-# test <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sphere, s.site, s.url, s.sha1, tc.parent_path_str, tc.group, tc.name, tc.attr, tc.value, tc.text FROM sites s INNER JOIN tags_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE 'German' AND tc.site LIKE '7a7680601a641ca3f1ad02053e6aa35fe53c111e'  ORDER BY s.sha1, tc.group"))
-# # 
-# test2 <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sphere, s.site, s.url, s.sha1, tc.parent_path_str, tc.group, tc.name, tc.attr, tc.value, tc.text FROM sites s INNER JOIN tags_context tc ON tc.site = s.sha1 WHERE s.sphere LIKE 'German' AND tc.site LIKE 'cc879db7bc2bf85ace60968cfcb31be123592d13'  ORDER BY s.sha1, tc.group"))
 
 
 ```
+
+Deprecated, weil das der Prototyp zum hashen war. Vielleicht können Formulierungen noch gebraucht werden.
 
 ## What is ment by form context?
 
@@ -129,13 +142,22 @@ Je mehr Hashes eine Seite hat, desto weniger funktioniert die Methode hier. Hat 
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
+load(file = "../../../data/4-doc/form-context/df_hashed_form_2th_iteration_de.RData")
+load(file = "../../../data/4-doc/form-context/df_hashed_form_2th_iteration_nl.RData")
+load(file = "../../../data/4-doc/form-context/df_hashed_form_2th_iteration_world.RData")
+  
 get_data_table <- function(sphere_){
   
-  df_hashes_3 <- get_hashes_3(sphere_)
+  df_hashes_3 <- case_when(
+    str_detect(string = sphere_, pattern ="de") ~ list(df_hashed_form_2th_iteration_de),
+    str_detect(sphere_, "nl") ~ list(df_hashed_form_2th_iteration_nl),
+    str_detect(sphere_, "world") ~ list(df_hashed_form_2th_iteration_world),
+    
+  )
   
-  # str(df_hashes_3)
+  df_hashes_3 <- df_hashes_3[[1]]
   
-  df_counted_sites_with_form_findings <- df_hashes_3 %>% 
+  df_counted_sites_with_form_findings <- df_hashes_3 %>% #View()
     reframe(nr_sites_with_form_findings = n(), .by = c(site, subdomain, site_subdomain)) 
   
   # print(sphere_)
@@ -165,11 +187,9 @@ get_data_table <- function(sphere_){
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df <- get_data_table("German") %>% select(-site_subdomain)
+df <- get_data_table("de") %>% select(-site_subdomain)
 
-DT::datatable(df, 
-              rownames = FALSE
-              )
+DT::datatable(df, rownames = FALSE)
 
 ```
 
@@ -177,11 +197,9 @@ DT::datatable(df,
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df <- get_data_table("Dutch") %>% select(-site_subdomain)
+df <- get_data_table("nl") %>% select(-site_subdomain)
 
-DT::datatable(df, 
-              rownames = FALSE
-              )
+DT::datatable(df, rownames = FALSE)
 
 ```
 
@@ -189,7 +207,7 @@ DT::datatable(df,
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
-df <- get_data_table("World") %>% select(-site_subdomain)
+df <- get_data_table("world") %>% select(-site_subdomain)
 
 DT::datatable(df, rownames = FALSE)
 
@@ -213,7 +231,18 @@ get_plot_changes <- function(sphere_){
   
   # print("get plot changes second")
   
-  get_hashes_3(sphere_) %>% 
+  # load(file = paste0("../../../data/4-doc/form-context/df_hashed_form_2th_iteration_", sphere_, ".RData"))
+  
+  df_hashes_3 <- case_when(
+    str_detect(string = sphere_, pattern ="de") ~ list(df_hashed_form_2th_iteration_de),
+    str_detect(sphere_, "nl") ~ list(df_hashed_form_2th_iteration_nl),
+    str_detect(sphere_, "world") ~ list(df_hashed_form_2th_iteration_world),
+    
+  )
+  
+  df_hashes_3 <- df_hashes_3[[1]]
+  
+  df_hashes_3 %>% 
     mutate(site_subdomain = paste(site, subdomain, sep = "_")) %>%
     # filter(site_subdomain %in% sites_to_print) %>% #View()
     ggplot(., aes(x = crawl_date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
@@ -232,7 +261,7 @@ get_plot_changes <- function(sphere_){
 
 ## hier fehlen alle seiten ohne form-findings
 
-get_plot_changes("German")
+get_plot_changes("de")
 
 ```
 
@@ -240,7 +269,7 @@ get_plot_changes("German")
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.width=9, fig.height=8}
 
-get_plot_changes("Dutch")
+get_plot_changes("nl")
 
 ```
 
@@ -248,7 +277,7 @@ get_plot_changes("Dutch")
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.width=9, fig.height=18}
 
-get_plot_changes("World") 
+get_plot_changes("world") 
 
 ```
 
@@ -262,8 +291,9 @@ Für diese Grafik, habe ich nur solche Domain-Subdomain-Kombinationen ausgewähl
 
 ## hier fehlen alle seiten ohne form-findings
   # print("get plot changes first")
-  
-  df_hashes_2 <- get_hashes_2("German")
+  load(file = "../../../data/4-doc/form-context/df_hashed_form_1th_iteration_de.RData")  
+
+  df_hashes_2 <- df_hashed_form_1th_iteration_de
   
   # str(df_hashes_3)
   

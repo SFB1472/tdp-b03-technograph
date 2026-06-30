@@ -1,0 +1,1219 @@
+---
+title: "Veränderungen finden - Codeabschnitte vergleichen"
+---
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+library(googlesheets4)
+library(ggiraph)
+library(ggforce)
+library("MetBrewer")
+
+source("../../config/config-secret-local.R")
+# source("../config/config-secret.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+# dbDisconnect(con)
+
+get_context_data_ <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT tc.attr, tc.value, COUNT(*) as counted FROM traces_context tc  WHERE tc.sphere = '", sphere_, "' GROUP BY tc.attr, tc.value"))
+  
+}
+
+get_hashes_local_timely <- function(sphere){
+  df_hashes <- dbGetQuery(conn = con, paste0("SELECT tc.hashed_context, tc.agg_type, tc.agg_id, tc.iteration FROM context_hashed tc  WHERE tc.sphere = '", sphere, "' AND tc.agg_type = 'date_site_subdomain'")) %>% 
+    mutate(
+           month = ifelse(agg_type == "date_site_subdomain", str_extract(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}"))#,
+           # site_subdomain = ifelse(agg_type == "date_site_subdomain")
+           )
+}
+
+```
+
+
+
+## Fingerabdrücke - Hashes als Tool Kommentarbereiche zu komprimieren
+
+Hashes können Fingerabdrücke von unterschiedlichstem digitalen Artefakten liefern. Das wird z.b. eingesetzt um Anwendern die Möglichkeit zu geben zu überprüfen, ob eine heruntergeladene Software auf wirklich die Software ist, die sie erwartet hatten. So lässt sich verhindern, Malware zu installieren, durch die der Computer oder, indirekter, die benutzende Person Schaden nimmt. Die Organisation stellt dann nicht nur ein Download-Paket zur Verfügung, sondern auch einen Hash. Bevor der User die heruntergeladene Software installiert, führt dieser selbst den Algorithmus aus, die Software zu hashen und vergleicht die 40 Zeichen lange Zahlen und Buchstabenkette mit derjenigen, die das Unternehmen zur Verfügung gestellt hat. 
+
+
+Notizen aus Prototyp:
+Welche Informationen werden gehasht? 
+
+In dem Probedurchlauf mit den form-tags flossen drei Spalten in den Hash ein: Name des Tags, Name des Attributes und der Text, der auf der Seite ausgegeben wird. Mit der Ausweitung auf divs und iframes taugt diese Entscheidung nicht mehr, denn jetzt sind definitiv ganze Kommentare in den Daten. Folglich sollte der Text, der auf der Seite zu lesen ist tunlichst nicht in den Hash eingehen. 
+
+Inzwischen denke ich, sollten die Werte der Attribute schon wieder in den Hash eingehen, allerdings ist dann eine notwendig die Daten ein wenig zu cleanen. Denn wie in dem vorherigen Dokument zu den Hashes geschildert, ist es tatsächlich so, dass sich hier oftmals ids finden. Manchmal beziehen sie sich auf die Texte, die kommentiert werden können, manchmal auf User (div data-userid), Autoren oder Kommentare haben selbst ids (div id': 'comments-40383508 ´; article data-comments-block-id). Auch störend sind beispielsweise img-descriptions, die durch den Context jetzt gelegentlich dabei sind (div data-video-description, aber nur 33 Vorkommen). 
+
+Je länger ich auf die Daten starre, desto klarer wird wieder weshalb ich bei den form-tags-context die Werte der Attribute weggelassen habe.
+
+Eine Variante dazwischen wäre manche Filter zu probieren und den Unterschied zu untersuchen. 
+
+### Varianten Hashes zu berechnen
+
+#### pragmatic
+
+Die pragmatische Lösung hier ist für die Hashes lediglich die Struktur der Bereiche zu beachten. Es werden hier die Tags und die Namen der Attribute berücksichtigt, die Werte der Attribute und der Text in der Seite nicht. 
+
+Nachteil der Variante ist, dass als individuelle Faktoren wie der Name einer Klasse oder ID rausfallen und somit kleine Veränderungen in einem Like-Button unsichtbar werden. 
+
+In der Datenbanktablle sind diese Hashes in der `iteration`-Spalte markiert mit "pragmatic".
+
+#### cleaned whitelist
+
+Diese Variante erweitert den pragmatischen ein wenig. Hier werden Werte von Attributen in den Hash mit einbezogen, aber nur von solchen, die für den Tag identitätsstiftend sind, also die Werte von Klassen und IDs, alle anderen bleiben leer. Außerdem werden die Bereiche im Umfang reduziert, so dass es jedes Vorkommen nur noch einmal gibt. Immer wieder kommt es vor, das Kommentare kodiert sind und sich die Struktur in der Seite wiederholt, wird diese dann mitcodiert, ändert sich ein Hash von Seite zu Seite womöglich nur deshalb, weil es mehr oder weniger Kommentare gibt. 
+
+#### cleaned countbased
+
+Ein erster Vereinfachungsversuch versuchte entlang solcher Attribut-Wert-Kombination vorzugehen, die besonders individuell sind. Werden diese Kombinationen gezählt, kommen einmalige Kombinationen mit Abstand am häufigsten vor. Das liegt u.a. daran, dass in Attributen oft Verknüpfungen auf den aktuellen Artikel oder einen kommentierenden User in Form von IDs enthalten sind. Diese Informationen sollten bei dem countbased-Ansatz vereinfacht werden, um dadurch möglichst viele Informationen im Hash kodieren zu können, ohne das dieser zu sensibel reagiert.
+
+Im Vergleich mit den beiden Erstgenannten (siehe Grafik weiter unten), schneidet dieser Ansatz so schlecht ab, dass der Aufwand nur für die deutsche Sphere durchgeführt wurde. 
+
+
+### Der Versuch Filterkriterien zu finden ...
+
+Tabellen, die bei dieser Cleaning-Aktion helfen:
+
+#### Welche Kombination von Attributen und Werten kommt wie häufig vor?
+
+Diese Tabelle ist eine Hitliste der Kombinationen, die in den extrahierten Kommentarspurenbereichen am häufigsten vorkommen. Sie enthalten nicht notwendigerweise Spuren auf Kommentaroptionen, sondern bilden in ihrer Gesamtheit die HTML-Strukturen für die Bereiche.
+
+Diese Liste ist verkürzt und zeigt nur die 50 häufigsten. Für die Informationen zum Cleanen ist sie noch nicht hilfreich, liefert aber eine Einordnung für die Häufigkeit der Kombinationen und födert ein Verständnis für die vorherrschenden Strukturen.
+
+:::panel-tabset
+
+##### German
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df_context_de_ <- get_context_data_("German")
+
+# ## Welche Kombinationen von Attributen und Werten kommen wie häufig vor?
+# # interessant werden hier vor allem die einstelligen Einträge
+duplicate_attr_values_de <- df_context_de_ %>%
+  # reframe(counted = n(), .by = c(attr, value)) %>% 
+  arrange(desc(counted)) 
+
+# rm(df_context_de)
+
+DT::datatable(duplicate_attr_values_de %>% head(50))
+
+```
+
+##### World
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+
+df_context_world_ <- get_context_data_("World")
+
+# ## Welche Kombinationen von Attributen und Werten kommen wie häufig vor?
+# # interessant werden hier vor allem die einstelligen Einträge
+duplicate_attr_values_world <- df_context_world_ %>%
+  # reframe(counted = n(), .by = c(attr, value)) %>% 
+  arrange(desc(counted)) 
+
+# rm(df_context_de)
+
+DT::datatable(duplicate_attr_values_world %>% head(50))
+
+```
+:::
+
+#### Wie häufig sind die jeweiligen Vorkommen?
+
+Diese Tabelle ist schwierig zu lesen: sie ist ein tabellarisches Histogram der oberen. Die erste Spalte zeigt wie oft eine Attribut-Wert-Kombination gezählt wurde, die zweite, wie häufig diese Zählung vorkommt. 
+
+Daraus ist zu lesen, dass es unglaublich viele individuelle Attribut-Wert-Kombination gibt, nämlich 719.799. Das ist jetzt relevant für die Überlegungen zum cleanen. Finde ich Regeln, die besonders viele der einzelnen Vorkommen vereinheitlichen, bringt mich das schon ein großes Stück voran. 
+
+Wende ich diese Vereinheitlichungsregeln auf den Datensatz an, habe ich entschieden alle Kombinationen bis 20 Vorkommen mit einzubeziehen. 
+
+:::panel-tabset
+
+##### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+histo_tbl <- duplicate_attr_values_de %>% 
+  reframe(histogram = n(), .by = counted) %>% 
+  arrange(desc(histogram)) 
+
+DT::datatable(histo_tbl%>% head(50) %>% select("Anzahl der Attribut-Wert-Kombination" = counted, "Häufigkeit der Anzahl" = histogram))
+
+```
+
+##### World
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+histo_tbl <- duplicate_attr_values_world %>% 
+  reframe(histogram = n(), .by = counted) %>% 
+  arrange(desc(histogram)) 
+
+DT::datatable(histo_tbl%>% head(50) %>% select("Anzahl der Attribut-Wert-Kombination" = counted, "Häufigkeit der Anzahl" = histogram))
+
+```
+
+:::
+
+#### Welche Attribute kommen am häufigsten mit einzelnen Werten vor?
+
+Diese Tabelle ist eine sehr wichtige Grundlage um zu sehen, welche Attribute die größte Aufmerksamkeit fürs Cleaning brauchen. Sie ist sowas wie das Gegenteil der ersten Tabelle oben. Sie zeigt welche Attribute am häufigsten Einzelwerte enthalten und dreht damit die Logik auf den Kopf. Das, was hier ganz oben steht, wäre in der ersten Tabelle in dem langen Rattenschwanz der sonstigen. 
+
+Hier liegt deswegen eine andere Zählung vor, hier sind die Werte der Attribute nämlich egal. Die obere Tabelle wurde hier gefiltert auf einmalige Vorkommen, dann wird die Spalte der Werte verworfen und nur noch das Vorkommen der Attribute gezählt. 
+
+Aus Performance-Gründen ist auch diese Tabelle auf die ersten 50 Einträge gefiltert.
+
+::: panel-tabset
+
+#### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+# ## auf einen Blick: welche Werte haben die einmal vorkommenden Attribute
+individual_attrs_de <- duplicate_attr_values_de %>%
+  filter(counted == 1) #%>% #View()
+  # head(50)
+
+#individual_attrs  %>% filter(is.na(value)) %>% View()
+
+## und welche Attribute haben die meisten unterschiedlichen Werte, denn ab denen würde ich mit dem Filtern ansetzen.
+most_individual_attrs_de <- duplicate_attr_values_de %>%
+  filter(counted == 1) %>% #View()
+  reframe(counted = n(), .by = attr) %>% #View()
+  arrange(desc(counted))
+
+DT::datatable(most_individual_attrs_de %>% head(50))
+
+```
+
+#### World
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+# ## auf einen Blick: welche Werte haben die einmal vorkommenden Attribute
+individual_attrs_world <- duplicate_attr_values_world %>%
+  filter(counted == 1) #%>% #View()
+  # head(50)
+
+#individual_attrs  %>% filter(is.na(value)) %>% View()
+
+## und welche Attribute haben die meisten unterschiedlichen Werte, denn ab denen würde ich mit dem Filtern ansetzen.
+most_individual_attrs_world <- duplicate_attr_values_world %>%
+  filter(counted == 1) %>% #View()
+  reframe(counted = n(), .by = attr) %>% #View()
+  arrange(desc(counted))
+
+DT::datatable(most_individual_attrs_world %>% head(50))
+
+```
+:::
+
+#### Countbased Cleaning
+
+Die zweite Tabelle zeigt einen Ausschnitt, welche Werte für die Attribute tatsächlich vergeben wurden. Auf deren Basis habe ich entschieden eine Reihe von Werten komplett zu ersetzen und zwar für folgende Attribute: "href", "alt", "title", "datetime", "action", "src", "name", "srcset","data-video-poster", "data-video-src", "data-video-title", "data-video-teaser"
+
+*class*:
+- alle Zahlen durch 0 ersetzt
+- alle urls ersetzt
+- für 4 spezielle Werte Kürzungen vorgenommen
+
+*onclick*:
+- Inhalt zwischen den runden Klammern löschen
+- Zahlen ersetzt
+- für 2 spezielle Werte Kürzungen vorgenommen
+
+Attribute die *id* enthalten und *value*:
+- zahlreiche replacements für diverse IDs
+- urls ersetzt
+- spezielle Ersetzungen 
+
+*data-cache* und *data-nocache*:
+- urls erhalten, aber nur bis `?`, danach gekürzt
+
+*data-param* und *data:param*:
+- Zahlen durch 0 ersetzt
+- urls entfernt
+- alle `/ajaxentry/` ab dem `?` gekürzt
+- zwei spezielle Kürzungen
+
+zusätzlich Attribute filtern, die keine Werte haben
+
+Das Script zum cleanen ist `analyzing-tags-context.R`
+
+
+**Zeit für ein Beispiel: so sehen "individuelle Attribute" aus:**
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+DT::datatable(individual_attrs_de %>% head(50))
+
+```
+
+#### Iteration nach Hash-Analyse viel später
+
+Nach Analyse der verschiedenen Hashes, die erst weiter unten ausgeführt werden, wurde eine Anpassung bei der Filterung der Attribute vorgenommen. Im Abschnitt "Welche Attribute kommen am häufigsten mit einzelnen Werten vor?" steht beschrieben, dass die Tabelle auf Einzelwerte beschränkt wurde. Das stellte sich als zu streng heraus. Der Grenzwert liegt nun bei unter 100 Vorkommen. 
+
+Damit das nachvollbarer wird, hilft die genannte Tabelle in ihrer langen Version (nur über diesen Quellcode möglich). Ab dem Grenzwert fällt das Vorkommen der Attribute in den einstelligen Bereich. 
+
+
+## Vegleich der unterschiedlichen Abdrücke
+
+Datenstand: Für die errechneten Hashes gibt es nun wieder eine neue Datenbanktabelle. Die Hashvarianten - pragmatisch, cleaned_countbased und cleaned-whitespace - liegen in der gleichen Tabelle, unterscheidbar über eine Spalte die `iteration` heißt. 
+
+### Erste Visualisierung - am Beispiel der Leipziger Volkszeitung (willkürliche Wahl) 
+
+Historisches Schnipsel: Die folgenden Absätze habe ich sehr früh im Prozess geschrieben. Nachdem ich zunächst tagelang nur auf Tabellen gestarrt hatte, wollte ich endlich wieder etwas Grafisches sehen. Ich hebe sie auf, weil sie eine nette Nachricht aus der Vergangenheit sind und demonstrieren, wieviel weniger komplex ein Themenbereich aussieht, wenn man noch nicht eingetaucht ist.
+
+"Diese Grafik erfüllt noch keinen tieferen Zweck, als endlich etwas Gezeichnetes zu sehen. Sie wird ein Auftakt für eine Analyse sein, welche der Hashes sich als geeigneter erweisen oder welche Nacharbeiten an den Hashes noch notwendig sind. Wichtig an der Stelle ist, das ist work in progress, kein fertiges Argument. 
+
+Ein halbes Argument vielleicht, denn was die Grafik jetzt schon leistet und am Ende noch viel besser leisten wird, ist ein visuelles Argument. Sie ist die eine Variante für "follow the update", denn besser als alle beschreibenden Worte ist hier schon ablesbar, wann sich Bereiche ändern. Eine neue Farbe bedeutet ein Veränderung im Kommentarbereich."
+
+Die Grafik existiert nicht mehr, sie war komplett sinnlos. 
+
+
+### Monatliche Hashes im Vergleich
+
+Die folgenden Grafiken sind erste Kontrollgrafiken dafür, wie gut die Idee funktioniert Hashes für die Aufgabenstellung Änderungen in Codeabschnitten zu verwenden. Es zeigt sich, dass es ein Tool sein kann, um mehr über die Datenlage zu erfahren, aber weniger um einen claim für eine Updatechronologie zu machen.
+
+Für jedes Haus, für das Kommentaroptionen gefunden wurden, gibt es eine Zeile. Jeder Hash, also jeder Fingerabdruck eines Codeabschnitts, bekommt eine eigene Farbe. Im Idealfall würde sich die Farbe nur dann wechseln, wenn die Veränderung von einem Hash zum nächsten bedeuten würde, dass sich etwas bedeutendes verändert hat. Dieses Verfahren beinhaltet allerdings, einen Vergleich auf Literalebene, so dass für die Berechnung der Hashes schon von Bedeutung ist, wenn sich z.B. eine Zahl verändert hat.
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+get_hashes_local_timely <- function(sphere, iteration){
+  df_hashes <- dbGetQuery(conn = con, paste0("SELECT tc.hashed_context, tc.agg_type, tc.agg_id, tc.iteration FROM context_hashed tc  WHERE tc.sphere = '", sphere, "' AND tc.iteration ='", iteration,"' AND tc.agg_type = 'date_site_subdomain'")) %>% 
+    mutate(
+           month = ifelse(agg_type == "date_site_subdomain", str_extract(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}")),
+           site_subdomain = str_remove(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}_")
+           )
+}
+
+make_df_timely <- function(sphere, iteration){
+  df <- get_hashes_local_timely(sphere, iteration) %>% 
+  mutate(date = ymd(month),
+         site_subdomain = str_remove(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}_")) %>%
+  arrange(date, hashed_context) %>%
+    mutate(
+      # change_indicator = ifelse(hashed_context == lag(hashed_context), 0, 1),
+           # prev_site = paste0("http://web.archive.org/web/", lag(crawl_date), "/", lag(url)),
+           # archive_url = paste0("http://web.archive.org/web/", crawl_date, "/", url),
+           nr_unique_hashes = dense_rank(hashed_context), .by = c(site_subdomain)) %>% #View()
+    mutate(counted_context = n(),.by = c(hashed_context))
+}
+
+```
+
+#### German
+
+:::panel-tabset
+
+##### whitelist
+
+Über diese Variante sind so viele unterschiedliche Hashes berechnet worden:
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 12
+#| fig-width: 10
+#| fig-dpi: 300
+
+df_hashes_timely_whitelist_de <- make_df_timely("German", "monthly_whitelist")
+
+exclude_from_plotting <- get_hashes_local_timely("German", "monthly_whitelist") %>%
+  reframe(counted = n(), .by = c(site_subdomain)) %>%
+  arrange(desc(counted)) %>%
+  filter(counted > 35)
+
+df_print_de <- df_hashes_timely_whitelist_de %>% 
+  filter(site_subdomain %in% exclude_from_plotting$site_subdomain) 
+
+df_print_de %>% select(hashed_context) %>% distinct() %>% nrow()
+
+df_print_de %>% #View()  
+  ggplot(., aes(x = date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
+  geom_point_interactive() +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))  #+  theme_b03_base_typo_interactive
+
+# plot
+
+```
+
+##### pragmatic
+
+Über diese Variante sind so viele unterschiedliche Hashes berechnet worden:
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 12
+#| fig-width: 10
+#| fig-dpi: 300
+
+df_hashes_timely_pragmatic_de <- make_df_timely("German", "monthly_pragmatic")
+
+df_print_de <- df_hashes_timely_pragmatic_de %>% 
+  filter(site_subdomain %in% exclude_from_plotting$site_subdomain) 
+
+df_print_de %>% select(hashed_context) %>% distinct() %>% nrow()
+
+df_print_de %>% #View()
+  ggplot(., aes(x = date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
+  geom_point_interactive() +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+
+```
+
+
+##### counted
+
+Über diese Variante sind so viele unterschiedliche Hashes berechnet worden:
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 12
+#| fig-width: 10
+#| fig-dpi: 300
+
+df_hashes_timely_counted_de <- make_df_timely("German", "monthly_counted")
+
+df_print_de <- df_hashes_timely_counted_de %>% 
+  filter(site_subdomain %in% exclude_from_plotting$site_subdomain) 
+
+df_print_de %>% select(hashed_context) %>% distinct() %>% nrow()
+
+df_print_de %>% #View()
+  ggplot(., aes(x = date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
+  geom_point_interactive() +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+
+
+```
+
+:::
+
+
+#### World
+
+:::panel-tabset
+
+##### whitelist
+
+Über diese Variante sind so viele unterschiedliche Hashes berechnet worden:
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 12
+#| fig-width: 10
+#| fig-dpi: 300
+
+df_hashes_timely_whitelist_world <- make_df_timely("World", "monthly_whitelist")
+
+exclude_from_plotting_world <- get_hashes_local_timely("World", "monthly_whitelist") %>%
+  reframe(counted = n(), .by = c(site_subdomain)) %>%
+  arrange(desc(counted)) %>%
+  filter(counted > 35) %>% 
+  mutate(site_subdomain = trimws(site_subdomain))
+
+df_print_world <- df_hashes_timely_whitelist_world %>% 
+  filter(site_subdomain %in% exclude_from_plotting_world$site_subdomain) 
+
+df_print_world %>% select(hashed_context) %>% distinct() %>% nrow()
+
+df_print_world %>% #View()  
+  ggplot(., aes(x = date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
+  geom_point_interactive() +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))  #+  theme_b03_base_typo_interactive
+
+# plot
+
+```
+
+##### pragmatic
+
+Über diese Variante sind so viele unterschiedliche Hashes berechnet worden:
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 12
+#| fig-width: 10
+#| fig-dpi: 300
+
+df_hashes_timely_pragmatic <- make_df_timely("World", "monthly_pragmatic")
+
+df_print_world <- df_hashes_timely_pragmatic %>% 
+  filter(site_subdomain %in% exclude_from_plotting_world$site_subdomain) 
+
+df_print_world %>% select(hashed_context) %>% distinct() %>% nrow()
+
+df_print_world %>% #View()
+  ggplot(., aes(x = date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
+  geom_point_interactive() +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+
+```
+
+
+##### counted
+
+Über diese Variante sind so viele unterschiedliche Hashes berechnet worden:
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 12
+#| fig-width: 10
+#| fig-dpi: 300
+
+df_hashes_timely_counted <- make_df_timely("World", "monthly_counted")
+
+df_print_world <- df_hashes_timely_counted %>% 
+  filter(site_subdomain %in% exclude_from_plotting_world$site_subdomain)
+
+df_print_world %>% select(hashed_context) %>% distinct() %>% nrow()
+
+df_print_world %>% #View()
+  ggplot(., aes(x = date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
+  geom_point_interactive() +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+
+
+```
+
+:::
+
+
+#### Dutch
+
+Für den niederländischen Sprachraum gibt es keine Variante "counted", da hier für das vereinheitlichen der Daten Sprachkenntnisse notwendig gewesen wären.
+
+:::panel-tabset
+
+##### whitelist
+
+Über diese Variante sind so viele unterschiedliche Hashes berechnet worden:
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 12
+#| fig-width: 10
+#| fig-dpi: 300
+
+df_hashes_timely_whitelist_nl <- make_df_timely("Dutch", "monthly_whitelist")
+
+exclude_from_plotting_nl <- get_hashes_local_timely("Dutch", "monthly_whitelist") %>%
+  reframe(counted = n(), .by = c(site_subdomain)) %>%
+  arrange(desc(counted)) %>%
+  filter(counted > 35)
+
+df_print_nl <- df_hashes_timely_whitelist_nl %>% 
+  filter(site_subdomain %in% exclude_from_plotting_nl$site_subdomain)
+
+df_print_nl %>% select(hashed_context) %>% distinct() %>% nrow()
+
+df_print_nl %>% #View()  
+  ggplot(., aes(x = date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
+  geom_point_interactive() +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))  #+  theme_b03_base_typo_interactive
+
+# plot
+
+```
+
+##### pragmatic
+
+Über diese Variante sind so viele unterschiedliche Hashes berechnet worden:
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 12
+#| fig-width: 10
+#| fig-dpi: 300
+
+df_hashes_timely_pragmatic <- make_df_timely("Dutch", "monthly_pragmatic")
+
+df_print_nl <- df_hashes_timely_pragmatic %>% 
+  filter(site_subdomain %in% exclude_from_plotting_nl$site_subdomain)
+
+df_print_nl %>% select(hashed_context) %>% distinct() %>% nrow()
+
+df_print_nl %>% #View()
+  ggplot(., aes(x = date, y = site_subdomain, color = as.character(nr_unique_hashes))) +
+  geom_point_interactive() +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))
+
+```
+
+:::
+
+
+### Vergleich der Iterationen
+
+:::panel-tabset
+
+#### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+hash_diversity <- c(df_hashes_timely_pragmatic_de %>% distinct(hashed_context) %>% nrow(), 
+                    df_hashes_timely_whitelist_de %>% distinct(hashed_context) %>% nrow(), 
+                    df_hashes_timely_counted_de %>% distinct(hashed_context) %>% nrow()) %>% 
+  enframe() %>% 
+  bind_cols(c("pragmatic", "whitelist", "count_based")) %>% 
+  select("iteration" = `...3`, nr_hashes = value)
+
+DT::datatable(hash_diversity)
+
+```
+
+#### World
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+hash_diversity <- c(make_df_timely("World", "monthly_pragmatic") %>% distinct(hashed_context) %>% nrow(), make_df_timely("World", "monthly_whitelist") %>% distinct(hashed_context) %>% nrow(), make_df_timely("World", "monthly_counted") %>% distinct(hashed_context) %>% nrow()) %>% 
+  enframe() %>% 
+  bind_cols(c("pragmatic", "whitelist", "count_based")) %>% 
+  select("iteration" = `...3`, nr_hashes = value)
+
+DT::datatable(hash_diversity)
+
+```
+
+
+#### Dutch
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+hash_diversity <- c(make_df_timely("Dutch", "monthly_pragmatic") %>% distinct(hashed_context) %>% nrow(), make_df_timely("Dutch", "monthly_whitelist") %>% distinct(hashed_context) %>% nrow()) %>% 
+  enframe() %>% 
+  bind_cols(c("pragmatic", "whitelist")) %>% 
+  select("iteration" = `...3`, nr_hashes = value)
+
+DT::datatable(hash_diversity)
+
+```
+
+:::
+
+
+### Einzelseiten mit Kontext
+
+Woran erkenne ich die Qualtität des Ergebnisses? 
+Zusätzliche Ebene davon wie viele Seiten überhaupt vorliegen: wenn das sehr schwankt, sind die hashes weniger robust. 
+Und wie umfangreich sind die Hashes? Die Vermutung ist, je weniger Zeilen mit einbezogen werden, desto stabiler sind sie. 
+
+Frage bleibt: Ähnlichkeit ist nicht Gleichheit, welche Lösungen kann es hier noch geben? Wann sind Fragmente ähnlich? Wie unterscheidet sich Vergleichen auf Codeebene mit Vergleichen auf kongnitiver (?) Ebene? Welche Art impliziter Referenz sind dabei am Werk?
+
+Praktiken des Programmierens setzen auf Eindeutigkeit. Die Hashes liefern eindeutige Abdrücke des ursprünglichen Inhaltes, hier ist keine kleine Abweichung möglich, sie liefert jedesmal einen vollständig unterschiedlichen Hash, aus dem später nicht mehr abzulesen ist, wie unterschiedlich die Inhalte waren. 
+
+Gibt es noch andere Verfahren? Netzwerke für die Nähe, Berechnung auf Basis von Ähnlichkeit. Auf Ebene der Informatik sind damit allerdings nicht gemeint, ist das ein Eingabefeld für die Suche oder für Kommentare, sondern auch solche wie, sind die vorliegenden Textketten halbwegs gleich lang, wenn sie schon nicht absolut übereinstimmen.
+
+Was genau ist es, das die Informatik bieten kann, und ab wann ist anderweitige Interpretation notwendig?
+
+Die Hashes versagen an dieser Stelle, also besteht die Notwendigkeit die Brücke von der anderen Seite aus weiterzubauen. 
+
+To do: 
+- Kreise in Größe skallieren, je nach dem wie viele Zeilen in dem Hash kodiert sind.
+- einzeichnen, wenn keine Seiten archiviert wurden
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+get_counted_sites_monthly <- function(sphere){
+  df_site <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.url, s.sha1 FROM sites s WHERE s.sphere = '", sphere, "' AND of_interest = true ORDER BY s.crawl_date")) %>% 
+    mutate(subdomain = domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+           site_subdomain = paste(site, subdomain, sep = "_"),
+           agg_date = paste0(year(crawl_date), "-", month(crawl_date), "-01"),
+           id_date_site_subdomain = paste0(agg_date, "_",site_subdomain)
+           ) %>% 
+    reframe(counted_sites = n(), .by = c("id_date_site_subdomain"))
+}
+
+get_counted_rows_per_hash_whitelist <- function(sphere){
+  df_traces_context <- dbGetQuery(conn = con, paste0("SELECT DISTINCT tc.sphere, tc.id_date_site_subdomain, tc.tag, tc.attr, tc.value_cleaned_whitelist FROM traces_context tc WHERE tc.sphere = '", sphere,"'")) %>% 
+    reframe(counted_rows_per_hash = n(), .by = "id_date_site_subdomain")
+}
+
+get_counted_rows_per_hash_pragmatic <- function(sphere){
+  df_traces_context <- dbGetQuery(conn = con, paste0("SELECT DISTINCT tc.sphere, tc.id_date_site_subdomain, tc.tag, tc.attr FROM traces_context tc WHERE tc.sphere = '", sphere,"'")) %>% 
+    reframe(counted_rows_per_hash = n(), .by = "id_date_site_subdomain")
+}
+
+get_counted_rows_per_hash_counted <- function(sphere){
+  df_traces_context <- dbGetQuery(conn = con, paste0("SELECT DISTINCT tc.sphere, tc.id_date_site_subdomain, tc.tag, tc.attr, tc.value_cleaned_counted FROM traces_context tc WHERE tc.sphere = '", sphere,"'")) %>% 
+    reframe(counted_rows_per_hash = n(), .by = "id_date_site_subdomain")
+}
+
+site_to_look_at <- "sueddeutsche_www"
+
+df_de_sites <- get_counted_sites_monthly("German") %>% 
+  mutate(date = str_extract(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01") %>% as_date(.)) %>% 
+  filter(str_detect(id_date_site_subdomain, site_to_look_at))
+
+
+max_y <- df_hashes_timely_counted_de %>% filter(site_subdomain == site_to_look_at) %>% reframe(y = max(nr_unique_hashes)) %>% pull(.)
+
+```
+
+
+
+:::panel-tabset
+
+#### whitelist
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 6
+#| fig-width: 10
+
+df_de_hashes_counted_rows <- get_counted_rows_per_hash_whitelist("German")
+
+df_print <- df_hashes_timely_whitelist_de %>% 
+  left_join(., df_de_hashes_counted_rows, by = c("agg_id" = "id_date_site_subdomain")) %>% #View()
+  filter(site_subdomain == site_to_look_at)# %>%  #View()
+
+ggplot() +
+  geom_tile(data = df_de_sites, aes(x = date, y = 0, fill = counted_sites)) + 
+  geom_point(data = df_print, aes(x = date, y = nr_unique_hashes, color = as.character(nr_unique_hashes), size = counted_rows_per_hash)) +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  ggtitle(site_to_look_at) +
+  scale_size_area() +
+  scale_y_continuous(limits = c(-1, max_y)) +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))  #+  theme_b03_base_typo_interactive
+
+```
+
+#### pragmatic
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 6
+#| fig-width: 10
+
+df_de_hashes_counted_rows <- get_counted_rows_per_hash_pragmatic("German")
+
+df_print <- df_hashes_timely_pragmatic_de %>% 
+  left_join(., df_de_hashes_counted_rows, by = c("agg_id" = "id_date_site_subdomain")) %>% #View()
+  filter(site_subdomain == site_to_look_at)# %>%  #View()
+
+ggplot() +
+  geom_tile(data = df_de_sites, aes(x = date, y = 0, fill = counted_sites)) + 
+  geom_point(data = df_print, aes(x = date, y = nr_unique_hashes, color = as.character(nr_unique_hashes), size = counted_rows_per_hash)) +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  ggtitle(site_to_look_at) +
+  scale_size_area() +
+  scale_y_continuous(limits = c(-1, max_y)) +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))  #+  theme_b03_base_typo_interactive
+
+
+```
+
+
+#### count-based
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 6
+#| fig-width: 10
+
+df_de_hashes_counted_rows <- get_counted_rows_per_hash_counted("German")
+
+df_print <- df_hashes_timely_counted_de %>% 
+  left_join(., df_de_hashes_counted_rows, by = c("agg_id" = "id_date_site_subdomain")) %>% #View()
+  filter(site_subdomain == site_to_look_at)# %>%  #View()
+
+ggplot() +
+  geom_tile(data = df_de_sites, aes(x = date, y = 0, fill = counted_sites)) + 
+  geom_point(data = df_print, aes(x = date, y = nr_unique_hashes, color = as.character(nr_unique_hashes), size = counted_rows_per_hash)) +
+  # facet_wrap(~iteration, ncol = 1, scales = "free_y") +
+  ggtitle(site_to_look_at) +
+  scale_size_area() +
+  scale_y_continuous(limits = c(-1, max_y)) +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+  theme_b03_base + theme(legend.position = "none", panel.grid.major.y = element_line(color = "#dddddd", linewidth = .2))  #+  theme_b03_base_typo_interactive
+
+
+```
+
+:::
+
+
+
+
+
+### Wie viele unterschiedliche Hashes hat eine Nachrichtenseite?
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+get_hashes_counted <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT s.sha1, s.site, s.url, c.hashed_context, c.iteration, c.id_sha1_group FROM sites s INNER JOIN context_hashed c ON s.sha1 = c.sha1 WHERE s.of_interest = TRUE AND c.sphere ='",sphere_,"'")) %>% 
+  mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+                   site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.)) %>%
+  reframe(counted = n(), .by = c(site_subdomain, site, iteration, hashed_context)) %>% 
+  reframe(sum_hashes = sum(counted), different_hashes = n(), .by = c(site_subdomain, site, iteration))# %>% #View()
+}
+
+colors_iteration <- met.brewer(name="Tara", n=3, type="discrete")
+
+```
+
+In dieser Grafik sieht man nicht mehr die absoluten Zahlen an Kommentarbereichen, jetzt stehen hier die einzigartigen Hashes. Was wir hier sehen wollen sind möglichst kleine Zahlen für jedes Haus. Je höher hier eine Seite steht, desto wahrscheinlicher, dass Kommentare oder andere Elemente in der Seite mitcodiert wurden, die für Individualität sorgen. 
+
+Sind für ein Haus die beiden Balken nahe beieinander, spricht das für viele Hashes, die sich in der codierten Informationsmenge stark unterscheiden. 
+
+Sind die Balken weit auseinander, sagt das, dass die gesäuberte Variante viel Information codiert, die eventuell noch weiter vereinfacht werden könnte. 
+
+Es ist eine gute Korrekturgrafik um zu prüfen wie sich kleine Verbesserungen am Handling der Hashes auswirkt, in dem es in einem weiteren Analyseschritt eine Grafik "vor Verbesserung" und eine "nach Verbesserugen" nebeneinander gibt. 
+
+und desto weniger aussagekräftig ist die Methode (?) oder desto relevanter werden die pragmatischeren Hashes?
+
+:::panel-tabset
+
+#### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 35 
+#| fig-width: 10
+#| fig-dpi: 300
+
+
+# colors_iteration <- met.brewer(name="Signac", n=3, type="discrete")
+
+df_hashes_counted_de <- get_hashes_local_timely("German", "monthly_pragmatic") %>% 
+  reframe(counted = n(), .by = c("site_subdomain", "iteration")) %>% 
+  filter(!site_subdomain %in% exclude_from_plotting) %>% 
+  select(-iteration)
+
+df_unique_hashes_counted_de <- get_hashes_local_timely("German", "monthly_pragmatic") %>% 
+  bind_rows(., get_hashes_local_timely("German", "monthly_whitelist")) %>% 
+  bind_rows(., get_hashes_local_timely("German", "monthly_counted")) %>%
+  # select(-hashed_context) %>%
+  filter(!site_subdomain %in% exclude_from_plotting) %>%
+  select(iteration, site_subdomain, hashed_context) %>% 
+  distinct() %>% #View()
+  reframe(counted_unique = n(), .by = c(site_subdomain, iteration)) %>% #View()
+  left_join(., df_hashes_counted_de)
+
+df_unique_hashes_counted_de %>% ggplot(., aes( y = reorder(site_subdomain, counted))) +
+  geom_col( aes(x = counted), position = "dodge", fill = "#f2f2f2")+
+  geom_text(aes(x = counted, label = counted), hjust = -0.1, vjust = 0.5, alpha =.3, size = 3) +
+  geom_col(aes(x = counted_unique, fill = iteration), position = "dodge", width = .8)+
+  geom_text(aes(x = counted_unique, color = iteration, label = counted_unique), position = position_dodge(width = .9), hjust = -0.1, vjust = 0.5, size = 3) +
+  scale_x_continuous(expand = c(0,NA), limits = c(0, 180)) +
+  scale_fill_manual(values = colors_iteration) +
+  scale_color_manual(values = colors_iteration) +
+  guides(fill = guide_legend(title.position = "top", override.aes = list(shape = 22))) +
+  coord_cartesian(clip = "off") +
+  theme_b03_base + theme_b03_base_typo_static  + theme(axis.text.x = element_blank())
+
+```
+
+#### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 20 
+#| fig-width: 10
+#| fig-dpi: 300
+
+df_hashes_counted_world <- get_hashes_local_timely("World", "monthly_pragmatic") %>% 
+  bind_rows(., get_hashes_local_timely("World", "monthly_whitelist")) %>% 
+  bind_rows(., get_hashes_local_timely("World", "monthly_counted")) %>% 
+  reframe(counted = n(), .by = c("site_subdomain", "iteration")) %>% 
+  # filter(!site_subdomain %in% exclude_from_plotting_world) %>% 
+  select(-iteration) %>% 
+  distinct()
+
+ 
+# df_hashes_counted_de <- get_hashes_local_timely("German", "monthly_pragmatic") %>% 
+#   reframe(counted = n(), .by = c("site_subdomain", "iteration")) %>% 
+#   filter(!site_subdomain %in% exclude_from_plotting) %>% 
+#   select(-iteration)
+
+df_unique_hashes_counted_world <- get_hashes_local_timely("World", "monthly_pragmatic") %>% 
+  bind_rows(., get_hashes_local_timely("World", "monthly_whitelist")) %>% 
+  bind_rows(., get_hashes_local_timely("World", "monthly_counted")) %>%
+  # select(-hashed_context) %>%
+  select(iteration, site_subdomain, hashed_context) %>% 
+  distinct() %>% #View()
+  reframe(counted_unique = n(), .by = c(site_subdomain, iteration)) %>% #View()
+  left_join(., df_hashes_counted_world) %>% 
+  filter(site_subdomain %in% exclude_from_plotting_world$site_subdomain) %>%
+  distinct()
+
+df_unique_hashes_counted_world %>% 
+  ggplot(., aes( y = reorder(site_subdomain, counted))) +
+  geom_col( aes(x = counted), position = "dodge", fill = "#f2f2f2")+
+  geom_text(aes(x = counted, label = counted), hjust = -0.1, vjust = 0.5, alpha =.3, size = 3) +
+  geom_col(aes(x = counted_unique, fill = iteration), position = "dodge", width = .8)+
+  geom_text(aes(x = counted_unique, color = iteration, label = counted_unique), position = position_dodge(width = .9), hjust = -0.1, vjust = 0.5, size = 3) +
+  scale_x_continuous(expand = c(0,NA), limits = c(0, 180)) +
+  scale_fill_manual(values = colors_iteration) +
+  scale_color_manual(values = colors_iteration) +
+  guides(fill = guide_legend(title.position = "top", override.aes = list(shape = 22))) +
+  coord_cartesian(clip = "off") +
+  theme_b03_base + theme_b03_base_typo_static  + theme(axis.text.x = element_blank())
+
+```
+
+#### Dutch
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 10 
+#| fig-width: 10
+#| fig-dpi: 300
+
+df_hashes_counted_nl <- get_hashes_local_timely("Dutch", "monthly_pragmatic") %>% 
+  bind_rows(., get_hashes_local_timely("Dutch", "monthly_whitelist")) %>% 
+  reframe(counted = n(), .by = c("site_subdomain", "iteration")) %>% 
+  # filter(!site_subdomain %in% exclude_from_plotting_world) %>% 
+  select(-iteration) %>% 
+  distinct()
+ 
+df_unique_hashes_counted_nl <- get_hashes_local_timely("Dutch", "monthly_pragmatic") %>% 
+  bind_rows(., get_hashes_local_timely("Dutch", "monthly_whitelist")) %>% 
+  # bind_rows(., get_hashes_local_timely("Dutch", "monthly_counted")) %>%
+  # select(-hashed_context) %>%
+  select(iteration, site_subdomain, hashed_context) %>% 
+  distinct() %>% #View()
+  reframe(counted_unique = n(), .by = c(site_subdomain, iteration)) %>% #View()
+  left_join(., df_hashes_counted_nl) %>% 
+  filter(site_subdomain %in% exclude_from_plotting_nl$site_subdomain) %>%
+  distinct()
+
+df_unique_hashes_counted_nl %>% 
+  ggplot(., aes( y = reorder(site_subdomain, counted))) +
+  geom_col( aes(x = counted), position = "dodge", fill = "#f2f2f2")+
+  geom_text(aes(x = counted, label = counted), hjust = -0.1, vjust = 0.5, alpha =.3, size = 3) +
+  geom_col(aes(x = counted_unique, fill = iteration), position = "dodge", width = .8)+
+  geom_text(aes(x = counted_unique, color = iteration, label = counted_unique), position = position_dodge(width = .9), hjust = -0.1, vjust = 0.5, size = 3) +
+  scale_x_continuous(expand = c(0,NA), limits = c(0, 180)) +
+  scale_fill_manual(values = colors_iteration) +
+  scale_color_manual(values = colors_iteration) +
+  guides(fill = guide_legend(title.position = "top", override.aes = list(shape = 22))) +
+  coord_cartesian(clip = "off") +
+  theme_b03_base + theme_b03_base_typo_static  + theme(axis.text.x = element_blank())
+
+```
+:::
+
+### Verhältnis zwischen Anzahl der Hashes und ihrer Unterschiedlichkeit
+
+Um herauszufinden, wo die Methode gut funktioniert und was die jeweiligen Ausreißer bedeuten, gibt es als nächstes eine Auswertung zum Verhältnis von Menge der Hashes zu Vorkommen einzigartiger Hashes. 
+
+Diese Grafik zeigt solche Zeitungshäuser ganz oben, bei denen die Methode noch nicht so gut funktioniert. Je kleiner das Verhältnis ist, je näher der Wert an 0, desto besser funktionert die Methode für dieses Haus.
+
+Der Kölner Stadtanzeiger hat beispielsweise über 1000 Hashes, aber nur 5 bzw. 7 unterschiedliche: hier kann die Methode richtig glänzen. 
+
+:::panel-tabset
+
+#### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 20 
+#| fig-width: 10
+
+
+df_share_hashes_counted_de <- df_unique_hashes_counted_de %>% 
+  mutate(share = round(counted_unique/counted, digits = 3)) %>% 
+  filter(site_subdomain %in% exclude_from_plotting$site_subdomain) #%>% 
+
+df_share_hashes_counted_de %>% 
+ggplot(., aes( y = reorder(site_subdomain, desc(share)))) +
+  # geom_col( aes(x = share), position = "dodge", fill = "#f2f2f2")+
+  # geom_text(aes(x = share, label = share), hjust = -0.1, vjust = 0.5, alpha =.3, size = 3) +
+  geom_col(aes(x = share, fill = iteration), position = "dodge", width = .8)+
+  geom_text(aes(x = share, color = iteration, label = share), position = position_dodge(width = .9), hjust = -0.1, vjust = 0.5, size = 3) +
+  scale_x_continuous(expand = c(0,NA), limits = c(0, 2)) +
+  scale_fill_manual(values = colors_iteration) +
+  scale_color_manual(values = colors_iteration) +
+  guides(fill = guide_legend(title.position = "top", override.aes = list(shape = 22))) +
+  coord_cartesian(clip = "off") +
+  theme_b03_base + theme_b03_base_typo_static  + theme(axis.text.x = element_blank())
+
+```
+#### World
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 22 
+#| fig-width: 10
+
+
+df_share_hashes_counted_world <- df_unique_hashes_counted_world %>% 
+  mutate(share = round(counted_unique/counted, digits = 3)) %>% 
+  filter(site_subdomain %in% exclude_from_plotting_world$site_subdomain) #%>% 
+
+df_share_hashes_counted_world %>% 
+ggplot(., aes( y = reorder(site_subdomain, desc(share)))) +
+  # geom_col( aes(x = share), position = "dodge", fill = "#f2f2f2")+
+  # geom_text(aes(x = share, label = share), hjust = -0.1, vjust = 0.5, alpha =.3, size = 3) +
+  geom_col(aes(x = share, fill = iteration), position = "dodge", width = .8)+
+  geom_text(aes(x = share, color = iteration, label = share), position = position_dodge(width = .9), hjust = -0.1, vjust = 0.5, size = 3) +
+  scale_x_continuous(expand = c(0,NA), limits = c(0, 2)) +
+  scale_fill_manual(values = colors_iteration) +
+  scale_color_manual(values = colors_iteration) +
+  guides(fill = guide_legend(title.position = "top", override.aes = list(shape = 22))) +
+  coord_cartesian(clip = "off") +
+  theme_b03_base + theme_b03_base_typo_static  + theme(axis.text.x = element_blank())
+```
+
+#### Dutch
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 12 
+#| fig-width: 10
+
+
+df_share_hashes_counted_nl <- df_unique_hashes_counted_nl %>% 
+  mutate(share = round(counted_unique/counted, digits = 3)) %>% 
+  filter(site_subdomain %in% exclude_from_plotting_nl$site_subdomain) #%>% 
+
+df_share_hashes_counted_nl %>% 
+ggplot(., aes( y = reorder(site_subdomain, desc(share)))) +
+  # geom_col( aes(x = share), position = "dodge", fill = "#f2f2f2")+
+  # geom_text(aes(x = share, label = share), hjust = -0.1, vjust = 0.5, alpha =.3, size = 3) +
+  geom_col(aes(x = share, fill = iteration), position = "dodge", width = .8)+
+  geom_text(aes(x = share, color = iteration, label = share), position = position_dodge(width = .9), hjust = -0.1, vjust = 0.5, size = 3) +
+  scale_x_continuous(expand = c(0,NA), limits = c(0, 2)) +
+  scale_fill_manual(values = colors_iteration) +
+  scale_color_manual(values = colors_iteration) +
+  guides(fill = guide_legend(title.position = "top", override.aes = list(shape = 22))) +
+  coord_cartesian(clip = "off") +
+  theme_b03_base + theme_b03_base_typo_static  + theme(axis.text.x = element_blank())
+```
+
+:::
+
+### Gibt es Hashes Nachrichtenhaus übergreifend?
+
+Theoretisch wäre es möglich, dass ein System auf mehreren Nachrichtenseiten auftaucht. Kommt das vor und wie sehen die Spuren aus?
+
+Die Erwartung bei einer solchen Betrachtung ist, dass es vor allem die pragmatischen Hashes sind, die über mehrere Seiten verstreut sein können, denn dort fließt weniger Information ein, sie sind also weniger präzise. Die erste Zeile der Tabelle zeigt das auch gleich. Das tag sieht so aus <script type = "", src = "" >, was zwischen den Anführungsstrichen steht ist für den pragmatischen Hash unerheblich. Deswegen ist es nicht verwunderlich, dass der Hash aus dieser Datenkombination auf 42 unterschiedlichen Nachrichtenseiten gefunden wird. 
+
+Ja, es kommt vor ... Diese Tabelle fordert der* Leser*in wieder einiges ab: Denn wenn unter "iteration" `pragmatic` steht, darf der Inhalt der Spalte "value" nicht beachtet werden. Diese Informationen wird beim Erstellen des Hashes nicht verwendet. 
+
+Ei, sogar cleane Hashes schaffen es ganz nach oben. Das liegt allerdings daran, dass die urls, die im src-Attribut gecleaned werden. Url werden komplett gelöscht. Für die Ausgabe hier ist das total verwirrend. Damit die Hashes hier nachvollziehbar werden, müsste ich die gesäuberte Spalte ausgeben. Diese ist aber noch nicht in der Datenbank, weil die Analyse noch nicht abgeschlossen ist. 
+
+Interessant ist noch der nächste gesäuberte Hash, bei dem es heißt, er kommt auf 15 Seiten vor: hier wird disqus eingebunden, über `<div id="disqus_thread">`. Checken ob das alle Seiten sind, auf denen dieses Snippet gefunden wird, oder ob es hier doch mehr Variation geben könnte.
+
+Interessant wäre noch zu wissen, wie lang die jeweiligen Hashes hier sind, über wie viele Tags erstrecken sie sich. Es sieht so aus, als wäre das immer nur einer, was logisch wäre. Aber das sind dann weniger Bereiche, als nur schmale Schlitze (?), an dem wording arbeite ich besser noch. Und wie umfangreich sind diese Bereiche eigentlich, die ich hier so stolz verkünde?
+
+Dieser Abschnitt bleibt vorerst Baustelle und wird zu einem späteren Zeitpunkt fertig gestellt. 
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 30 
+#| fig-width: 10
+
+# dbGetQuery(conn = con, paste0("SELECT s.sha1, s.site, s.url, c.hashed_context, c.iteration, c.id_sha1_group FROM sites s INNER JOIN context_hashed c ON s.sha1 = c.sha1 WHERE s.of_interest = TRUE")) %>% 
+#   mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+#                    site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.)) %>%
+#   reframe(counted = n(), .by = c(iteration, hashed_context, site, site_subdomain)) %>% View()
+
+# df_hashes_sites <- dbGetQuery(conn = con, paste0("SELECT s.sha1, s.site, s.url, c.hashed_context, c.iteration, c.id_sha1_group FROM sites s INNER JOIN context_hashed c ON s.sha1 = c.sha1 WHERE s.of_interest = TRUE")) %>% 
+#   mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+#                    site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.)) %>%
+#   reframe(counted = n(), summe = sum(counted), .by = c(iteration, hashed_context, site, site_subdomain)) %>% #View()
+#   mutate(groups = row_number(), .by = c(iteration, hashed_context)) %>% 
+#   filter(groups > 1) %>% 
+#   reframe(distinct_hashes = max(groups), summe = sum(summe), .by = c(iteration, hashed_context)) #%>% View() ### gute idee hier die summe dazu zu nehmen, aber hier wieder das falsche summiert. Die richtige Zahl, wie oft dieser Hash für eine Domain vorkommt, ist in der df_hashed, oder? checken! (in der baustellenausgabe nicht enthalten)
+  
+# df_hashed_sites_context <- df_hashes_sites %>%
+#   left_join(., df_hashed) %>%
+#   select(iteration, hashed_context, distinct_hashes, site, sha1, id_sha1_group, site_subdomain) %>%
+#   distinct()
+
+# df_hashed_sites_context <- df_hashed %>% 
+#   filter(hashed_context %in% df_hashes_sites$hashed_context)# %>% 
+#   reframe(id_sha1_group = first(id_sha1_group), .by = c(iteration, hashed_context)) #%>% 
+#   
+# test <-  df_hashed_sites_context %>% filter(hashed_context == "b20056daad0b587bf4538d6fb8c40f9613bbd5c3")
+# df_context_de %>% filter(id_sha1_group %in% test$id_sha1_group) %>% View()
+
+# df_hashed_sites_context_info_ <- df_hashed_sites_context %>% 
+
+# id_to_request <- df_hashed_sites_context %>% select(id_sha1_group) %>% distinct() %>% pull() 
+# 
+# special_context <- map_df(id_to_request, function(i){
+#   df<- get_context_data_partiell("German", i)
+# })
+# 
+# df_hashed_sites_context_info <- df_hashed_sites_context %>% 
+#   left_join(., special_context) %>% #View()
+#   filter(!is.na(tag)) %>% 
+#   arrange(desc(distinct_hashes)) %>% 
+#   select(iteration, "Anzahl der Seiten" = distinct_hashes, tag, attr, value, context_path, hashed_context, "Bespielseite" = sha1)
+
+
+# DT::datatable(df_hashes_sites %>% arrange(desc(distinct_hashes)) %>% select(iteration, "Anzahl der Seiten" = distinct_hashes, hashed_context) %>% head(20))
+
+```
+
+
+
+```{r}
+
+# df_handelsblatt <- dbGetQuery(conn = con, paste0("SELECT s.sha1, s.site, s.url, tc.id_sha1_group, tc. tag, tc.attr, tc.value_cleaned_whitelist, tc.context_path, tc.context_path_cleaned FROM sites s INNER JOIN traces_context tc ON s.sha1 = tc.sha1 WHERE s.site = 'handelsblatt'")) %>% 
+#   mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+#                    site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.))
+
+
+```
+
+
+### Notizen
+
+Übersicht, wie sich die Anzahl an verschiedenen hashes unterscheided, pro subdomain
+welche pragmatischen hashes kommen über unterschiedliche domains hinweg vor?
+gibt es cleane hashes, die über subdomains oder so gar domains hinweg vorkommen?
+gecleante spalte auch in die db: wann?
+
+
+
+
+Gerüst für Argumentation: 
+
+in der Disziplin des Materials beginnen: wie wird in der Informatik verglichen? Welche Verfahren kennt die Informatik, um Vergleiche zwischen unterschiedlichen Entitäten zu ziehen? 
+back in history: wie git-Software entstanden ist
+Vergleiche auf Literalebene, bedeuted, wann haben sich Worte geändert?
+Webseiten von Seite zu Seite vergleichen -> irreführend, weil Inhalt sich immer unterscheidet. Nach Abstraktionsprozessen evtl möglich, aber aus der Datenanalyse und auch aus der Webarchivhandling anderes Verfahren bekannt: Hashes. Das Internetarchiv nutzt solche Verfahren, um Duplikate zu finden
+Erläuterung was sind Hashes, wie werden sie erstellt, durch welche Faktoren werden sie beeinflusst. 
+
+Verschiedene Faktoren ausprobiert, Grafik. bestes Verfahren herauspicken, an dem Beispiel erläutern, was für unterschiedliche Zeitungshäuser abzulesen ist. 
+
+Schlussfolgerung aus den Grafik, evtl. Grafiken (einzelne Häuser im Detail anschauen): qualitativer turn notwendig. Weitermachen mit Schlagwortliste zu konkreten Interfacebeobachtungen, wann kann Moderation beobachtet werden, Registrierung usw. 
+
+Später wieder aufgreifen: die Rolle der Grafiken, sie sind hier Recherchetools
+
+
+Handwerkliche To Dos: 
+- Hashes auf Monatsebene für die anderen beiden cleaning-Methoden berechnen -> Grafiken zeichnen.
+- llm Daten labeln lassen, wie funktioniert das aus R heraus?
+- Einzelgrafik fixen, hier muss das pattern, wie viele Seiten pro Monat existieren über die ganze Höhe laufen
+- Schlussfolgerung auf Codeebene implementieren -> Liste über traces_context laufen lassen
+
+
+Qualitative Recherche:
+- Hashes funktionieren mies: fokus,  handelsblatt, taz
+
+

@@ -8,7 +8,7 @@ library(DBI)
 library(RPostgres)
 library(re2)
 
-source("../config/config-secret.R")
+source("../config/config-secret-local.R")
 source("../config/config.R")
 source("../config/config-graphic.R")
 
@@ -65,7 +65,7 @@ Im Forschungsantrag steht beschrieben, dass der Zeitraum von 1996 bis heute (bzw
 
 ```{r message=FALSE, error=FALSE, echo=FALSE, warning=FALSE}
 
-df_sites <- dbGetQuery(conn = con, "SELECT * FROM sites_first_export") %>% 
+df_sites <- dbGetQuery(conn = con, "SELECT * FROM sites WHERE export = 1") %>% 
   mutate(year = ymd(crawl_date) %>% year(),
              site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
 

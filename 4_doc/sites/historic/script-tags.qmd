@@ -10,9 +10,9 @@ library(urltools)
 library(googlesheets4)
 
 
-source("../config/config-secret.R")
-source("../config/config-graphic.R")
-source("../config/config.R")
+source("../../config/config-secret-local.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
 
 # gs4_auth(cache=".secrets")
 # gs_domain_to_look <- read_sheet(SPREADSHEET_PATH_GENERELL, sheet = SPREADSHEET_PATH_DOMAINS[[{{CURRENT_SPHERE}}]]) %>% 
@@ -28,7 +28,7 @@ con <- dbConnect(RPostgres::Postgres(),
                  password = dsn_pwd
 )
 
-# dbDisconnect(con)
+dbDisconnect(con)
 
 get_script_tags <- function(sphere){
   df <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.site, s.sha1, t.tag, t.name, t.attr, t.group FROM sites s INNER JOIN tags_2 t ON t.site = s.sha1 WHERE s.sphere = '", sphere, "' AND t.tag = 'script' ORDER BY s.crawl_date"))

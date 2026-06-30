@@ -16,9 +16,9 @@ library(urltools)
 library(MetBrewer)
 library(ggforce)
 
-source("../config/config-secret.R")
-source("../config/config-graphic.R")
-source("../config/config.R")
+source("../../config/config-secret-local.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
 
 
 con <- dbConnect(RPostgres::Postgres(), 
@@ -33,6 +33,8 @@ con <- dbConnect(RPostgres::Postgres(),
 
 # Finding snippets in all tags
 
+Nachrichtenhäuser haben noch andere Möglichkeiten für User-Interaktion eingesetzt, abgesehen von Kommentaroptionen. Auch diese technischen Objekte hinterlassen Spuren im Quellcode der Webseite. Hier werden die Spuren von **Opinary**, **Civey**, **Facebook**, **Twitter** und dem **Googletag-Manager** gezeigt. Letzeren in die Liste aufzunehmen ist ein bisschen fragwürdig und braucht nochmal eine Umdrehung Nachdenken.
+
 ```{r}
 #| echo: false
 #| warning: false
@@ -40,7 +42,7 @@ con <- dbConnect(RPostgres::Postgres(),
 #| message: false
 
 get_domain_translation <- function(sphere_){
-  df_return <- read_csv(file = paste0("../../data/helper/22-09-21-Top News Websites [AU - public] - ",sphere_," news.csv"), show_col_types = FALSE) %>% 
+  df_return <- read_csv(file = paste0("../../../data/helper/22-09-21-Top News Websites [AU - public] - ",sphere_," news.csv"), show_col_types = FALSE) %>% 
     mutate(cleaned_urls = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.)) %>% 
     select(Name, cleaned_urls)
 }
@@ -48,23 +50,23 @@ get_domain_translation <- function(sphere_){
 tag_colors <- c("iframe" = "#c969a1", "script" = "#ee8577", "form" = "#ffbb44", "div" = "#62929a")
 
 get_data_opinary <- function(sphere_){
-  df_opinary <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~ 'pressekompass|opinary' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+  df_opinary <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.value, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags t ON s.sha1 = t.site WHERE t.value ~ 'pressekompass|opinary' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
 }
 
 get_data_googletag <- function(sphere_){
-  df_googletag <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~ 'googletag' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+  df_googletag <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.value, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags t ON s.sha1 = t.site WHERE t.value ~ 'googletag' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
 }
 
 get_data_civey <- function(sphere_){
-  df_civey <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~ 'civey' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+  df_civey <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.value, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags t ON s.sha1 = t.site WHERE t.value ~ 'civey' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
 }
 
 get_data_facebook <- function(sphere_){
-  df_facebook <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~ 'facebook|^fb-|/fb-|fbcomments|fb:' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+  df_facebook <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.value, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags t ON s.sha1 = t.site WHERE t.value ~ 'facebook|^fb-|/fb-|fbcomments|fb:' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
 }
 
 get_data_twitter <- function(sphere_){
-  df_twitter <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.name, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags_2 t ON s.sha1 = t.site WHERE t.attr ~ 'twitter' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
+  df_twitter <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.site, s.sha1, s.crawl_date, t.tag, t.value, t.attr, t.group, t.sphere FROM sites s INNER JOIN tags t ON s.sha1 = t.site WHERE t.value ~ 'twitter' AND t.sphere ='", sphere_,"' AND s.of_interest = TRUE"))
 }
 
 get_all_sites_sphere <- function(sphere_){
@@ -168,56 +170,7 @@ Keine Spuren von Civey im niederländischen Korpus.
 
 :::
 
-## Googletag
 
-::: panel-tabset
-
-### German
-
-```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| fig-height: 33
-#| fig-width: 10
-
-df_retranslate_domains <- get_domain_translation("German")
-df_de <- get_data_googletag("German")
-print_heatmap(df_de, "Googletag")
-
-```
-
-### International
-
-```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| fig-height: 33
-#| fig-width: 10
-
-df_retranslate_domains <- get_domain_translation("World")
-df_world <- get_data_googletag("World")
-print_heatmap(df_world, "Googletag")
-
-```
-
-### Dutch
-
-```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| fig-height: 33
-#| fig-width: 10
-
-df_retranslate_domains <- get_domain_translation("Dutch")
-df_dutch <- get_data_googletag("Dutch")
-print_heatmap(df_dutch, "Googletag")
-
-```
-
-:::
 
 ## Facebook
 
@@ -324,6 +277,57 @@ print_heatmap(df_world, "Twitter")
 df_retranslate_domains <- get_domain_translation("Dutch")
 df_dutch <- get_data_twitter("Dutch")
 print_heatmap(df_dutch, "Twitter")
+
+```
+
+:::
+
+## Googletag
+
+::: panel-tabset
+
+### German
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 33
+#| fig-width: 10
+
+df_retranslate_domains <- get_domain_translation("German")
+df_de <- get_data_googletag("German")
+print_heatmap(df_de, "Googletag")
+
+```
+
+### International
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 33
+#| fig-width: 10
+
+df_retranslate_domains <- get_domain_translation("World")
+df_world <- get_data_googletag("World")
+print_heatmap(df_world, "Googletag")
+
+```
+
+### Dutch
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| fig-height: 33
+#| fig-width: 10
+
+df_retranslate_domains <- get_domain_translation("Dutch")
+df_dutch <- get_data_googletag("Dutch")
+print_heatmap(df_dutch, "Googletag")
 
 ```
 

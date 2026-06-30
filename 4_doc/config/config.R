@@ -20,14 +20,15 @@ SPREADSHEET_SNIPPETS_TO_SEARCH_FOR <- "788821906"
 SPREADSHEET_ANNOTATION_DATA <- "https://docs.google.com/spreadsheets/d/1aEQAAh0UZlFImajCQ-E7cH-0nrlH8TGuxQt4PTbVCJE/"
 
 SPREADSHEET_ANNOTATION <- list()
-SPREADSHEET_ANNOTATION$World <- "international-domains"
-SPREADSHEET_ANNOTATION$Dutch <- "nl-domains"
-SPREADSHEET_ANNOTATION$German <- "de-domains"
+SPREADSHEET_ANNOTATION$World <- "/World/technographer - manually added data points - international-domains.csv"
+SPREADSHEET_ANNOTATION$Dutch <- "/Dutch/technographer - manually added data points - nl-domains.csv"
+SPREADSHEET_ANNOTATION$German <- "/German/technographer - manually added data points - de-domains.csv"
+
 
 PATH_TO_SHINY_DATA <- "shiny/data/"
 
 library(re2)
 SUBDOMAINS_TO_INKLUDE <- re2_regexp("news\\.sky|timesofindia.indiatimes")
-SCRIPT_ENDINGS_TO_SEARCH_FOR <- re2_regexp("ajax(entry)?|\\.asp(x)?|\\.js(on|p|f)?|\\.php|\\.(f)?cgi|\\.do")
+SCRIPT_ENDINGS_TO_SEARCH_FOR <- c("ajax(entry)?|\\.asp(x)?|\\.js(on|p|f)?|\\.php|\\.(f)?cgi|\\.do")
 
 COMMENTS_IN_TAGS <- "comment|komment"

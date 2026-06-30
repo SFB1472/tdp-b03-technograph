@@ -3,6 +3,8 @@ title: "Checking fixed parsing"
 ---
 
 ```{r}
+#|warning: false
+
 library(tidyverse)
 library(DBI)
 library(RPostgres)

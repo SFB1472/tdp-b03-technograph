@@ -11,10 +11,10 @@ library(DBI)
 library(RPostgres)
 library(urltools)
 
-source("../config/config-graphic.R")
-source("../config/config.R")
+source("../../../config/config-graphic.R")
+source("../../../config/config.R")
 
-source("../config/config-secret.R")
+source("../../../config/config-secret.R")
 con_remote <- dbConnect(RPostgres::Postgres(), 
                  dbname = dsn_database,
                  host = dsn_hostname, 
@@ -23,7 +23,7 @@ con_remote <- dbConnect(RPostgres::Postgres(),
                  password = dsn_pwd
 )
 
-source("../config/config-secret-local.R")
+source("../../../config/config-secret-local.R")
 con_local <- dbConnect(RPostgres::Postgres(), 
                  dbname = dsn_database,
                  host = dsn_hostname, 
@@ -32,7 +32,7 @@ con_local <- dbConnect(RPostgres::Postgres(),
                  password = dsn_pwd
 )
 
-SPHERE_FOR_SHEET <- "Dutch"
+SPHERE_FOR_SHEET <- "World"
 
 ```
 
@@ -128,19 +128,21 @@ dbWriteTable(conn = con_local, name = "context_hashed", value = df_hashed_contex
 
 ### Aggregation: site_subdomain and month 
 
+```{r}
+df_tags_monthly <- dbGetQuery(conn = con_local, paste0("SELECT DISTINCT tc.sphere, tc.id_date_site_subdomain, tc.tag, tc.attr, tc.value_cleaned_whitelist, tc.value_cleaned_counted FROM traces_context tc WHERE tc.sphere = '", SPHERE_FOR_SHEET,"'")) 
+
+```
+
 #### cleaned whitelist
-
-
 
 ```{r}
 # creating hashes for monthly and cleaned_whitelist iteration ----------------------------------
 
 ## to do: bei sphere dutch gibts probleme mit der date_site_subdomain id. wie ist das entstanden?
 
-df_tags_monthly <- dbGetQuery(conn = con_local, paste0("SELECT DISTINCT tc.sphere, tc.id_date_site_subdomain, tc.tag, tc.attr, tc.value_cleaned_whitelist FROM traces_context tc WHERE tc.sphere = '", SPHERE_FOR_SHEET,"'")) 
 
 df_hashed_context_monthly <- df_tags_monthly %>% 
-  distinct(tag, attr, value_cleaned_whitelist, id_date_site_subdomain, .keep_all = TRUE) %>% 
+  distinct(tag, attr, value_cleaned_whitelist, id_date_site_subdomain, .keep_all = TRUE) %>% View()
   select(id_date_site_subdomain, tag, attr, value_cleaned_whitelist) %>%
   # group_by(id_sha1_group) %>% 
   arrange(id_date_site_subdomain, tag, attr, value_cleaned_whitelist) %>% #View()
@@ -156,6 +158,50 @@ dbWriteTable(conn = con_local, name = "context_hashed", value = df_hashed_contex
 
 ```
 
+#### cleaned pragmatic
+
+```{r}
+# creating hashes for monthly and cleaned_whitelist iteration ----------------------------------
+
+df_hashed_context_monthly_pr <- df_tags_monthly %>% 
+  select(id_date_site_subdomain, tag, attr) %>%
+  distinct(tag, attr, id_date_site_subdomain, .keep_all = TRUE) %>% #View()
+  # group_by(id_sha1_group) %>% 
+  arrange(id_date_site_subdomain, tag, attr) %>% #View()
+  reframe(hashed_context = digest::sha1(c(tag, attr), serialize = F), .by = id_date_site_subdomain) %>% #,
+  mutate(agg_id = id_date_site_subdomain,
+         agg_type = "date_site_subdomain",
+         sphere = SPHERE_FOR_SHEET,
+         # sha1 = str_remove(id_sha1_group, "_\\d{1,}$"),
+         iteration = "monthly_pragmatic") %>% 
+  select(-id_date_site_subdomain)
+
+dbWriteTable(conn = con_local, name = "context_hashed", value = df_hashed_context_monthly_pr, append = TRUE)
+
+```
+
+
+#### cleaned count based
+
+```{r}
+# creating hashes for monthly and cleaned_whitelist iteration ----------------------------------
+
+df_hashed_context_monthly_cn <- df_tags_monthly %>% 
+  distinct(tag, attr, value_cleaned_counted, id_date_site_subdomain, .keep_all = TRUE) %>% #View()
+  select(id_date_site_subdomain, tag, attr, value_cleaned_counted) %>%
+  # group_by(id_sha1_group) %>% 
+  arrange(id_date_site_subdomain, tag, attr, value_cleaned_counted) %>% #View()
+  reframe(hashed_context = digest::sha1(c(tag, attr, value_cleaned_counted), serialize = F), .by = id_date_site_subdomain) %>% #,
+  mutate(agg_id = id_date_site_subdomain,
+         agg_type = "date_site_subdomain",
+         sphere = SPHERE_FOR_SHEET,
+         # sha1 = str_remove(id_sha1_group, "_\\d{1,}$"),
+         iteration = "monthly_counted") %>% 
+  select(-id_date_site_subdomain)
+
+dbWriteTable(conn = con_local, name = "context_hashed", value = df_hashed_context_monthly_cn, append = TRUE)
+
+```
 
 ## Tests
 

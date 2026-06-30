@@ -9,8 +9,8 @@ library(DBI)
 library(RPostgres)
 library(MetBrewer)
 
-source("../config/config-secret-local.R")
-source("../config/config-graphic.R")
+source("../../config/config-secret-local.R")
+source("../../config/config-graphic.R")
 
 con <- dbConnect(RPostgres::Postgres(), 
                  dbname = dsn_database,
@@ -100,7 +100,7 @@ they do not tell a thing about commenting systems, but speaking of the standards
 #   select(-name) #%>% deframe()
 # 
 # write_csv(test_colors, "../data/helper/doctype-colors-2.csv")
-doc_colors_legend <- read_csv("../../data/helper/doctype-colors-2.csv")# %>% deframe()
+doc_colors_legend <- read_csv("../../../data/helper/doctype-colors-2.csv")# %>% deframe()
 # rm(get_doctype_info_relative)
 df_doctype_de <- get_doctype_info_relative("German", "doctype")
 df_doctype_de_abs <- get_doctype_info("German", "doctype")
@@ -117,7 +117,12 @@ Großes ABER siehe die Grafiken darunter.
 
 ### German
 
-```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+```{r}
+#| echo: false 
+#| message: false
+#| error: false
+#| warning: false
+#| fig-width: 10
 
 # rm(df_doctype_de)
 colors_ <- doc_colors_legend %>% select(-group) %>% deframe(.)
@@ -134,7 +139,13 @@ df_doctype_de %>%
 
 ### Dutch
 
-```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+```{r}
+#| echo: false 
+#| message: false
+#| error: false
+#| warning: false
+#| fig-width: 10
+
 df_doctype_nl <- get_doctype_info_relative("Dutch", "doctype")
 
 df_doctype_nl %>% 
@@ -148,7 +159,13 @@ df_doctype_nl %>%
 
 ### International
 
-```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+```{r}
+#| echo: false 
+#| message: false
+#| error: false
+#| warning: false
+#| fig-width: 10
+
 df_doctype_world <- get_doctype_info_relative("World", "doctype")
 
 df_doctype_world %>% 
@@ -171,7 +188,12 @@ Die Verteilung der absoluten Zahlen zeigt, dass die obere Aussage zwar logisch s
 
 ### German
 
-```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+```{r}
+#| echo: false 
+#| message: false
+#| error: false
+#| warning: false
+#| fig-width: 10
 
 # rm(df_doctype_de)
 
@@ -196,7 +218,13 @@ Der Standard HTML 2.0 kam so selten vor, dass in diesem Diagramm keine Balken zu
 
 ### Dutch
 
-```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+```{r}
+#| echo: false 
+#| message: false
+#| error: false
+#| warning: false
+#| fig-width: 10
+
 df_doctype_nl_abs <- get_doctype_info("Dutch", "doctype")
 
 df_doctype_nl_abs_counted <- df_doctype_nl_abs %>% 
@@ -217,7 +245,13 @@ Der Standard HTML 2.0 kam so selten vor, dass in diesem Diagramm keine Balken zu
 
 ### International
 
-```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+```{r}
+#| echo: false 
+#| message: false
+#| error: false
+#| warning: false
+#| fig-width: 10
+
 df_doctype_world_abs <- get_doctype_info("World", "doctype")
 
 df_doctype_world_abs_counted <- df_doctype_de_abs %>% 

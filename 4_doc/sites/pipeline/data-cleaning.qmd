@@ -18,24 +18,25 @@ gs4_auth(cache=".secrets")
 
 extrafont::loadfonts(quiet = TRUE)
 
-source("../../config/config-secret.R")
+# source("../../config/config-secret.R")
 # source("../../config/config-secret-local.R")
 source("../../config/config-graphic.R")
 source("../../config/config.R")
 
-con <- dbConnect(RPostgres::Postgres(), 
-                 dbname = dsn_database,
-                 host = dsn_hostname, 
-                 port = dsn_port,
-                 user = dsn_uid, 
-                 password = dsn_pwd
-)
+# con <- dbConnect(RPostgres::Postgres(), 
+#                  dbname = dsn_database,
+#                  host = dsn_hostname, 
+#                  port = dsn_port,
+#                  user = dsn_uid, 
+#                  password = dsn_pwd
+# )
 
 ## as of db crash in december 25 importing sites tbl from computer change in september 25
 # df_sites_dump <- read_csv(paste0("../../../data/1-parsing/sites/all-sites-dump.csv")) %>% select(-sites_id) 
 # dbWriteTable(conn = con, name = "sites", df_sites_dump)
 
 ```
+
 
 
 ## Messiness of the data
@@ -55,7 +56,12 @@ Deshalb folgt als nächstes eine kurze Analyse zu den mehrfach vorkommenden HTML
 # 
 # dbWriteTable(conn = con, name =  "snippets_2", value = df_snippets_dump, append=FALSE)
 
-df_sites_messy <- dbGetQuery(conn = con, "SELECT * FROM sites_messy") %>% 
+# df_sites_messy <- dbGetQuery(conn = con, "SELECT * FROM sites_messy") 
+# 
+# save(df_sites_messy, file = "../../../data/4-doc/sites/df_sites_messy.RData")
+load(file = "../../../data/4-doc/sites/df_sites_messy.RData")
+
+df_sites_messy <- df_sites_messy %>% 
   mutate(year = ymd(crawl_date) %>% year(),
              site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
 

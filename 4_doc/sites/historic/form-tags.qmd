@@ -20,9 +20,9 @@ library(shiny)
 
 extrafont::loadfonts(quiet = TRUE)
 
-source("../config/config-secret-local.R")
-source("../config/config-graphic.R")
-source("../config/config.R")
+source("../../config/config-secret-local.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
 
 SPHERE_FOR_SHEET <- "German"
 
@@ -127,37 +127,56 @@ Die deutsche Sphere unterscheidet sich hier massiv von den anderen beiden.
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
+### hä, ich glaub, die beiden dfs gehören umgedreht. erst alle seiten, dann die mit tags dazu
+
 SPHERE_FOR_TABSET <- "German"
-get_sites_with_form(SPHERE_FOR_TABSET) %>% 
+sites_with_forms <- get_sites_with_form(SPHERE_FOR_TABSET) %>% 
   mutate(crawl_date = ymd(crawl_date)) %>% 
-  group_by(crawl_date) %>% 
-  summarise(nr_tags = n()) %>% 
-  left_join(., get_sites_per_day("German")) %>% 
-  mutate(normalized = nr_tags/sites_per_day) %>% 
+  reframe(nr_tags = n(), .by = crawl_date)
+  # group_by(crawl_date) %>% 
+  # summarise(nr_tags = n()) # %>% 
+
+sites_per_day_de <- get_sites_per_day(SPHERE_FOR_TABSET) %>% 
+  left_join(., sites_with_forms) %>% 
+  mutate(normalized = nr_tags/sites_per_day)# %>% #View()
+
+sites_per_day_de %>% 
   ggplot(., aes(x = crawl_date, y = normalized)) +
   geom_col()
 
+sites_without_forms <- sites_per_day_de %>% 
+  mutate(without = sites_per_day-nr_tags) %>% 
+  reframe(sum_without = sum(without))
+
 ```
 
-Nur in `r df %>% nrow()` Seiten enthalten überhaupt keine `form`-Tags enthalten.
+Nur in `r sites_without_forms$sum_without` Seiten enthalten überhaupt keine `form`-Tags enthalten.
 
 ### Dutch
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 
 SPHERE_FOR_TABSET <- "Dutch"
-get_sites_with_form(SPHERE_FOR_TABSET) %>%
+sites_with_forms <- get_sites_with_form(SPHERE_FOR_TABSET) %>% 
   mutate(crawl_date = ymd(crawl_date)) %>% 
   group_by(crawl_date) %>% 
-  summarise(nr_tags = n()) %>% 
-  left_join(., get_sites_per_day("Dutch")) %>% 
-  mutate(normalized = nr_tags/sites_per_day) %>% 
+  summarise(nr_tags = n()) # %>% 
+
+sites_per_day <- get_sites_per_day(SPHERE_FOR_TABSET) %>% 
+  left_join(., sites_with_forms) %>% 
+  mutate(normalized = nr_tags/sites_per_day) #%>% #View()
+
+sites_per_day %>% 
   ggplot(., aes(x = crawl_date, y = normalized)) +
   geom_col()
 
+sites_without_forms <- sites_per_day %>% 
+  mutate(without = sites_per_day-nr_tags) %>% 
+  reframe(sum_without = sum(without))
+
 ```
 
-In `r df %>% nrow()` Seiten sind keine Tags enthalten.
+In `r sites_without_forms$sum_without` Seiten sind keine Tags enthalten.
 
 ### International
 
@@ -165,18 +184,26 @@ In `r df %>% nrow()` Seiten sind keine Tags enthalten.
 
 SPHERE_FOR_TABSET <- "World"
 
-get_sites_with_form(SPHERE_FOR_TABSET) %>%
+sites_with_forms <- get_sites_with_form(SPHERE_FOR_TABSET) %>% 
   mutate(crawl_date = ymd(crawl_date)) %>% 
   group_by(crawl_date) %>% 
-  summarise(nr_tags = n()) %>% 
-  left_join(., get_sites_per_day("World")) %>% 
-  mutate(normalized = nr_tags/sites_per_day) %>% 
+  summarise(nr_tags = n()) # %>% 
+
+sites_per_day <- get_sites_per_day(SPHERE_FOR_TABSET) %>% 
+  left_join(., sites_with_forms) %>% 
+  mutate(normalized = nr_tags/sites_per_day) #%>% #View()
+
+sites_per_day %>% 
   ggplot(., aes(x = crawl_date, y = normalized)) +
   geom_col()
 
+sites_without_forms <- sites_per_day %>% 
+  mutate(without = sites_per_day-nr_tags) %>% 
+  reframe(sum_without = sum(without))
+
 ```
 
-In `r df %>% nrow()` Seiten sind keine Tags enthalten.
+In `r sites_without_forms$sum_without` Seiten sind keine Tags enthalten.
 
 :::
 
@@ -196,7 +223,7 @@ get_form_attr_info <- function(sphere, tag, attr){
 }
 
 df_form_de_actions <- get_form_attr_info("German", "form", "action") %>% 
-  mutate(script_detected = re2_match(attr, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>% 
+  mutate(script_detected = re2_match(value, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>% 
   arrange(crawl_date) %>% #View()
   group_by(crawl_date, script_detected) %>% 
   summarise(scripts_counted = n()) %>% 
@@ -205,7 +232,7 @@ df_form_de_actions <- get_form_attr_info("German", "form", "action") %>%
 
 
 df_form_nl_actions <- get_form_attr_info("Dutch", "form", "action") %>% 
-  mutate(script_detected = re2_match(attr, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>% 
+  mutate(script_detected = re2_match(value, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>% 
   arrange(crawl_date) %>% #View()
   group_by(crawl_date, script_detected) %>% 
   summarise(scripts_counted = n()) %>% 
@@ -213,7 +240,7 @@ df_form_nl_actions <- get_form_attr_info("Dutch", "form", "action") %>%
   mutate(normalised = scripts_counted/sites_per_day)
 
 df_form_world_actions <- get_form_attr_info("World", "form", "action") %>% 
-  mutate(script_detected = re2_match(attr, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>% 
+  mutate(script_detected = re2_match(value, SCRIPT_ENDINGS_TO_SEARCH_FOR, simplify = TRUE)[,1]) %>% 
   arrange(crawl_date) %>% #View()
   group_by(crawl_date, script_detected) %>% 
   summarise(scripts_counted = n()) %>% 

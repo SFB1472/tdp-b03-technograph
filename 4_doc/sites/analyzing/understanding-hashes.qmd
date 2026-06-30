@@ -1,5 +1,7 @@
 ---
 title: "Understanding the Hashes"
+execute:
+  eval: false
 ---
 
 ## head
@@ -55,12 +57,12 @@ get_hashes_context <- function(){
 
 raw_data <- get_hashes_context()
 
-counted_hashes <- raw_data %>% filter(iteration == "cleaned") %>% 
+counted_hashes <- raw_data %>% filter(iteration == "cleaned_whitelist") %>% 
   select(context_path, hashed_context, site_subdomain) %>% distinct() %>% 
   reframe(distinct_hashes = n(), .by = c(site_subdomain, context_path)) 
 
 hash_sizes <- raw_data %>% 
-  filter(iteration == "cleaned") %>% 
+  filter(iteration == "cleaned_whitelist") %>% 
   select(site_subdomain, context_path, hashed_context, id_sha1_group) %>% #distinct() %>% 
   reframe(counted_rows = n(), .by = c(site_subdomain, context_path, hashed_context,id_sha1_group)) %>% 
   reframe(shortest = min(counted_rows), longest = max(counted_rows), .by = c(site_subdomain, context_path)) %>% 
@@ -239,6 +241,10 @@ welt_sim <- welt_hashes_umfang %>%
 welt_sim_agg <- welt_sim %>% 
   reframe(counted_pathes = n(), .by = group_)
   
+
+welt_sim_pathes <- welt_sim %>% 
+  left_join(., welt_sim_agg) %>% 
+  mutate(context_path_group = ifelse(counted_pathes >1, group_, context_path))
 
 ```
 

@@ -18,9 +18,9 @@ library(ggforce)
 library(reactable)
 library(BAMMtools)
 
-source("../config/config-secret-local.R")
-source("../config/config-graphic.R")
-source("../config/config.R")
+source("../../config/config-secret-local.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
 
 
 con <- dbConnect(RPostgres::Postgres(), 
@@ -42,12 +42,12 @@ con <- dbConnect(RPostgres::Postgres(),
 #| error: false
 #| message: false
 
-snippets_to_find <- read.csv("../../data/helper/24-07-12-Commenting-system-detection-patterns.csv", sep = ";")
+snippets_to_find <- read.csv("../../../data/helper/24-07-12-Commenting-system-detection-patterns.csv", sep = ";")
 str_snippets_to_find <- snippets_to_find %>% select(regex) %>% pull(.) %>% paste(collapse = "|")
 # traces_to_search <- c(COMMENTS_IN_TAGS, str_snippets_to_find) %>% paste(collapse = "|")
 
 get_domain_translation <- function(sphere_){
-  df_return <- read_csv(file = paste0("../../data/helper/22-09-21-Top News Websites [AU - public] - ",sphere_," news.csv"), show_col_types = FALSE) %>% 
+  df_return <- read_csv(file = paste0("../../../data/helper/22-09-21-Top News Websites [AU - public] - ",sphere_," news.csv"), show_col_types = FALSE) %>% 
     mutate(cleaned_urls = domain(URL) %>% suffix_extract(.) %>% select(domain) %>% pull(.)) %>% 
     select(Name, cleaned_urls)
 }
