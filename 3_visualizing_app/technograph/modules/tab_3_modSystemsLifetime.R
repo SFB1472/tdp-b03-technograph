@@ -4,7 +4,7 @@ tab_3_modSystemsLifetimeUI <- function(id) {
   ns <- NS(id)
   tagList(
     addGFontHtmlDependency(family = c("Roboto Mono")),
-    girafeOutput(ns("systemsLifetime"))
+    imageOutput(ns("systemsLifetime"), inline = TRUE)
   )
 }
 
@@ -17,19 +17,8 @@ tab_3_modSystemsLifetimeServer <- function(id) {
        # print the visualization -----------------------------------------
       
       get_systems_lifetime <- function(){
-        # current_systems_found <- current_data$counted_systems %>% select(system) %>% pull(.)
-        load(paste0("data/systems/df_system_lifetime.RData"))
-        plot <- df_system_lifetime %>% 
-          mutate(cat = ifelse(is.na(present), NA, cat)) %>% 
-          ggplot(., aes()) +
-          geom_tile_interactive(aes(x = check_years, y = reorder(name, desc(sorting_lifetime)), fill = cat, tooltip = paste0("system: ", name, "\nyear: ", check_years)), color = NA) +
-          scale_fill_manual(values = c("year" = "#333333", "year_unsecure" = "#c2c2c2"), na.value = NA) +
-          scale_x_continuous( limits = c(1997, 2021)) +
-          theme_b03_base + theme_b03_box_timeline + theme(legend.position = "none")
+        list(src = paste0("data/German/overview-systems-available.png"), width = "100%")
         
-        girafe(ggobj = plot, options = list(opts_sizing(rescale = FALSE)),
-               width_svg = 15,
-               height_svg = 10)
       }
       
       # reactive value handling ---------------------------------------------------
@@ -46,7 +35,7 @@ tab_3_modSystemsLifetimeServer <- function(id) {
       #   }
       # })
 
-      output$systemsLifetime <- renderGirafe({get_systems_lifetime()})
+      output$systemsLifetime <- renderImage({get_systems_lifetime()}, deleteFile=FALSE)
     
   })
   
