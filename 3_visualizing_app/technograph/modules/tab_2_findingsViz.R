@@ -15,8 +15,8 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
   moduleServer(
     id,
     function(input, output, session) {
-      # initLoad <- TRUE
-      initLoad <- FALSE
+      initLoad <- TRUE
+      # initLoad <- FALSE
       
       ## get the data ----------------------------------------------------------
       
@@ -72,17 +72,17 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
       get_snippet_traces_data <- function(){
         
         df_return <- tbl(pool, "sites") %>% 
-          inner_join(., tbl(pool, "snippets_2"), by = c("sha1" = "site")) %>% 
-          filter(site == !!current_data$site_to_load, detected == 1) %>% 
+          inner_join(., tbl(pool, "traces"), by = c("sha1" = "site")) %>% 
+          filter(site == !!current_data$site_to_load, search_type == "snippet_list") %>% 
           collect() %>% #View()
           mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
                  site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.),
                  type = "traces via snippet detection",
                  shape_color = NA,
                  shape_nr = 23 %>% as.character(.),
-                 tooltip_info = paste0("Snippet: ", snippet),
+                 tooltip_info = paste0("Snippet: ", trace),
                  archive_url = paste0("http://web.archive.org/web/", str_remove_all(as.character(crawl_timestamp), "-|\\s|:"), "/", url)) %>% 
-          mutate(shape_fill = cur_group_id(), .by = "snippet")
+          mutate(shape_fill = cur_group_id(), .by = "trace")
 
         return(df_return)
       }
@@ -91,26 +91,30 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
       
       get_form_finding_data <- function(){
         
-        df_return <- tbl(pool, "sites") %>%
-          inner_join(., tbl(pool, "context_hashed")) %>%
-          filter(site == !!current_data$site_to_load, iteration == "cleaned_whitelist") %>% 
-          collect() %>% 
-          mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
-                 site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.),
+        df_return <- tbl(pool, "context_hashed") %>%
+          # inner_join(., tbl(pool, "context_hashed")) %>%
+          filter(iteration == "monthly_whitelist") %>% 
+          collect()  %>%
+          mutate(site_subdomain = str_remove(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}_"),
+                 site = str_remove(site_subdomain, "_.*$"),
+                 crawl_date = str_extract(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}"),
+                 crawl_date = ymd(crawl_date) , 
                  type = "traces via tag findings") %>%
-          arrange(crawl_date) %>% 
+          filter(site == current_data$site_to_load) %>%
+          arrange(crawl_date) %>%
           mutate(
-            nr_unique_hashes = match(hashed_context, unique(hashed_context)), 
+            nr_unique_hashes = match(hashed_context, unique(hashed_context)),
             # nr_unique_hashes = dense_rank(hashed_context), .by = c(site, subdomain),
-                 shape_color = nr_unique_hashes,
-                 shape_fill = NA,
-                 shape_nr = 19,
-                 tooltip_info = paste0("tagindex: ", nr_unique_hashes)) %>%  
+            shape_color = nr_unique_hashes,
+            shape_fill = NA,
+            shape_nr = 19,
+            tooltip_info = paste0("tagindex: ", nr_unique_hashes)) %>%
           select(crawl_date, site_subdomain, type, shape_color, shape_fill, shape_nr, tooltip_info)
         # View(df_return)
         # print(head(df_return))
         return(df_return)
-      }
+        
+     }
       
       # calc height ------------------------------------------------------------
       
@@ -126,9 +130,9 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
        nr_rows <- as.numeric(has_annotation + nr_snippets + nr_forms)
        
        # facethöhe: hier fließt die überschrift und die x-achse als entscheidende größen ein. x-achse gibts für alle facets nur einmal 
-       minheight_one_facet = 1
+       minheight_one_facet = 0.5
        # jede datenreihe braucht ein bisschen platz, aber keine neue überschrift
-       minheight_one_row = 0.5
+       minheight_one_row = 0.3
        
        sum_height <- minheight_one_facet + (minheight_one_facet * nr_facets) + minheight_one_row + (minheight_one_row * nr_rows)
        # print(sum_height)
@@ -140,7 +144,6 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
       # print the viz --------------------------------------------------------------
       
       print_form_findings <- reactive({
-        
         unique_colors <- c("")
         if (nrow(current_data$form_data) > 0 & !is.null(nrow(current_data$form_data))){
           unique_colors <- current_data$form_data %>% 
@@ -148,7 +151,7 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
             distinct(shape_color) %>% nrow() %>% rainbow(.)
           }
         
-        color_values <- current_data$form_data %>% 
+          color_values <- current_data$form_data %>% 
           select(shape_color) %>% 
           distinct() %>% 
           arrange(shape_color) %>% 
@@ -173,7 +176,7 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
         plot <- ggplot() +
           geom_point_interactive(data = df_plot, aes(x = crawl_date, y = site_subdomain, color =  as.character(shape_color), tooltip = paste0(tooltip_info, "\nDatum: ", crawl_date)), size = 3, alpha = 0.8, shape = 19) +
           geom_point_interactive(data = current_data$snippet_data, aes(x = crawl_date, y = site_subdomain, fill = as.character(shape_fill), tooltip = paste0(tooltip_info, "\nDatum: ", crawl_date)), shape = 23, size = 4, stroke = 0.1, color = "white") +
-          scale_x_date(date_breaks = "year", date_labels = "%Y", limits = c(ymd("1997-01-01"), ymd("2021-01-01"))) +
+          scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(ymd("1997-01-01"), ymd("2021-01-01"))) +
           scale_color_manual(values = color_values) +
           scale_fill_manual(values = MetBrewer::met.brewer("Cross", fill_values)) +
           theme_b03_base + theme_b03_facets_individual + theme(legend.position = "none") + 
@@ -185,7 +188,7 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
         
         girafe(ggobj = plot,
                options = list(opts_sizing(rescale = FALSE)),
-               width_svg = 15,
+               width_svg = 9,
                height_svg = current_data$height)
       })
       

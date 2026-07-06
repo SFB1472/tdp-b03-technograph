@@ -43,16 +43,16 @@ snippetFindingsTableServer <- function(id, tab_, site_to_load) {
         
         df_table <- tbl(pool, "sites") %>%
           filter(site == !!current_data$site_to_load) %>% 
-          inner_join(., tbl(pool, "snippets_2"), by = c("sha1" = "site")) %>%
-          filter(detected == 1) %>% 
-          select(site, crawl_date, snippet, url, crawl_timestamp) %>% 
+          inner_join(., tbl(pool, "traces"), by = c("sha1" = "site")) %>%
+          filter(search_type == "snippet_list") %>% 
+          select(site, crawl_date, trace, url, crawl_timestamp) %>% 
           collect() %>% 
           arrange(crawl_date) %>% 
           mutate(snippet_group = cur_group_id(),
-                 snippet_group_member = row_number(), .by = "snippet") %>% 
+                 snippet_group_member = row_number(), .by = "trace") %>% 
           filter(snippet_group_member < 6) %>% 
           mutate(archive_url = paste0('<a href= "http://web.archive.org/web/', crawl_timestamp, '/', url,'"  target="_blank">Link ins Archive</a>')) %>% 
-          select(snippet, crawl_date, url, archive_url)
+          select(trace, crawl_date, url, archive_url)
         
         # View(df_table)
         return(df_table)
@@ -63,13 +63,13 @@ snippetFindingsTableServer <- function(id, tab_, site_to_load) {
       get_colors <- reactive({
         
         nr_fill_values <- current_data$snippet_data %>% 
-          select(snippet) %>% 
+          select(trace) %>% 
           distinct() %>% nrow()
         
         color_values = MetBrewer::met.brewer("Cross", nr_fill_values)
         
         colors <- current_data$snippet_data %>% 
-          select(snippet) %>% 
+          select(trace) %>% 
           distinct() %>% 
           # arrange(snippet) %>% 
           bind_cols(color_values) %>% #deframe()
@@ -79,19 +79,19 @@ snippetFindingsTableServer <- function(id, tab_, site_to_load) {
         return(colors)
       })
       
-      output$tableSnippetFindings <- renderDataTable({
+      output$tableSnippetFindings <- DT::renderDataTable({
         
         if (!is.null(current_data$snippet_data)){
           if(nrow(current_data$snippet_data) > 0){
-            datatable(current_data$snippet_data, rownames= FALSE, filter = "top", escape=F, colnames=c("snippet found", "crawl date", "url", "archive link"),
+            DT::datatable(current_data$snippet_data, rownames= FALSE, filter = "top", escape=F, colnames=c("snippet found", "crawl date", "url", "archive link"),
                       options = list(order = list(0, 'asc'))
                       ) %>%
-                            formatStyle(columns = "snippet",
+                            formatStyle(columns = "trace",
                                         target = "cell",
-                                        backgroundColor = styleEqual(levels = current_data$colors["snippet"] %>% pull(.), values = current_data$colors["hex"] %>% pull(.))
+                                        backgroundColor = styleEqual(levels = current_data$colors["trace"] %>% pull(.), values = current_data$colors["hex"] %>% pull(.))
                             )
         } else {
-          datatable(current_data$snippet_data, rownames= FALSE, filter = "top", escape=F, colnames=c("snippet found", "crawl date", "url", "archive link"),
+          DT::datatable(current_data$snippet_data, rownames= FALSE, filter = "top", escape=F, colnames=c("snippet found", "crawl date", "url", "archive link"),
                     options = list(order = list(0, 'asc'))
           )
           }

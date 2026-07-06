@@ -2,7 +2,7 @@ modCrawlTimeUI <- function(id) {
   ns <- NS(id)
   tagList(
     addGFontHtmlDependency(family = c("Roboto Mono")),
-    plotOutput(ns("crawlTime"), height = 300, width = 1100)
+    plotOutput(ns("crawlTime"), height = 300, width = 900)
   )
 }
 
@@ -21,9 +21,7 @@ modCrawlTimeServer <- function(id, tab_, site_to_load) {
           ungroup() %>% 
           collect() %>% 
           mutate(counted = as.numeric(counted))
-        
-        str(df_return)
-
+       
         return(df_return)
       }
 
@@ -40,8 +38,6 @@ modCrawlTimeServer <- function(id, tab_, site_to_load) {
           theme_b03_base + theme_b03_heatmap + 
           guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines")))
       })
-      
-      # current_tab <- reactiveValues()
       
       current_data <- reactiveValues()
       

@@ -20,7 +20,7 @@ tab_4_historiogramServer <- function(id, tab_) {
           filter(type %in% c("offsite", "onsite", "meta"))
         return(df_sheet)
       }
-       
+      
       make_segment_data <- function(){ 
         df_make_shades <- current_data$sheet %>% 
           select(-comment, -archive_link, -screenshot) %>% 
@@ -38,46 +38,45 @@ tab_4_historiogramServer <- function(id, tab_) {
           summarise(start_date = first(date), end_date = last(date), .by = c(site, index, type)) %>% 
           mutate(blurry_start = start_date - months(6),
                  blurry_end = end_date + months(6))
-        View(df_plot_segments)
+        # print(df_plot_segments)
         return(df_plot_segments)
       }
       
       # print the viz --------------------------------------------------------------
       
       print_historiograms <- reactive({
-        # View(current_data$segment_data)
-        # View(current_data$sheet)
+       
         plot <- ggplot() +
           geom_segment(data = current_data$segment_data, aes(x = blurry_start, y = type, xend = blurry_end, yend = type, color = type), alpha = .5, lineend = "round", linewidth = 2)+
           geom_segment(data = current_data$segment_data, aes(x = start_date, y = type, xend = end_date, yend = type, color = type), lineend = "round", linewidth = 2)+
           geom_point_interactive(data = current_data$sheet, aes(x = date, y = type, tooltip = paste0(comment))) +
+          scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(ymd("1997-01-01"), ymd("2021-01-01"))) +
           theme_b03_base + theme_b03_facets_individual + theme(legend.position = "none") +
           facet_col(vars(site), scales = "free_y", space = "free" )
         
         girafe(ggobj = plot,
                options = list(opts_sizing(rescale = FALSE)),
-               width_svg = 15,
-               height_svg = 8)
+               width_svg = 10,
+               height_svg = 6)
       })
       
       # observe Events ----------------------------------
       
-      current_data <- list()
+      current_data <- reactiveValues()
       
-      # rebuild_df <- function(){
+      rebuild_df <- function(){
         current_data$sheet = load_sheet()
         current_data$segment_data = make_segment_data()
-      # }
+      }
       
-      # observeEvent(tab_(),{
-      #   print(paste0("tab 4 visualization: tab loaded: ", tab_()))
-        # current_tab$tab = tab_()
-        # if(tab_() == "tab_4"){
-          # rebuild_df()
-        # }
-      # })
-      
+      observeEvent(tab_(),{
+        # print(paste0("tab 4 visualization: tab loaded: ", tab_()))
+      # current_tab$tab = tab_()
+      if(tab_() == "tab_4"){
+        rebuild_df()
+      }
+      })
+
       output$historiogram <- renderGirafe({print_historiograms()})
     })
-  }
-  
+}

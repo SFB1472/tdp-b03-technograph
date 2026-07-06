@@ -2,95 +2,88 @@ library(DT)
 
 formFindingsTableUI <- function(id) {
   ns <- NS(id)
+  # tagList(reactableOutput(ns("tableFindings")))
+  # DT::dataTableOutput(ns("tableFindings"))
   tagList(DT::dataTableOutput(ns("tableFindings")))
 }
 
-formFindingsTableServer <- function(id, tab_, site_to_load) {
+formFindingsTableServer <- function(id, tab_, site_to_load, sphere) {
   
   stopifnot(is.reactive(site_to_load))
   
   moduleServer(
     id,
     function(input, output, session) {
-      
-      current_data <- reactiveValues()
-      
-      rebuilt_data <- function(){
-        current_data$form_data = get_form_finding_data()
-        current_data$colors = get_colors()
-      }
-      
-      observeEvent(tab_(),{
-        # print(paste0("tab 2 tabledata: tab loaded: ", tab_()))
-        if(tab_() == "tab_2"){
-          rebuilt_data()
-        }
-      })
-      
-      observeEvent(site_to_load(),{
-        # print(paste0("findingsTableServer ", site_to_load()))
-        current_data$site_to_load = site_to_load()
-        if(tab_() == "tab_2"){
-          rebuilt_data()
-        }
-      })
-      
+      initLoad <- TRUE
       ## get the data ----------------------------------------------------------
       
-      get_form_finding_data <- function(){
+      
+      get_traces_data <- function(sphere_){
+      
+        # print("building table data")
         
-        df_table <- tbl(pool, "sites") %>%
-          inner_join(., tbl(pool, "context_hashed")) %>%
-          filter(site == !!current_data$site_to_load, iteration == "cleaned_whitelist") %>% 
-          collect()
+        df_ids <- tbl(pool, "context_hashed") %>%
+          filter(iteration == "monthly_whitelist", sphere == sphere_) %>% 
+          select(agg_id, hashed_context) |> 
+          arrange(agg_id) |> 
+          collect() |> 
+          mutate(site_subdomain = str_remove(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}_"),
+                 site = str_remove(site_subdomain, "_.*$")) |> 
+          filter(site == current_data$site_to_load) |> 
+          mutate(nr_unique_hashes = match(hashed_context, unique(hashed_context))) |> 
+          reframe(agg_id = first(agg_id), .by = c(nr_unique_hashes, hashed_context, site)) |> 
+          select(-hashed_context)
         
-        df_sites <- tbl(pool, "sites") %>%
-          # inner_join(., db_findings_hashed) %>%
-          filter(site == !!current_data$site_to_load) %>% 
-          collect() %>% 
-          mutate(archive_url = paste0("http://web.archive.org/web/", str_remove_all(as.character(crawl_timestamp), "-|\\s|:"), "/", url),
-                 empty = "") %>% 
-          arrange(crawl_date)
+        # View(df_ids)
         
-        df_table_filled_ <- df_table %>% 
-            mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
-                   site_subdomain = paste(site, subdomain, sep = "_"),
-                   type = "traces via form tags") %>%
-            arrange(crawl_date) %>% 
-            mutate(
-              # nr_unique_hashes = dense_rank(hashed_context), .by = c(site, subdomain)
-              nr_unique_hashes = match(hashed_context, unique(hashed_context))
-              ) 
-          # View(df_table_filled_)
-          df_table_filled <- df_table_filled_ %>% 
-            reframe(first_crawl_date = min(crawl_date), first_id_sha1_group = first(id_sha1_group), first_url = first(url), .by = c("site", "hashed_context", "nr_unique_hashes")) #%>% View()
+        df_archived_sites <- tbl(pool, "sites") %>%
+          filter(site == !!current_data$site_to_load) %>%
+          left_join(., tbl(pool, "traces_context")) %>%
+          filter(id_date_site_subdomain %in% df_ids$agg_id) |> 
+          # left_join(., tbl(pool, "context_hashed"), by = c("id_date_site_subdomain" = "agg_id")) |> 
+          select(crawl_date, crawl_timestamp, site, url, id_date_site_subdomain) |> 
+          distinct() |> 
+          collect() %>%
+          mutate(archive_url = paste0("http://web.archive.org/web/", str_remove_all(as.character(crawl_timestamp), "-|\\s|:"), "/", url)) %>%
+          arrange(crawl_date) |>
+          select(id_date_site_subdomain, archive_url) |> 
+          reframe(archive_url = first(archive_url), .by = c("id_date_site_subdomain")) # |>
           
-          ids_to_look_at <- df_table_filled %>% select(first_id_sha1_group) %>% pull(.)
-          
-          df_return_table <- tbl(pool, "tag_context") %>% 
-            filter(id_sha1_group %in% ids_to_look_at) %>% 
-            collect() %>% 
-            left_join(., df_table_filled, by = c("id_sha1_group" = "first_id_sha1_group")) %>% 
-            arrange(id_sha1_group, nr_unique_hashes) %>% 
-            mutate(
-              first_crawl_date = as.character(first_crawl_date) %>% str_remove_all(., "-"),
-              archive_url = paste0('<a href= "http://web.archive.org/web/', first_crawl_date, '/', first_url,'"  target="_blank">Link ins Archive</a>')) %>% 
-            select(nr_unique_hashes, tag, attr, text, archive_url) # %>% 
-            # rename("Kommentar- index" = "nr_unique_hashes")
-          
-        return(df_return_table)
+        
+        df_table <- tbl(pool, "traces_context") %>%
+          select(id_date_site_subdomain, tag, attr, value, value_cleaned_whitelist) |>
+          filter(id_date_site_subdomain %in% df_ids$agg_id) |>
+          distinct() |> 
+          collect() %>% #View()
+          mutate(site_subdomain = str_remove(id_date_site_subdomain, "\\d{4,4}-\\d{2,2}-\\d{2,2}_"),
+                 site = str_remove(site_subdomain, "_.*$"),
+                 crawl_date = str_extract(id_date_site_subdomain, "\\d{4,4}-\\d{2,2}-\\d{2,2}"),
+                 crawl_date = ymd(crawl_date),
+                 type = "traces via tag findings") %>%
+          left_join(., df_ids, by = c("id_date_site_subdomain" = "agg_id")) |> 
+          arrange(crawl_date) |>
+          select(nr_unique_hashes, tag, attr, value_cleaned_whitelist, id_date_site_subdomain) |>
+          distinct() |> 
+          left_join(df_archived_sites) |> 
+          mutate(archive_url = paste0('<a href= "', archive_url,'"  target="_blank">Link ins Archive</a>')) %>% 
+          select(-id_date_site_subdomain)#, archive_url) # %>%
+        
+        # View(df_table)
+        # print("finished building table data")
+        
+        return(df_table)
       }
       
       # build table --------------------------------------------------------------
       
       get_colors <- reactive({
-        # print("recalc colors")
+        # print(paste0("changed ", structure(current_data$traces_data)))
         # print(current_data$site_to_load)    
-        unique_colors <- current_data$form_data %>% 
+        unique_colors <- current_data$traces_data %>% 
           select(nr_unique_hashes) %>% 
           distinct() %>% nrow() %>% rainbow(.)
         
-        colors <- current_data$form_data %>% 
+        colors <- current_data$traces_data %>% 
           select(nr_unique_hashes) %>% 
           distinct() %>% 
           arrange(nr_unique_hashes) %>% 
@@ -101,24 +94,48 @@ formFindingsTableServer <- function(id, tab_, site_to_load) {
         return(colors)
       })
       
-      output$tableFindings <- renderDataTable({
-        # print(paste0("form findings table ", is.null((current_data$form_data)) ))
-        if (!is.null(nrow(current_data$form_data))){
-          if(nrow(current_data$form_data) > 0) {
-            datatable(current_data$form_data, rownames= FALSE, filter = "top", escape=F, colnames=c("tagindex", "tag", "attr", "text", "archive link"),
-                    options = list(order = list(0, 'asc'))
-                    ) %>%
-                          formatStyle(columns = "nr_unique_hashes", 
-                                      target = "cell", 
-                                      backgroundColor = styleEqual(levels = current_data$colors["nr_unique_hashes"] %>% pull(.), values = current_data$colors["hex"] %>% pull(.))
-                          )
-        } else {
-          datatable(current_data$form_data, rownames= FALSE, filter = "top", escape=F, colnames=c("tagindex", "tag", "attr", "text", "archive link"),
-                    options = list(order = list(0, 'asc'))
-          )
+      get_table <- reactive({
+        if (!is.null(nrow(current_data$traces_data))){
+            if(nrow(current_data$traces_data) > 0) {
+              datatable(current_data$traces_data, rownames= FALSE, filter = "top", escape=F, colnames=c("tagindex", "tag", "attr", "value cleaned", "archive link (excample)"),
+                      options = list(order = list(0, 'asc'))
+                      ) %>%
+                            formatStyle(columns = "nr_unique_hashes",
+                                        target = "cell",
+                                        backgroundColor = styleEqual(levels = current_data$colors["nr_unique_hashes"] %>% pull(.), values = current_data$colors["hex"] %>% pull(.))
+                            )
+          } else {
+            DT::datatable(current_data$traces_data, rownames= FALSE, filter = "top", escape=F, colnames=c("tagindex", "tag", "attr", "value cleaned", "archive link  (excample)"),
+          options = list(order = list(0, 'asc'))
+            )
+          }
+            }
+          })
+
+      current_data <- reactiveValues()
+      
+      rebuilt_data <- function(){
+        current_data$test = penguins
+        current_data$traces_data = get_traces_data(sphere())
+        current_data$colors = get_colors()
+      }
+      
+      observeEvent(tab_(),{
+        # print(paste0("tab 2 snippet table data: tab loaded: ", tab_()))
+        if(tab_() == "tab_2"){
+          rebuilt_data()
         }
+      })
+      
+      observeEvent(site_to_load(),{
+        # print(paste0("2 tab, 4 viz, snippet findingsTableServer ", site_to_load()))
+        current_data$site_to_load = site_to_load()
+        if(tab_() == "tab_2"){
+          rebuilt_data()
           }
         })
+      
+      output$tableFindings <- DT::renderDataTable({get_table()})
     })
   }
   
