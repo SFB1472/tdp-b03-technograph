@@ -146,6 +146,8 @@ faz (so viel in de): sortChanger, empfehlen, LesermeinungenAnzahl, Richtlinien, 
 sub_traces <- read.csv("../../../data/helper/26-02-26-search-list-comment-functions.csv", header = FALSE) 
 sub_traces_light <- sub_traces$V1[!sub_traces$V1 %in% c("even", "odd")] %>% paste(., collapse=("|"))
 
+save(sub_traces, file = "../../../3_visualizing_app/technograph/data/helper/sub-traces-to-search-for.RData")
+
 reactable(sub_traces)
 
 ```
@@ -184,10 +186,6 @@ get_data_comment_traces <- function(sphere_){
   reframe(counted_comments = n(), .by = c(site_subdomain, simple_date))
 }
 
-# sphere_ <- "German"
-# df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.sphere, t.id_date_site_subdomain, t.tag, t.attr, t.value FROM traces_context t WHERE t.sphere ='", sphere_,"' "), check_interrupts = TRUE) %>% 
-#   mutate(simple_date = str_extract(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01") %>% as_date(.),
-#          site_subdomain = str_remove(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01_")) 
 
 get_data_sub_traces <- function(sphere_, search_in){
   df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.tag, t.sphere, t.",search_in," as raw_trace FROM traces_context t WHERE t.sphere ='", sphere_,"' AND t.",search_in," ~* '", sub_traces, "'"), check_interrupts = TRUE) %>% 
@@ -196,6 +194,9 @@ get_data_sub_traces <- function(sphere_, search_in){
   mutate(search_type = "sub_traces",
          comment = search_in) 
 }
+
+# get_data_sub_traces("German", "attr")
+
 ```
 
 ## Grafik: Konjunkturen verschiedener Funktionalitäten innerhalb von Kommentaroptionen
@@ -218,14 +219,20 @@ df_sites_de <- df_sites("German") %>%
          simple_date = paste0(year(crawl_date),"-", month(crawl_date), "-01") %>% ymd(.))
 
 get_script_sub_traces <- function(sphere_){
-  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.sphere, t.value FROM tags t WHERE t.sphere ='", sphere_,"' AND t.tag = 'script' AND t.embedded is not null AND t.value ~* '", sub_traces_light, "'"), check_interrupts = TRUE) %>% 
+  # sphere_ <- "German"
+  script_trace_ids <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.tags_id FROM traces t WHERE t.sphere ='", sphere_,"' AND t.tag = 'script' AND t.comment = 'embedded'"), check_interrupts = TRUE) #|>  paste(collapse=("|"))
+  
+  # script_embeddings_all <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.tags_id FROM tags t WHERE t.sphere ='", sphere_,"' AND t.tag = 'script' AND t.embedded is not null"), check_interrupts = TRUE)
+  
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site, t.tag, t.tags_id, t.sphere, t.value FROM tags t WHERE t.sphere ='", sphere_,"' AND t.tag = 'script' AND t.embedded is not null AND t.value ~* '", sub_traces_light, "'"), check_interrupts = TRUE) %>% 
+    filter(tags_id %in% script_trace_ids$tags_id) |> 
   mutate(trace = str_extract(value, regex(sub_traces_light, ignore_case = TRUE))) %>%
   # select(-column_t) 
   mutate(search_type = "sub_traces",
          comment = "value") 
 }
 
-df_script_sub_traces_traces <- get_script_sub_traces("German") %>% 
+df_script_sub_traces <- get_script_sub_traces("German") %>% 
   left_join(., df_sites_de, by = c("site" = "sha1")) %>% 
   arrange(simple_date) %>% 
   reframe(counted = n(), .by = c(site_subdomain, simple_date, trace, search_type)) %>% 
@@ -243,7 +250,7 @@ df_sub_traces_de__ <- df_sub_traces_de %>%
   reframe(counted = n(), .by = c(site_subdomain, simple_date, trace, search_type)) %>% 
   filter(!site_subdomain %in% exclude_side_subdomain)
 
-just_traces <- df_script_sub_traces_traces %>% 
+just_traces <- df_script_sub_traces %>% 
   bind_rows(., df_sub_traces_de__) %>% 
   reframe(counted_traces = sum(counted), .by = c(simple_date, trace))
 
@@ -415,6 +422,8 @@ df_meta_info <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>%
   filter(is_set == 1) %>% 
   filter(!site_subdomain %in% exclude_side_subdomain)
 
+df_sub_traces_de |> select(site_subdomain) |> distinct() |> arrange(site_subdomain) |>  clipr::write_clip()
+
 ggplot() +
   geom_tile(data = df_meta_info, aes(x = simple_date, y = trace, fill = counted_sites)) +
   geom_point(data = df_meta_info, aes(x = simple_date, y = trace, size = counted_comments), color = "#31eccd", shape = 15) +
@@ -511,14 +520,14 @@ reactable(tbl_snippets)
 #| fig-height: 8
 #| fig-width: 10
 
-found_traces <- df_script_sub_traces_traces %>% select(trace) %>% distinct()# %>% pull(.)
+found_traces <- df_script_sub_traces %>% select(trace) %>% distinct()# %>% pull(.)
 
 df_meta_info <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>% 
   as_tibble() %>% 
   rename(simple_date = value) %>% 
   expand_grid(., found_traces) %>% # View()
   left_join(., df_sites_de_histo) %>% 
-  left_join(., df_script_sub_traces_traces) %>% 
+  left_join(., df_script_sub_traces) %>% 
   mutate(is_set = ifelse(!is.na(counted), 1, NA)) %>% 
   group_by(site_subdomain, trace) %>% 
   fill(is_set, .direction = "updown") %>% 
@@ -529,7 +538,7 @@ df_meta_info <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>%
 ggplot() +
   geom_tile(data = df_meta_info, aes(x = simple_date, y = trace, fill = counted_sites)) +
   geom_point(data = df_meta_info, aes(x = simple_date, y = trace, size = counted_comments), color = "#31eccd", shape = 15) +
-  geom_point(data = df_script_sub_traces_traces, aes(x = simple_date, y = trace, size = counted), color = "black") +
+  geom_point(data = df_script_sub_traces, aes(x = simple_date, y = trace, size = counted), color = "black") +
   facet_col(vars(site_subdomain), scales = "free", space = "free") +
   scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2021-09-01")), expand = c(0,NA)) +
   scale_color_manual(values = color_search_type) +
