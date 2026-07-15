@@ -1,0 +1,290 @@
+---
+title: "Traces context"
+---
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(urltools)
+library(ggforce)
+library(reactable)
+library(MetBrewer)
+library(ggiraph)
+
+source("../../config/config-secret-local.R")
+# source("../config/config-secret.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+# dbDisconnect(con)
+
+retranslate_snippets <- read_delim("../../../data/helper/25-12-12-Commenting-system-detection-patterns.csv", show_col_types = FALSE, delim = ";") %>% #View()
+          select("system" = `Commenting system`, "snippet" = snippet) %>% 
+          filter(!is.na(system)) %>% select(snippet, system)
+
+
+df_timespan_year <- seq(ymd("1996-01-01"), ymd("2021-06-01"), by = "year") %>% as_tibble()
+df_systems_color_legend <- read_csv(file = "../../../3_visualizing_app/technograph/data/helper/colors-systems.csv", show_col_types = FALSE)
+year_breaks_for_plotting <- df_timespan_year %>% 
+  mutate(years = year(value)) %>% 
+  select(years) %>% pull(.)
+
+```
+
+
+## Create table subtraces
+
+### functions
+
+```{r}
+
+sub_traces <- read.csv("../../../data/helper/26-02-26-search-list-comment-functions.csv", header = FALSE)$V1 |> paste(collapse=("|"))
+sub_traces_light <- sub_traces$V1[!sub_traces$V1 %in% c("even", "odd")] %>% paste(., collapse=("|"))
+
+
+get_sites <- function(sphere_){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.crawl_date, t.site, t.url, t.sphere FROM sites t WHERE t.sphere ='", sphere_,"' AND t.of_interest = TRUE"), check_interrupts = TRUE) %>% 
+    mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+           site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.),
+           simple_date = paste0(year(crawl_date),"-", month(crawl_date), "-01") |> ymd())
+}
+
+get_sites_comments_histo <- function(sphere_){
+  df_comments <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.sphere, t.id_date_site_subdomain FROM traces_context t WHERE t.sphere ='", sphere_,"' "), check_interrupts = TRUE) %>% 
+  mutate(simple_date = str_extract(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01") %>% as_date(.),
+         site_subdomain = str_remove(id_date_site_subdomain, "^\\d{4,4}-\\d{1,2}-01_")) %>%
+  reframe(counted_comments = n(), .by = c(site_subdomain, simple_date))
+  
+  df <- get_sites(sphere_) |> 
+    reframe(counted_sites = n(), .by = c(site, site_subdomain, simple_date)) |> 
+    left_join(df_comments)
+}
+
+get_script_sub_traces <- function(sphere_){
+  
+  script_trace_ids <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.tags_id FROM traces t WHERE t.sphere ='", sphere_,"' AND t.tag = 'script' AND t.comment = 'embedded'"), check_interrupts = TRUE) #|>  paste(collapse=("|"))
+  
+    df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.site as sha1, t.tag, t.tags_id, t.sphere, t.value as raw_trace FROM tags t WHERE t.sphere ='", sphere_,"' AND t.tag = 'script' AND t.embedded is not null AND t.value ~* '", sub_traces_light, "'"), check_interrupts = TRUE) %>% 
+    filter(tags_id %in% script_trace_ids$tags_id) |> 
+  mutate(trace = str_extract(raw_trace, regex(sub_traces_light, ignore_case = TRUE))) %>%
+  # select(-column_t) 
+  mutate(search_type = "sub_traces",
+         comment = "value") 
+}
+
+get_data_sub_traces <- function(sphere_, search_in){
+  df <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.sha1, t.tag, t.sphere, t.",search_in," as raw_trace FROM traces_context t WHERE t.sphere ='", sphere_,"' AND t.",search_in," ~* '", sub_traces, "'"), check_interrupts = TRUE) %>% 
+  mutate(trace = str_extract(raw_trace, regex(sub_traces, ignore_case = TRUE))) %>%
+  # select(-column_t) 
+  mutate(search_type = "sub_traces",
+         comment = search_in) 
+}
+
+
+```
+
+### building data
+
+```{r}
+
+sphere_ <- "German"
+sphere_ <- "World"
+sphere_ <- "Dutch"
+
+translation_sites <- read_csv("../../../data/4-doc/sites/de_site_subdomain_category.csv")
+translation_sites <- read_csv("../../../data/4-doc/sites/world_site_subdomain_category.csv")
+
+df_sites_de_histo <- get_sites_comments_histo(sphere_) 
+
+# test <- get_sites("German")
+
+df_sub_traces <- get_data_sub_traces(sphere_, "value") %>% #View()
+  bind_rows(., get_data_sub_traces(sphere_, "attr")) %>% 
+  # bind_rows(., get_data_snippets_traces_("value", sphere_)) %>%
+  # bind_rows(., get_data_snippets_traces_("attr", sphere_)) %>%
+  bind_rows(., get_script_sub_traces(sphere_)) |> 
+  left_join(get_sites(sphere_)) %>% 
+  reframe(counted_traces = n(), .by = c(site_subdomain, site, simple_date, trace, search_type)) %>% 
+  arrange(simple_date) |> 
+  left_join(translation_sites) |> 
+  mutate(site_category = if_else(!is.na(category), paste0(site,"_", category), site_subdomain))
+
+found_traces <- df_sub_traces %>% select(trace) %>% distinct()# %>% pull(.)
+found_sites <- df_sub_traces |> select(site_category) |> distinct()
+
+print_data_subfindings <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>% 
+  as_tibble() %>% 
+  rename(simple_date = value) %>% 
+  expand_grid(., found_traces) %>%  #View()
+  left_join(., df_sites_de_histo) %>% #View()
+  left_join(., df_sub_traces) %>% #View()
+  mutate(is_set = ifelse(!is.na(counted_traces), 1, NA),
+         sphere = sphere_) %>% #View()
+  group_by(site_subdomain, trace) %>% 
+  fill(is_set, .direction = "updown") %>% 
+  fill(site_category, .direction = "updown") |> 
+  ungroup() %>% 
+  filter(is_set == 1) %>% # View()
+  # mutate(site_category = ifelse())
+  filter(site_category %in% found_sites$site_category) |> 
+  select(-category, -is_set)
+
+dbWriteTable(conn = con, name = "tbl_gfx_subfindings", print_data_subfindings, append = TRUE)
+
+```
+
+## Create table all findings
+
+### functions
+
+```{r}
+
+get_annotated_data <- function(sphere_){
+  annotated_data_raw <- read_csv(paste0("../../../3_visualizing_app/technograph/data/", SPREADSHEET_ANNOTATION[[{sphere_}]]), show_col_types = FALSE) |> filter(!is.na(site))
+        annotation_is_empty <- annotated_data_raw %>% nrow() == 0
+        # check_gs_empty(annotated_data)
+        if(!annotation_is_empty) {
+          annotated_data <- annotated_data_raw %>% 
+            filter(tooltip_info != "") %>% 
+            mutate(type = "manual research",
+                   date = paste0(year, "-", ifelse(is.na(month), "1", month), "-", ifelse(is.na(day), "1", day)) %>% ymd(.),
+                   # technology = ifelse(is.na(technology), "other", technology),
+                   shape_color = 9999999,
+                   shape_fill = NA#,
+                   # shape_nr = 19
+                   ) %>% 
+            rename("crawl_date" = "date") %>% 
+            select(crawl_date, site, type, shape_color, shape_fill, tooltip_info)
+        }
+        else{
+            annotated_data <- annotated_data_raw %>% 
+            mutate(type = "manual research",
+                   date = NA_Date_,
+                   site = NA_character_,
+                   tooltip_info = NA_character_,
+                   shape_color = NA,
+                   shape_fill = NA#,
+                   # shape_nr = NA
+                   ) %>% 
+            rename("crawl_date" = "date") %>% 
+            select(crawl_date, site, type, shape_color, shape_fill, tooltip_info) 
+        }
+        return(annotated_data)
+        }
+
+get_snippet_data <- function(sphere_){
+  df_return <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sha1, s.site, s.url, t.trace, t.sphere FROM sites s INNER JOIN traces t ON s.sha1 = t.site WHERE t.sphere ='", sphere_,"' AND t.search_type = 'snippet_list'"), check_interrupts = TRUE) %>%
+    mutate(subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
+                 site_subdomain = paste(site, subdomain, sep = "_") %>% as.character(.),
+                 type = "traces via snippet detection",
+                 shape_color = NA,
+                 # shape_nr = 23 %>% as.character(.),
+                 tooltip_info = paste0("Snippet: ", trace),
+                 # archive_url = paste0("http://web.archive.org/web/", str_remove_all(as.character(crawl_timestamp), "-|\\s|:"), "/", url)
+                 ) %>% 
+          mutate(shape_fill = cur_group_id(), .by = "trace") |> 
+    select(crawl_date, site, site_subdomain, type, shape_color, shape_fill, tooltip_info)
+}
+
+get_hashed_findings <- function(sphere_){
+  # sphere_ <-  "German"
+  df_return <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.agg_id, t.hashed_context FROM context_hashed t WHERE t.iteration ='monthly_whitelist' AND t.sphere = '",sphere_,"' "), check_interrupts = TRUE) |>
+    mutate(site_subdomain = str_remove(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}_"),
+                 site = str_remove(site_subdomain, "_.*$"),
+                 crawl_date = str_extract(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}"),
+                 crawl_date = ymd(crawl_date) , 
+                 type = "traces via tag findings") %>%
+          # filter(site == current_data$site_to_load) %>%
+          arrange(crawl_date) %>%
+          mutate(
+            nr_unique_hashes = match(hashed_context, unique(hashed_context)), .by = "site_subdomain"
+            ) |> 
+  mutate(
+            # nr_unique_hashes = dense_rank(hashed_context), .by = c(site, subdomain),
+            shape_color = nr_unique_hashes,
+            shape_fill = NA,
+            # shape_nr = 19,
+            tooltip_info = paste0("tagindex: ", nr_unique_hashes)) %>%
+          select(crawl_date, site, site_subdomain, type, shape_color, shape_fill, tooltip_info)
+}
+
+```
+
+### building data
+
+```{r}
+
+sphere_ <- "German"
+sphere_ <- "World"
+sphere_ <- "Dutch"
+
+df_gfx_all_findings <- get_annotated_data(sphere_) |> 
+  bind_rows(get_hashed_findings(sphere_)) |> 
+  bind_rows(get_snippet_data(sphere_)) |> 
+  mutate(sphere = sphere_)
+
+dbWriteTable(conn = con, name = "tbl_gfx_all_findings", df_gfx_all_findings, append = TRUE)
+
+```
+
+ 
+ 
+ 
+## Create table corresponding tags to hashes
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+sphere_ <- "German"
+sphere_ <- "World"
+sphere_ <- "Dutch"
+
+df_ids <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.agg_id, t.hashed_context FROM context_hashed t WHERE t.iteration ='monthly_whitelist' AND t.sphere = '",sphere_,"' "), check_interrupts = TRUE) |>
+  mutate(site_subdomain = str_remove(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}_"),
+                 site = str_remove(site_subdomain, "_.*$")) |> 
+          # filter(site == current_data$site_to_load) |> 
+          mutate(nr_unique_hashes = match(hashed_context, unique(hashed_context)), .by = "site") |> 
+          reframe(agg_id = first(agg_id), .by = c(nr_unique_hashes, hashed_context, site, site_subdomain)) |> 
+          select(-hashed_context)
+
+db_ids <- df_ids$agg_id |> paste(collapse=("|"))
+
+df_archived_sites <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.crawl_timestamp, s.site, s.url, t.id_date_site_subdomain FROM sites s INNER JOIN traces_context t ON s.sha1 = t.sha1 WHERE t.sphere = '",sphere_,"' "), check_interrupts = TRUE) |>
+  filter(id_date_site_subdomain %in% df_ids$agg_id) |> 
+   mutate(archive_url = paste0("http://web.archive.org/web/", str_remove_all(as.character(crawl_timestamp), "-|\\s|:"), "/", url)) %>%
+          arrange(crawl_date) |>
+          select(id_date_site_subdomain, archive_url) |> 
+          reframe(archive_url = first(archive_url), .by = c("id_date_site_subdomain")) # |>
+          
+        
+
+df_db_table <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.id_date_site_subdomain, t.tag, t.attr, t.value, t.value_cleaned_whitelist, t.sphere FROM traces_context t WHERE t.sphere = '",sphere_,"' "), check_interrupts = TRUE) |>
+  filter(id_date_site_subdomain %in% df_ids$agg_id) |> 
+  mutate(site_subdomain = str_remove(id_date_site_subdomain, "\\d{4,4}-\\d{2,2}-\\d{2,2}_"),
+                 site = str_remove(site_subdomain, "_.*$"),
+                 crawl_date = str_extract(id_date_site_subdomain, "\\d{4,4}-\\d{2,2}-\\d{2,2}"),
+                 crawl_date = ymd(crawl_date),
+                 type = "traces via tag findings") %>%
+          left_join(., df_ids, by = c("id_date_site_subdomain" = "agg_id", "site" = "site", "site_subdomain" = "site_subdomain")) |> 
+          arrange(crawl_date) |> # View()
+          select(site, site_subdomain, tag, attr, value, value_cleaned_whitelist, nr_unique_hashes, id_date_site_subdomain, sphere) |>
+          distinct() |> 
+          left_join(df_archived_sites) |> 
+          mutate(archive_url = paste0('<a href= "', archive_url,'"  target="_blank">Link ins Archive</a>')) %>% 
+          select(-id_date_site_subdomain)#, archive_url) # %>%
+
+dbWriteTable(conn = con, name = "tbl_context_hashed_tags", df_db_table, append = TRUE)
+
+```
