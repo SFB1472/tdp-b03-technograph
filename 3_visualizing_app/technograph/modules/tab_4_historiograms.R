@@ -16,30 +16,19 @@ tab_4_historiogramServer <- function(id, tab_) {
       ## get the data ----------------------------------------------------------
       
       load_sheet <- function(){
-        df_sheet <- read_csv("data/historiograms/visual analyses - traces of commenting options - Tabellenblatt1.csv", show_col_types = FALSE) %>% 
-          filter(type %in% c("offsite", "onsite", "meta"))
-        return(df_sheet)
+        df_return <- tbl(pool, "tbl_historiogram_comments") |> 
+          collect()
+        
+        # print(df_plot_segments)
+        return(df_return)
       }
       
       make_segment_data <- function(){ 
-        df_make_shades <- current_data$sheet %>% 
-          select(-comment, -archive_link, -screenshot) %>% 
-          filter(type != "meta") %>% 
-          mutate(continuous_group = cur_group_id(), .by = c(site, type)) %>% 
-          mutate(closed_groups = ifelse(lead(continuous_group) != continuous_group, "last", "same"),
-                 closed_groups_start = ifelse(lag(continuous_group) != continuous_group, "first", "same"), .by = site) %>% 
-          mutate(closed_groups = ifelse(is.na(closed_groups), "last", closed_groups),
-                 closed_groups_start = ifelse(is.na(closed_groups_start), "first", closed_groups_start),
-                 date_blurred = floor_date(date,unit ="month"),
-                 change = ifelse(closed_groups == "same" & closed_groups_start == "first", T, F)) %>% 
-          mutate(index = cumsum(change), .by = site) #%>% 
+        df_make_shades <- tbl(pool, "tbl_historiogram") |> 
+          collect()
         
-        df_plot_segments <- df_make_shades %>% 
-          summarise(start_date = first(date), end_date = last(date), .by = c(site, index, type)) %>% 
-          mutate(blurry_start = start_date - months(6),
-                 blurry_end = end_date + months(6))
         # print(df_plot_segments)
-        return(df_plot_segments)
+        return(df_make_shades)
       }
       
       # print the viz --------------------------------------------------------------
@@ -47,9 +36,9 @@ tab_4_historiogramServer <- function(id, tab_) {
       print_historiograms <- reactive({
        
         plot <- ggplot() +
-          geom_segment(data = current_data$segment_data, aes(x = blurry_start, y = type, xend = blurry_end, yend = type, color = type), alpha = .5, lineend = "round", linewidth = 2)+
-          geom_segment(data = current_data$segment_data, aes(x = start_date, y = type, xend = end_date, yend = type, color = type), lineend = "round", linewidth = 2)+
-          geom_point_interactive(data = current_data$sheet, aes(x = date, y = type, tooltip = paste0(comment))) +
+          geom_segment(data = current_data$segment_data, aes(x = ymd(blurry_start), y = type, xend = ymd(blurry_end), yend = type, color = type), alpha = .5, lineend = "round", linewidth = 2)+
+          geom_segment(data = current_data$segment_data, aes(x = ymd(start_date), y = type, xend = ymd(end_date), yend = type, color = type), lineend = "round", linewidth = 2)+
+          geom_point_interactive(data = current_data$sheet, aes(x = ymd(date), y = type, tooltip = paste0(comment))) +
           scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(ymd("1997-01-01"), ymd("2021-01-01"))) +
           theme_b03_base + theme_b03_facets_individual + theme(legend.position = "none") +
           facet_col(vars(site), scales = "free_y", space = "free" )
@@ -80,3 +69,4 @@ tab_4_historiogramServer <- function(id, tab_) {
       output$historiogram <- renderGirafe({print_historiograms()})
     })
 }
+

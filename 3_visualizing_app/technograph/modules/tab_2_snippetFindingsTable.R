@@ -41,18 +41,18 @@ snippetFindingsTableServer <- function(id, tab_, site_to_load) {
       
       get_snippet_finding_data <- function(){
         
-        df_table <- tbl(pool, "sites") %>%
+        df_table <- tbl(pool, "tbl_snippet_findings") %>%
           filter(site == !!current_data$site_to_load) %>% 
-          inner_join(., tbl(pool, "traces"), by = c("sha1" = "site")) %>%
-          filter(search_type == "snippet_list") %>% 
-          select(site, crawl_date, trace, url, crawl_timestamp) %>% 
-          collect() %>% 
-          arrange(crawl_date) %>% 
-          mutate(snippet_group = cur_group_id(),
-                 snippet_group_member = row_number(), .by = "trace") %>% 
-          filter(snippet_group_member < 6) %>% 
-          mutate(archive_url = paste0('<a href= "http://web.archive.org/web/', crawl_timestamp, '/', url,'"  target="_blank">Link ins Archive</a>')) %>% 
-          select(trace, crawl_date, url, archive_url)
+          # inner_join(., tbl(pool, "traces"), by = c("sha1" = "site")) %>%
+          # filter(search_type == "snippet_list") %>% 
+          # select(site, crawl_date, trace, url, crawl_timestamp) %>% 
+          collect() # %>%
+          # arrange(crawl_date) %>% 
+          # mutate(snippet_group = cur_group_id(),
+          #        snippet_group_member = row_number(), .by = "trace") %>% 
+          # filter(snippet_group_member < 6) %>% 
+          # mutate(archive_url = paste0('<a href= "http://web.archive.org/web/', crawl_timestamp, '/', url,'"  target="_blank">Link ins Archive</a>')) %>% 
+          # select(trace, crawl_date, url, archive_url)
         
         # View(df_table)
         return(df_table)

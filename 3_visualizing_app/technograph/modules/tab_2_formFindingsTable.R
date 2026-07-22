@@ -24,7 +24,8 @@ formFindingsTableServer <- function(id, tab_, site_to_load, sphere) {
         
         df_table <- tbl(pool, "tbl_context_hashed_tags") %>%
           filter(site == !!current_data$site_to_load) |> 
-          select(nr_unique_hashes, tag, attr, value, archive_url) |> 
+          select(nr_unique_hashes, tag, attr, value_cleaned_whitelist, archive_url) |> 
+          distinct() |> 
           collect()
         
         return(df_table)

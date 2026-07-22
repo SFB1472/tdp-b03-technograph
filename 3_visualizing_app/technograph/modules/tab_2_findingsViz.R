@@ -26,6 +26,7 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
         df_return <- tbl(pool, "tbl_gfx_all_findings") |> 
           filter(site == !!current_data$site_to_load) |> 
           collect()
+        
         return(df_return)
       }
       
@@ -60,7 +61,7 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
           distinct() |> 
           nrow()
         
-        print(nr_tags)   
+        # print(nr_tags)   
         
         if (nr_tags > 0){
           unique_colors <- current_data$print_data |>  
@@ -82,21 +83,10 @@ findingsVizServer <- function(id, tab_, site_to_load, sphere) {
           distinct() %>% nrow()
         
         data_first_layer <- current_data$print_data |> 
-          filter(type != "traces via snippets")
+          filter(type != "traces via snippets") 
         
         data_sec_layer <- current_data$print_data |> 
           filter(type == "traces via snippets")
-        
-        # df_plot  <-  current_data$form_data %>% 
-        #   # bind_rows(., current_data$snippet_data) %>% 
-        #   bind_rows(., current_data$annotation) %>% 
-        #   mutate(shape_nr = as.character(shape_nr))
-        
-        # shape_values <- current_data$print_data %>% 
-        #   # bind_rows(., current_data$snippet_data) %>% 
-        #   select(shape_nr) %>% 
-        #   distinct() %>% 
-        #   mutate(value = as.numeric(shape_nr)) %>% deframe()
         
         plot <- ggplot() +
           geom_point_interactive(data = data_first_layer, aes(x = crawl_date, y = site_subdomain, color =  as.character(shape_color), tooltip = paste0(tooltip_info, "\nDatum: ", crawl_date)), size = 3, alpha = 0.8, shape = 19) +

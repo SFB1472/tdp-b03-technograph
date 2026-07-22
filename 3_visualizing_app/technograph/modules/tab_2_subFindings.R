@@ -26,7 +26,7 @@ subFindingsVizServer <- function(id, tab_, site_to_load, sphere) {
         
         return_df <- tbl(pool, "tbl_gfx_subfindings") |> 
           filter(site == !!current_data$site_to_load) |> 
-          collect()
+          collect() 
         
         return(return_df)
         
@@ -70,10 +70,10 @@ subFindingsVizServer <- function(id, tab_, site_to_load, sphere) {
           geom_point(data = current_data$sub_traces, aes(x = simple_date, y = trace, size = counted_traces), color = "black") +
           facet_col(vars(site_category), scales = "free", space = "free") +
           scale_x_date(date_breaks = "2 years", date_labels = "%Y", limits = c(ymd("1997-01-01"), ymd("2021-01-01"))) +
-          scale_color_manual(values = color_search_type) +
-          scale_shape_manual(values = shape_search_type) +
+          # scale_color_manual(values = color_search_type) +
+          # scale_shape_manual(values = shape_search_type) +
           scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90") +
-          theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
+          theme_b03_base + theme_b03_heatmap + theme_b03_facets + theme_b03_legend_discrete + theme_b03_panel_spacing +
           theme_b03_timeline_faceted +  theme(legend.position = "none", panel.grid.major.y = element_line(color = "grey70", linewidth = .2))
         
         girafe(ggobj = plot,

@@ -12,15 +12,9 @@ modCrawlTimeServer <- function(id, tab_, site_to_load) {
     function(input, output, session) {
       
       get_site_timestamps <- function(){
-        df_return <- tbl(pool, "sites") %>% 
-          filter(site == !!current_data$site_to_load) %>% 
-          mutate(hour = hour(crawl_timestamp) %>% as.numeric(),
-                 year = year(crawl_date) %>% as.numeric()) %>% 
-          group_by(hour, year, site) %>% 
-          summarise(counted = n()) %>% 
-          ungroup() %>% 
-          collect() %>% 
-          mutate(counted = as.numeric(counted))
+        df_return <- tbl(pool, "tbl_crawl_time") %>% 
+          filter(site == !!current_data$site_to_load)  |> 
+          collect()
        
         return(df_return)
       }

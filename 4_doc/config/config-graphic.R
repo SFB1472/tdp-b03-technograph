@@ -39,14 +39,14 @@ theme_b03_base <- theme(
   )
  
 theme_b03_base_typo_static <- theme(
-  axis.text = element_text(family = typo_sfb_mono, size = 10, hjust = 0),
+  axis.text = element_text(family = typo_sfb_mono, size = 12, hjust = 0),
   plot.title = element_text(family = "Nantes-Regular", size = 18),
   legend.title = element_text(family = typo_sfb_mono, size = 12, hjust = 0.5),
   text = element_text(family = typo_sfb_mono, size = 12, hjust = 0)
 )
  
 theme_b03_base_typo_interactive <- theme(
-  axis.text = element_text(family = typo_sfb_mono_ggiraph, size = 10, hjust = 0),
+  axis.text = element_text(family = typo_sfb_mono_ggiraph, size = 12, hjust = 0),
   legend.title = element_text(family = typo_sfb_mono_ggiraph, size = 12, hjust = 0.5),
   text = element_text(family = typo_sfb_mono_ggiraph, size = 12, hjust = 0)
 )

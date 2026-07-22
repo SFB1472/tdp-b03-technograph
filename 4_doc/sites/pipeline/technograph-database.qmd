@@ -13,7 +13,7 @@ library(MetBrewer)
 library(ggiraph)
 
 source("../../config/config-secret-local.R")
-# source("../config/config-secret.R")
+source("../../config/config-secret.R")
 source("../../config/config-graphic.R")
 source("../../config/config.R")
 
@@ -25,7 +25,21 @@ con <- dbConnect(RPostgres::Postgres(),
                  password = dsn_pwd
 )
 
-# dbDisconnect(con)
+# dbDisconnect(mydb)
+
+dbListTables(con)
+
+con_sqlLite <- dbConnect(RSQLite::SQLite(), "../../../3_visualizing_app/technograph/data/db-technograph.sqlite")
+# dbWriteTable(con_sqlLite, "tbl_context_hashed_tags", df_db_table)
+
+
+db_sites <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.sha1, s.sphere, s.site, t.trace FROM sites s LEFT JOIN traces t ON s.sha1 = t.site WHERE s.of_interest = TRUE"), check_interrupts = TRUE)
+
+dbWriteTable(con_sqlLite, "sites_with_traces", db_sites, append = TRUE)
+# dbRemoveTable(con_sqlLite, "sites_with_traces")
+
+
+
 
 retranslate_snippets <- read_delim("../../../data/helper/25-12-12-Commenting-system-detection-patterns.csv", show_col_types = FALSE, delim = ";") %>% #View()
           select("system" = `Commenting system`, "snippet" = snippet) %>% 
@@ -103,7 +117,7 @@ sphere_ <- "Dutch"
 translation_sites <- read_csv("../../../data/4-doc/sites/de_site_subdomain_category.csv")
 translation_sites <- read_csv("../../../data/4-doc/sites/world_site_subdomain_category.csv")
 
-df_sites_de_histo <- get_sites_comments_histo(sphere_) 
+df_sites_histo <- get_sites_comments_histo(sphere_) 
 
 # test <- get_sites("German")
 
@@ -125,7 +139,7 @@ print_data_subfindings <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month"
   as_tibble() %>% 
   rename(simple_date = value) %>% 
   expand_grid(., found_traces) %>%  #View()
-  left_join(., df_sites_de_histo) %>% #View()
+  left_join(., df_sites_histo) %>% #View()
   left_join(., df_sub_traces) %>% #View()
   mutate(is_set = ifelse(!is.na(counted_traces), 1, NA),
          sphere = sphere_) %>% #View()
@@ -139,6 +153,7 @@ print_data_subfindings <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month"
   select(-category, -is_set)
 
 dbWriteTable(conn = con, name = "tbl_gfx_subfindings", print_data_subfindings, append = TRUE)
+dbWriteTable(con_sqlLite, "tbl_gfx_subfindings", print_data_subfindings, append = TRUE)
 
 ```
 
@@ -217,6 +232,13 @@ get_hashed_findings <- function(sphere_){
           select(crawl_date, site, site_subdomain, type, shape_color, shape_fill, tooltip_info)
 }
 
+
+df_return <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sha1, s.site, s.url, t.trace, t.sphere FROM sites s INNER JOIN traces t ON s.sha1 = t.site WHERE t.sphere ='", sphere_,"' AND s.site ='cbc'"), check_interrupts = TRUE)
+
+df_return <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.sha1, s.site, s.url, t.tag, t.attr, t.value, t.sphere FROM sites s INNER JOIN traces_context t ON s.sha1 = t.sha1 WHERE t.sphere ='", sphere_,"' AND s.sha1 ='0ac2c91419f24491669a3ffce269e7be4b10cf37'"), check_interrupts = TRUE)
+
+"0ac2c91419f24491669a3ffce269e7be4b10cf37"
+
 ```
 
 ### building data
@@ -233,6 +255,7 @@ df_gfx_all_findings <- get_annotated_data(sphere_) |>
   mutate(sphere = sphere_)
 
 dbWriteTable(conn = con, name = "tbl_gfx_all_findings", df_gfx_all_findings, append = TRUE)
+dbWriteTable(con_sqlLite, "tbl_gfx_all_findings", df_gfx_all_findings, append = TRUE)
 
 ```
 
@@ -255,6 +278,7 @@ df_ids <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.agg_id, t.hashed_cont
   mutate(site_subdomain = str_remove(agg_id, "\\d{4,4}-\\d{2,2}-\\d{2,2}_"),
                  site = str_remove(site_subdomain, "_.*$")) |> 
           # filter(site == current_data$site_to_load) |> 
+  arrange(agg_id) |> 
           mutate(nr_unique_hashes = match(hashed_context, unique(hashed_context)), .by = "site") |> 
           reframe(agg_id = first(agg_id), .by = c(nr_unique_hashes, hashed_context, site, site_subdomain)) |> 
           select(-hashed_context)
@@ -286,5 +310,85 @@ df_db_table <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.id_date_site_sub
           select(-id_date_site_subdomain)#, archive_url) # %>%
 
 dbWriteTable(conn = con, name = "tbl_context_hashed_tags", df_db_table, append = TRUE)
+dbWriteTable(con_sqlLite, "tbl_context_hashed_tags", df_db_table, append = TRUE)
 
 ```
+
+
+## Create table crawl time
+
+```{r}
+df_return <- dbGetQuery(conn = con, paste0("SELECT DISTINCT * FROM sites s WHERE s.of_interest = TRUE"), check_interrupts = TRUE) |> 
+          # filter(site == !!current_data$site_to_load) %>% 
+          mutate(hour = hour(crawl_timestamp) %>% as.numeric(),
+                 year = year(crawl_date) %>% as.numeric()) %>% 
+          group_by(sphere, site, hour, year) %>% 
+          summarise(counted = n()) %>% 
+          ungroup() %>% 
+          # collect() %>% 
+          mutate(counted = as.numeric(counted))
+
+dbWriteTable(con_sqlLite, "tbl_crawl_time", df_return, append = TRUE)
+
+
+```
+
+## Create table snippet findings data
+
+```{r}
+df_table_snippet_findings <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.url, s.crawl_timestamp, t.trace FROM sites s INNER JOIN traces t ON s.sha1 = t.site WHERE s.of_interest = TRUE AND t.search_type ='snippet_list' "), check_interrupts = TRUE) |> 
+  
+  # tbl(pool, "sites") %>%
+  #         filter(site == !!current_data$site_to_load) %>% 
+  #         inner_join(., tbl(pool, "traces"), by = c("sha1" = "site")) %>%
+  #         filter(search_type == "snippet_list") %>% 
+  #         select(site, crawl_date, trace, url, crawl_timestamp) %>% 
+  #         collect() %>% 
+          arrange(crawl_date) %>% 
+          mutate(snippet_group = cur_group_id(),
+                 snippet_group_member = row_number(), .by = c("trace", "site")) %>% 
+          filter(snippet_group_member < 6) %>% 
+          mutate(archive_url = paste0('<a href= "http://web.archive.org/web/', crawl_timestamp, '/', url,'"  target="_blank">Link ins Archive</a>')) %>% 
+          select(site, trace, crawl_date, url, archive_url)
+
+dbWriteTable(con_sqlLite, "tbl_snippet_findings", df_table_snippet_findings, append = TRUE)
+
+```
+
+## Create table histogram
+
+```{r}
+
+df_historiograms <- read_csv("../../../3_visualizing_app/technograph/data/historiograms/visual analyses - traces of commenting options - Tabellenblatt1.csv") |> View()
+  filter(type %in% c("offsite", "onsite", "meta")) |> 
+  select(-comment, -archive_link, -screenshot) %>% 
+          filter(type != "meta") %>% 
+          mutate(continuous_group = cur_group_id(), .by = c(site, type)) %>% 
+          mutate(closed_groups = ifelse(lead(continuous_group) != continuous_group, "last", "same"),
+                 closed_groups_start = ifelse(lag(continuous_group) != continuous_group, "first", "same"), .by = site) %>% 
+          mutate(closed_groups = ifelse(is.na(closed_groups), "last", closed_groups),
+                 closed_groups_start = ifelse(is.na(closed_groups_start), "first", closed_groups_start),
+                 date_blurred = floor_date(date,unit ="month"),
+                 change = ifelse(closed_groups == "same" & closed_groups_start == "first", T, F)) %>% 
+          mutate(index = cumsum(change), .by = site) |> 
+  summarise(start_date = first(date), end_date = last(date), .by = c(site, index, type)) %>% 
+          mutate(blurry_start = start_date - months(6),
+                 blurry_end = end_date + months(6)) |> 
+  mutate(start_date = start_date |> as.character(),
+         end_date = end_date |> as.character(),
+         blurry_start=blurry_start |> as.character(),
+         blurry_end = blurry_end |> as.character())
+
+dbWriteTable(con_sqlLite, "tbl_historiogram", df_historiograms, append = TRUE)
+dbRemoveTable(con_sqlLite, "tbl_historiogram")
+
+df_historiogram_comments <- read_csv("../../../3_visualizing_app/technograph/data/historiograms/visual analyses - traces of commenting options - Tabellenblatt1.csv") |> 
+  filter(type %in% c("offsite", "onsite", "meta")) |> 
+  mutate(date = date |> as.character()) |> 
+  select(date, type, comment)
+
+dbWriteTable(con_sqlLite, "tbl_historiogram_comments", df_historiogram_comments, append = TRUE)
+
+```
+
+

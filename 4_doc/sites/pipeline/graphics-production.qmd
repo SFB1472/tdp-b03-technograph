@@ -44,8 +44,12 @@ year_breaks_for_plotting <- df_timespan_year %>%
 ## Make plots with overview of found snippets - per sphere
 
 ```{r}
-get_data_sites_na <- function(sphere_){
-  load(file = paste0("../../../3_visualizing_app/technograph/data/",sphere_,"/gs_domain_to_look.RData"))
+get_data_sites_na <- function(sphere_, translate_domains){
+  # if(sphere_ == "German"){
+  #   gs_domain_to_look <- read_delim(file = paste0("../../../3_visualizing_app/technograph/data/",sphere_,"/gs_domain_to_look.csv"))
+  # }else{
+  #   load(file = paste0("../../../3_visualizing_app/technograph/data/",sphere_,"/gs_domain_to_look.RData"))
+  # }
   
   db_sites <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.crawl_date, t.site, t.sphere FROM sites t WHERE t.sphere ='", sphere_,"' AND t.of_interest = TRUE"), check_interrupts = TRUE) %>% 
     mutate(year = year(crawl_date)) %>%
@@ -59,7 +63,7 @@ get_data_sites_na <- function(sphere_){
     left_join(., db_sites) %>% 
     filter(is.na(counted_site)) %>% 
     mutate(counted_sites = "no sites archived") %>% 
-    left_join(., gs_domain_to_look, by = "site")
+    left_join(., translate_domains, by = "site")
     
   return(df_na_sites)
 }
@@ -102,7 +106,7 @@ get_annotated_data <- function(sphere_){
 
 ## copied from shiny app
 
-get_traces_found <- function(sphere_){
+get_traces_found <- function(sphere_, translate_domains){
   db_traces_findings <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.crawl_date, t.site, tr.trace, tr.search_type, t.sphere FROM sites t INNER JOIN traces tr ON t.sha1 = tr.site WHERE t.sphere ='", sphere_,"' AND t.of_interest = TRUE"), check_interrupts = TRUE) %>% 
           mutate(year = year(crawl_date)) %>% #View()
           select(-crawl_date) %>% 
@@ -121,18 +125,20 @@ get_traces_found <- function(sphere_){
             type = "automated",
             system = if_else(is.na(system), "generic", system)) %>% #View()
           ungroup() %>% 
-          left_join(., gs_domain_to_look)
+          left_join(., translate_domains)
 }
 
-plot_traces_found <- function(sphere_){
+plot_traces_found <- function(sphere_, translate_domains){
   
-  db_traces_findings <- get_traces_found(sphere_)
+  db_traces_findings <- get_traces_found(sphere_, translate_domains)
+  # db_traces_findings <- get_traces_found(sphere_, gs_domain_to_look)
   
   systems_found <- db_traces_findings %>% select(system) %>% distinct() %>% pull(.)
   color_values <- df_systems_color_legend %>% filter(system %in% systems_found) %>% deframe()
         
-  df_sites_na <- get_data_sites_na(sphere_)
-  df_annotated <- get_annotated_data(sphere_)
+  df_sites_na <- get_data_sites_na(sphere_, translate_domains)
+  # df_sites_na <- get_data_sites_na(sphere_, gs_domain_to_look)
+  df_annotated <- get_annotated_data(sphere_) |> filter(!is.na(site))
         
   plot_snippets <- ggplot() +
           geom_tile(data = df_sites_na, aes(x = year, y = Name), fill = "grey90") +
@@ -148,7 +154,7 @@ plot_traces_found <- function(sphere_){
             shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
           )
         
-    ggsave(filename = paste0("../../../3_visualizing_app/technograph/data/", sphere_, "/overview-traces-found.png"), width = 15, height = 10, dpi = 144)
+    ggsave(filename = paste0("../../../3_visualizing_app/technograph/data/", sphere_, "/overview-traces-found.png"), width = 15, height = 12)#, dpi = 144)
         # girafe(ggobj = plot_snippets, options = list(opts_sizing(rescale = FALSE)),
         #        width_svg = 15,
         #        height_svg = 10
@@ -157,16 +163,16 @@ plot_traces_found <- function(sphere_){
 
 sphere_ <- "German"
 gs_domain_to_look <- read_delim(file = paste0("../../../3_visualizing_app/technograph/data/",sphere_,"/gs_domain_to_look.csv"))
-plot_traces_found(sphere_)
+plot_traces_found(sphere_, gs_domain_to_look)
 
 sphere_ <- "World"
 load(file = paste0("../../../3_visualizing_app/technograph/data/",sphere_,"/gs_domain_to_look.RData"))
-clipr::write_clip(gs_domain_to_look)
-plot_traces_found(sphere_)
+# clipr::write_clip(gs_domain_to_look)
+plot_traces_found(sphere_, gs_domain_to_look)
 
 sphere_ <- "Dutch"
 load(file = paste0("../../../3_visualizing_app/technograph/data/",sphere_,"/gs_domain_to_look.RData"))
-plot_traces_found(sphere_)
+plot_traces_found(sphere_, gs_domain_to_look)
 
 ```
 
@@ -187,15 +193,15 @@ plot_traces_found(sphere_)
 #| fig-width: 10
 
 
-plot_sites_archived <- function(sphere_){
+plot_sites_archived <- function(sphere_, translate_domains){
   # clipr::write_clip(gs_domain_to_look)
   
   df_sites_archived <- get_sites_counted(sphere_)
-  df_traces_found <- get_traces_found(sphere_) %>% select(site) %>% distinct()
+  df_traces_found <- get_traces_found(sphere_, gs_domain_to_look) %>% select(site) %>% distinct()
   
   df_sites_archived %>% 
           mutate(system_detected = ifelse(site %in% df_traces_found$site, "system found", "no system found")) %>% 
-          left_join(., gs_domain_to_look, by = "site") %>% #View()
+          left_join(., translate_domains, by = "site") %>% #View()
           ggplot(aes(x = year, y = Name, fill = counted_sites)) +
           geom_tile_interactive(aes(tooltip = paste0("year: ", year, "\nsite: ", site, "\nsites_counted: ", counted_sites))) +
           scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
@@ -205,20 +211,20 @@ plot_sites_archived <- function(sphere_){
           guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines"))) +
           theme_b03_base + theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets  + theme_b03_legend_discrete
   
-   ggsave(filename = paste0("../../../3_visualizing_app/technograph/data/", sphere_, "/histogram-archived-sites.png"), width = 15, height = 10, dpi = 144)
+   ggsave(filename = paste0("../../../3_visualizing_app/technograph/data/", sphere_, "/histogram-archived-sites.png"), width = 15, height = 12)
 }
 
 sphere_ <- "German"
 gs_domain_to_look <- read_delim(file = paste0("../../../3_visualizing_app/technograph/data/",sphere_,"/gs_domain_to_look.csv"))
-plot_sites_archived(sphere_)
+plot_sites_archived(sphere_, gs_domain_to_look)
 
 sphere_ <- "World"
 load(file = paste0("../../../3_visualizing_app/technograph/data/",sphere_,"/gs_domain_to_look.RData"))
-plot_sites_archived(sphere_)
+plot_sites_archived(sphere_, gs_domain_to_look)
 
 sphere_ <- "Dutch"
 load(file = paste0("../../../3_visualizing_app/technograph/data/",sphere_,"/gs_domain_to_look.RData"))
-plot_sites_archived(sphere_)
+plot_sites_archived(sphere_, gs_domain_to_look)
 
 ```
 

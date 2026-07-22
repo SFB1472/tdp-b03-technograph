@@ -15,14 +15,14 @@ tab_1_aggregatedBarchartServer <- function(id, tab_, sphere_) {
       get_data <- function(){
         # print("1 tab, 1 vis, aggregating data")
         
-        generell_findings <- tbl(pool, "sites") %>%
-          filter(sphere == !!current_data$sphere_to_load, of_interest == TRUE) %>% 
-          inner_join(., tbl(pool, "traces"), by = c("sha1" = "site")) %>%
+        generell_findings <- tbl(pool, "sites_with_traces") %>%
+          filter(sphere == !!current_data$sphere_to_load, !is.na(trace)) %>% 
+          # inner_join(., tbl(pool, "traces"), by = c("sha1" = "site")) %>%
           distinct(site) %>%
           collect() 
         
-        df_bar_data <- tbl(pool, "sites") %>%
-          filter(sphere == !!current_data$sphere_to_load, of_interest == TRUE) %>% 
+        df_bar_data <- tbl(pool, "sites_with_traces") %>%
+          filter(sphere == !!current_data$sphere_to_load) %>% 
           select(site) %>% 
           distinct() %>% 
           collect() %>%
@@ -30,6 +30,7 @@ tab_1_aggregatedBarchartServer <- function(id, tab_, sphere_) {
           reframe(overview = n(), .by = detected) %>% 
           mutate(bar = "bar")
        
+        # View(df_bar_data)
         return(df_bar_data)
     
       }
