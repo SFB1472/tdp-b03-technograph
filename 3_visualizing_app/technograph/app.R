@@ -1,5 +1,5 @@
-options(tidyverse.quiet = TRUE)
-options(dplyr.summarise.inform = FALSE)
+# options(tidyverse.quiet = TRUE)
+# options(dplyr.summarise.inform = FALSE)
 library(needs)
 needs(shiny, tidyverse, DBI, RPostgres, pool, dbplyr, ggforce, gdtools, ggtext, urltools, ggiraph, googlesheets4, MetBrewer, gfonts, scales)
 loadNamespace("dbplyr")
@@ -9,13 +9,14 @@ source("config/config.R")
 source("config/config-graphic.R")
 source("modules/modSelectSphere.R")
 source("modules/modSelectSite.R")
-source("modules/modSelectSubdomain.R")
-source("modules/msodSelectHash.R")
+# source("modules/modSelectSubdomain.R")
+# source("modules/modSelectHash.R")
 source("modules/tab_1_modAggregatedBarChart.R")
 source("modules/tab_1_modTracesFound.R")
 source("modules/tab_1_modArchivedSites.R")
 source("modules/tab_2_modCrawlTime.R")
 source("modules/tab_2_findingsViz.R")
+source("modules/tab_2_subFindings.R")
 source("modules/tab_2_formFindingsTable.R")
 source("modules/tab_2_snippetFindingsTable.R")
 source("modules/tab_3_modVizSystemsFound.R")
@@ -79,8 +80,13 @@ ui <- fluidPage(
                               h3("At what time were the pages archived?"),
                               modCrawlTimeUI("crawl_time_sec_tab"),
                               hr(),
+                              h3("Sub findings"),
+                              p("Die Grafik zeigt die Suche nach Schlagworten innerhalb der extrahierten Bereiche, innerhalb derer Spuren auf Kommentaroptionen gefunden wurde. Die Schlagwortliste ergibt sich aus der Analyse von Kommentarbereichen. Wurde eines der Schlagworte gefunden, wird es an der y-Achse aufgetragen und in der Grafik zum jeweiligen Zeitpunkt mit einem schwarzen Kreis eingezeichnet."),
+                              p("Die unterschiedlich intensiven Streifen im Hintergrund stellen, wie in der oberen Grafik auch, die Intensität der Archivierung der jeweiligen Seite dar. Die türkisen Flecken zeigen an, dass es Spuren auf Kommentaroptionen gibt."),
+                              subFindingsVizUI("subFindings_sec_tab"),
+                              hr(),
                               h3("Traces of commenting possiblities in tags"),
-                              p("Die Tabelle zeigt zusätzliche Informationen zu den 'traces via form tags'. Alle 'Kinder' die innerhalb des Tags mit detektierten Spuren genestet sind, werden hier gezeigt. Die Spalte 'text' enthält immer auch den Text aller nachfolgenden tags."),
+                              p("Die Tabelle zeigt zusätzliche Informationen zu den 'traces via tags'. Alle 'Kinder' die innerhalb des Tags mit detektierten Spuren genestet sind, werden hier gezeigt."),
                               formFindingsTableUI("tableFindingsMod_sec_tab"),
                               h3("Traces of commenting systems"),
                               p("Die Tabelle zeigt zusätzliche Informationen zu den 'traces via snippets'."),
@@ -116,51 +122,51 @@ ui <- fluidPage(
                                  tab_4_historiogramUI("historiogram")
                                  )
                         )
-                        ),
-               tabPanel(value = "tab_5", title = "Work in progress: Context Analysis",
-                        fluidRow(
-                          column(1, ""),
-                          column(10,
-                                 br(),
-                                 selectSphereModUI("sphere_to_load_tab_5"),
-                                 br(),
-                                 hr(),
-                                 tags$mark("Please be patient: loading the data will take some time"),
-                                 hr(),
-                                 selectSiteModUI("site_to_load_tab_5"),
-                                 br(),
-                                 tab_5_contextVizUI("contextViz"),
-                                 br(),
-                                 h3("Compare Hashes"),
-                                 p("Die folgenden Abschnitte werden mit Informationen gefüllt, wenn in Input-Felder Nummer von Hashes eingegeben werden. Diese Nummern können über mouse over die farbigen Punkte oben abgelesen werden. Es ist der Wert, der ganz am Ende steht."),
-                                 br()
-                                 ),
-                          column(1, "")
-                          ),
-                          fluidRow(
-                            column(4,
-                                 selectSubdomainUI("tab_5_select_subdomain")),
-                            column(4,
-                                 inputHashUI("tab_5_compare_hash_1")),
-                            column(4,
-                                 inputHashUI("tab_5_compare_hash_2"))
-                          ),
-                          fluidRow(
-                            column(1, ""),
-                            column(10,
-                                   br(),
-                                   h4("Wie unterschiedlich umfangreich sind die codierten Datenbereiche?"),
-                                   tab_5_compareHashesOVUI("tab_5_compareHashesOV"),
-                                   br(),
-                                   h4("Diese Zeilen sind nur in dem zuerst eingebenen Hash codiert"),
-                                   tab_5_compareHashesUI("tab_5_compareHashes_1"),
-                                   br(),
-                                   h4("Die folgenden Zeilen sind nur in dem zweiten eingebenen Hash codiert"),
-                                   tab_5_compareHashesUI("tab_5_compareHashes_2")
-                                 ),
-                            column(1, "")
-                          )
-                        )
+                        )#,
+               # tabPanel(value = "tab_5", title = "Work in progress: Context Analysis",
+               #          fluidRow(
+               #            column(1, ""),
+               #            column(10,
+               #                   br(),
+               #                   selectSphereModUI("sphere_to_load_tab_5"),
+               #                   br(),
+               #                   hr(),
+               #                   tags$mark("Please be patient: loading the data will take some time"),
+               #                   hr(),
+               #                   selectSiteModUI("site_to_load_tab_5"),
+               #                   br(),
+               #                   tab_5_contextVizUI("contextViz"),
+               #                   br(),
+               #                   h3("Compare Hashes"),
+               #                   p("Die folgenden Abschnitte werden mit Informationen gefüllt, wenn in Input-Felder Nummer von Hashes eingegeben werden. Diese Nummern können über mouse over die farbigen Punkte oben abgelesen werden. Es ist der Wert, der ganz am Ende steht."),
+               #                   br()
+               #                   ),
+               #            column(1, "")
+               #            ),
+               #            fluidRow(
+               #              column(4,
+               #                   selectSubdomainUI("tab_5_select_subdomain")),
+               #              column(4,
+               #                   inputHashUI("tab_5_compare_hash_1")),
+               #              column(4,
+               #                   inputHashUI("tab_5_compare_hash_2"))
+               #            ),
+               #            fluidRow(
+               #              column(1, ""),
+               #              column(10,
+               #                     br(),
+               #                     h4("Wie unterschiedlich umfangreich sind die codierten Datenbereiche?"),
+               #                     tab_5_compareHashesOVUI("tab_5_compareHashesOV"),
+               #                     br(),
+               #                     h4("Diese Zeilen sind nur in dem zuerst eingebenen Hash codiert"),
+               #                     tab_5_compareHashesUI("tab_5_compareHashes_1"),
+               #                     br(),
+               #                     h4("Die folgenden Zeilen sind nur in dem zweiten eingebenen Hash codiert"),
+               #                     tab_5_compareHashesUI("tab_5_compareHashes_2")
+               #                   ),
+               #              column(1, "")
+               #            )
+               #          )
                )
       
     )
@@ -181,16 +187,17 @@ server <- function(input, output, session) {
   tab_1_aggregatedBarchartServer("aggregated_bar_chart_tab1", reactive(react_tab_activaded$tab), reactive(sphere_to_load_tab_1$selectSphere))
   tab_1_overviewTracesFoundServer("overview_traces_found_tab1", reactive(react_tab_activaded$tab), reactive(sphere_to_load_tab_1$selectSphere))
   tab_1_archivedSitesServer("archivedSites_tab1", reactive(react_tab_activaded$tab), reactive(sphere_to_load_tab_1$selectSphere))
-  #
-  # # # Tab "perspective on domains" -------------------------------
+
+  # Tab "perspective on domains" -------------------------------
   sphere_to_load_tab_2 <- selectSphereModServer("sphere_to_load_sec_tab")
   site_to_display <- selectSiteModServer("site_to_load_sec_tab", reactive(sphere_to_load_tab_2$selectSphere))
 
+  subFindingsVizServer("subFindings_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite), reactive(sphere_to_load_tab_2$selectSphere))
   findingsVizServer("headerFindingsVis_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite), reactive(sphere_to_load_tab_2$selectSphere))
   modCrawlTimeServer("crawl_time_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite))
-  formFindingsTableServer("tableFindingsMod_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite))
+  formFindingsTableServer("tableFindingsMod_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite), reactive(sphere_to_load_tab_2$selectSphere))
   snippetFindingsTableServer("tableSnippetFindingsMod_sec_tab", reactive(react_tab_activaded$tab), reactive(site_to_display$selectSite))
-  #
+  
   # Tab "perspective on systems" ----------------------------------
   sphere_to_load_tab_3 <- selectSphereModServer("sphere_to_load_3_tab")
   tab_3_modVizSystemFoundServer("systemFoundSphere", reactive(react_tab_activaded$tab), reactive(sphere_to_load_tab_3$selectSphere))
@@ -198,6 +205,7 @@ server <- function(input, output, session) {
   #
   # # # Tab "historiogram" ------------------------
   tab_4_historiogramServer("historiogram", reactive(react_tab_activaded$tab))
+  # tab_4_historiogramServer("historiogram")
   
   # Tab "context analysis -----------------
   # sphere_to_load_tab_5 <- selectSphereModServer("sphere_to_load_tab_5")
