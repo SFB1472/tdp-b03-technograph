@@ -422,7 +422,7 @@ df_meta_info <- seq(ymd("1997-01-01"), ymd("2021-09-01"), by = "month") %>%
   filter(is_set == 1) %>% 
   filter(!site_subdomain %in% exclude_side_subdomain)
 
-df_sub_traces_de |> select(site_subdomain) |> distinct() |> arrange(site_subdomain) |>  clipr::write_clip()
+# df_sub_traces_de |> select(site_subdomain) |> distinct() |> arrange(site_subdomain) |>  clipr::write_clip()
 
 ggplot() +
   geom_tile(data = df_meta_info, aes(x = simple_date, y = trace, fill = counted_sites)) +
