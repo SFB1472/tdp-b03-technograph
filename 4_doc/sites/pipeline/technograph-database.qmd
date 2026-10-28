@@ -1,8 +1,11 @@
 ---
-title: "Traces context"
+title: "Create DB-tables for Technograph"
+toc-depth: 4
+execute:
+  eval: false
 ---
 
-```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+```{r}
 library(tidyverse)
 library(DBI)
 library(RPostgres)
@@ -36,6 +39,7 @@ con_sqlLite <- dbConnect(RSQLite::SQLite(), "../../../3_visualizing_app/technogr
 db_sites <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.sha1, s.sphere, s.site, t.trace FROM sites s LEFT JOIN traces t ON s.sha1 = t.site WHERE s.of_interest = TRUE"), check_interrupts = TRUE)
 
 dbWriteTable(con_sqlLite, "sites_with_traces", db_sites, append = TRUE)
+dbWriteTable(conn = con, name = "sites_with_traces", db_sites, append = TRUE)
 # dbRemoveTable(con_sqlLite, "sites_with_traces")
 
 
@@ -265,10 +269,7 @@ dbWriteTable(con_sqlLite, "tbl_gfx_all_findings", df_gfx_all_findings, append = 
 ## Create table corresponding tags to hashes
 
 ```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| message: false
+
 
 sphere_ <- "German"
 sphere_ <- "World"
@@ -329,7 +330,7 @@ df_return <- dbGetQuery(conn = con, paste0("SELECT DISTINCT * FROM sites s WHERE
           mutate(counted = as.numeric(counted))
 
 dbWriteTable(con_sqlLite, "tbl_crawl_time", df_return, append = TRUE)
-
+dbWriteTable(conn = con, name = "tbl_crawl_time", df_return, append = TRUE)
 
 ```
 
@@ -352,6 +353,7 @@ df_table_snippet_findings <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.cr
           select(site, trace, crawl_date, url, archive_url)
 
 dbWriteTable(con_sqlLite, "tbl_snippet_findings", df_table_snippet_findings, append = TRUE)
+dbWriteTable(conn = con, name = "tbl_snippet_findings", df_table_snippet_findings, append = TRUE)
 
 ```
 
@@ -359,7 +361,7 @@ dbWriteTable(con_sqlLite, "tbl_snippet_findings", df_table_snippet_findings, app
 
 ```{r}
 
-df_historiograms <- read_csv("../../../3_visualizing_app/technograph/data/historiograms/visual analyses - traces of commenting options - Tabellenblatt1.csv") |> View()
+df_historiograms <- read_csv("../../../3_visualizing_app/technograph/data/historiograms/visual analyses - traces of commenting options - Tabellenblatt1.csv") |> #View()
   filter(type %in% c("offsite", "onsite", "meta")) |> 
   select(-comment, -archive_link, -screenshot) %>% 
           filter(type != "meta") %>% 
@@ -380,14 +382,17 @@ df_historiograms <- read_csv("../../../3_visualizing_app/technograph/data/histor
          blurry_end = blurry_end |> as.character())
 
 dbWriteTable(con_sqlLite, "tbl_historiogram", df_historiograms, append = TRUE)
+dbWriteTable(conn = con, name = "tbl_historiogram", df_historiograms, append = TRUE)
 dbRemoveTable(con_sqlLite, "tbl_historiogram")
 
 df_historiogram_comments <- read_csv("../../../3_visualizing_app/technograph/data/historiograms/visual analyses - traces of commenting options - Tabellenblatt1.csv") |> 
   filter(type %in% c("offsite", "onsite", "meta")) |> 
-  mutate(date = date |> as.character()) |> 
+  mutate(date = date |> as.character()) # |> 
   select(date, type, comment)
 
 dbWriteTable(con_sqlLite, "tbl_historiogram_comments", df_historiogram_comments, append = TRUE)
+dbWriteTable(conn = con, name = "tbl_historiogram_comments", df_historiogram_comments, append = TRUE)
+dbRemoveTable(con_sqlLite, "tbl_historiogram_comments")
 
 ```
 
