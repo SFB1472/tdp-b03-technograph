@@ -33,6 +33,10 @@ website:
             file: sites/pipeline/create-traces-context-tbl.qmd
           - text: "5 db tabelle: hashes"
             file: sites/pipeline/create-traces-hashes-tbl.qmd
+          - text: "Technograph - tables"
+            file: sites/pipeline/technograph-database.qmd
+          - text: "Technograph - graphics"
+            file: sites/pipeline/graphics-production.qmd
       - section: Historic development of tags
         contents: 
           - text: "Doctype"
@@ -57,6 +61,12 @@ website:
             file: sites/analyzing/hashes.qmd
           - text: "Commenting traces - segments"
             file: sites/analyzing/traces-context.qmd
+      - section: "Specials"
+        contents:
+          - text: "Jahrestagung 2025"
+            file: sites/analyzing/jahrestagung-grafiken.qmd
+          - text: "Jahrestagung 2026"
+            file: sites/analyzing/inspecting-archivedweb-data.qmd
 
 format:
   html:
