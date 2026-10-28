@@ -1,0 +1,672 @@
+---
+title: "Jahrestagung - 2026"
+toc-depth: 4
+---
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+library(tidyverse)
+library(jsonlite)
+library(rjson)
+library(urltools)
+library(ggforce)
+library(reactable)
+library(MetBrewer)
+library(ggiraph)
+
+# source("../../config/config-secret-local.R")
+# source("../../config/config-secret.R")
+source("../../config/config-graphic.R")
+source("../../config/config.R")
+
+#zstd -d *html.zst
+
+retranslate_sites <- read_csv("../../../data/helper/26-08-18-translate-sites.csv", show_col_types = FALSE) 
+domains_to_look_at <- paste(retranslate_sites$domain, collapse = "|")
+
+retranslate_snippets <- read_delim("../../../data/helper/26-09-29-Commenting-system-detection-patterns.csv", show_col_types = FALSE, delim = ";") %>% #View()
+          select("system" = `Commenting system`, "snippet" = snippet, category, type) %>% 
+  mutate(snippet = str_remove_all(snippet, "'")) |> 
+          filter(!is.na(system))
+
+create_index <- function(sub_path){
+  index <- read_lines(paste0("../../../data/brics-media-infrastructure-exits(",sub_path,")/index/packages.jsonl")) |> 
+  as.tibble() 
+
+df_index <- map_df(index$value, jsonlite::fromJSON) |> 
+  mutate(timestamp = ymd_hms(timestamp),
+         date = date(timestamp),
+         # simple_date = paste0(year(date),"-", month(date),"-01") |> ymd(),
+         simple_date = year(date),
+         site = ifelse(str_detect(url, domains_to_look_at), str_extract(url, domains_to_look_at), NA)
+         ) |> 
+  left_join(retranslate_sites, by = c("site" = "domain")) |> 
+  rename(package_hash = hash, package_url = url)
+}
+
+test <- create_index("1")
+
+```
+
+## Histogramm der archivierten Seiten
+
+Aus der Grafik lässt sich ablesen, wie viele Archivversionen einer Domain zur Verfügung stehen und darüber hinaus, die zeitliche Verteilung der Seiten. 
+
+Die Farbintensität ist eine optionale Variable, mit Helge verabredet waren ein paar wenige Snapshots pro Samplingzeitpunkt und Domain. 
+
+Mehrere Varianten der Grafik gibt es deswegen, weil das Sampling der Daten komplizierter ist, als gedacht. In dem ersten Download sah es so aus, als würde der Algorithmus zu wenige Artikelseiten, ausgehend von der Homepage, liefern. Auf die Artikelseiten sind wir aber angewiesen, wenn wir auf der Suche nach Kommentarsytemen sind. 
+
+Der zweite Download ist nur halb so groß, wie der erste und das ist auch abzulesen an der unterschiedlichen Skala der Legende. Im ersten Fall ist der höchstmögliche Wert für ein Datum bei 20 Seiten, im zweiten nur mehr 8 Seiten. Stattdessen sind manche Domains nun umfangreicher dokumentiert, Globo aus Brasilien zum Beispiel oder Lenta aus Russland.
+
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 15
+#| fig-width: 10
+
+create_index("1") |> 
+  bind_rows(create_index("2")) |> 
+  bind_rows(create_index("3")) |> # View()
+  distinct() |> 
+  reframe(counted_sites = n(), .by = c(simple_date, site, country)) |> #View()
+  ggplot(aes(x = simple_date, y = site, fill = counted_sites)) + 
+  geom_tile() +
+  facet_col(vars(country), scales = "free", space = "free") +
+    scale_x_continuous(limits = c(1998,2027), expand = c(0,NA), n.breaks = 6) +
+  # scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2027-09-01")), expand = c(0,NA)) +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted+ 
+          coord_cartesian(clip = "off") +
+          guides(
+            fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
+            shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
+          )
+
+```
+
+
+## parsing headers
+
+```{r}
+
+
+get_package_data <- function(subpath)  {
+  path <- paste0("../../../data/brics-media-infrastructure-exits(",subpath,")/")
+  
+  all_package_files <- list.files(paste0(path, "packages/"))
+  packages_ <- map_df(all_package_files, function(i){
+    # print(i)
+    package_ <- jsonlite::fromJSON(paste0(path, "packages/", i)) |> 
+      as_tibble() |> 
+      mutate(package_hash = i |> str_remove(".json"))
+  })
+  
+  # df_packages <- packages_ |> filter(original_url == records$url) |> unnest()
+  df_pages <- packages_ |> filter(initial_record == records$record) |> unnest(cols = c(records), names_sep = "records_")
+  df_scripte <- packages_ |> filter(str_detect(records$url,".js$")) |> unnest(cols = c(records), names_sep = "records_")
+  
+  df_packages <- df_pages |> 
+    bind_rows(df_scripte) |> 
+    select(package_hash, package_url = original_url, record_hash = recordsrecords_record, record_url = recordsrecords_url )
+}
+
+create_index_with_header <- function(subpath){
+  path <- paste0("../../../data/brics-media-infrastructure-exits(",subpath,")/")
+  # df_packages <- get_package_data("1")
+  df_packages <- get_package_data(subpath)
+  
+  record_files <- df_packages |> select(record_hash) |> distinct() |> pull()
+   
+  df_files <- map_df(record_files, function(i){
+    files <- jsonlite::fromJSON(paste0(path, "records/",i,".json")) #|>
+    content <- files  |> 
+      discard_at("skipped_response_file") |>
+      as_tibble() |>
+      # unlist(headers) |>
+      mutate(record_hash = i)#,
+  
+    if(files$headers |> as_tibble() |> length() > 0){
+        header <- files$headers |> as_tibble() |> rename(header_attr = V1, header_value = V2)
+      }
+      else{
+        header <-  tibble(header_attr = c(), header_value = c()) # |> View())
+      }
+  
+    return <- content |> 
+      bind_cols(header)
+    
+  }) |> 
+    select(record_hash, record_url = url, header_attr, header_value) |> 
+      distinct() 
+  
+  df_packages_files <- df_packages |> 
+    left_join(df_files) |> 
+    select(package_hash, record_hash, header_attr, header_value)
+  
+  df_index_files <- create_index(subpath) |> 
+    left_join(df_packages_files) #|> #, by = c("hash" = "package_hash")) |> 
+    # mutate(response_file = str_remove(response_file, ".zst")) |> 
+    # filter(!is.na(response_file))
+    # 
+}
+
+```
+
+
+## linking urls to files
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+create_index_with_filenames <- function(subpath){
+  # subpath <- "3"
+  path <- paste0("../../../data/brics-media-infrastructure-exits(",subpath,")/")
+  df_packages <- get_package_data(subpath)
+  
+  record_files <- df_packages |> select(record_hash) |> distinct() |> pull()
+  # record_files <- c("be7d79794be7a1f391bf15bab1e48bdcc5f4396e9358a30243584e16f23876a8")
+
+  df_files <- map_df(record_files, function(i){
+    files <- jsonlite::fromJSON(paste0(path, "records/",i,".json")) |>
+      discard_at("skipped_response_file") |>
+      as_tibble() |>
+      # unlist(headers) |>
+      mutate(record_hash = i,
+             response_file = ifelse(exists("response_file"), response_file, NA_character_))#,
+  }) |> 
+    select(record_hash, response_file, record_url = url) |> 
+      distinct() |> 
+    filter(!str_detect(response_file, ".txt.zst$|.xml.zst$|.json.zst$|.gif.zst$|.bin.zst$"))
+  
+  # df_files |> filter(str_detect(response_file, ".txt.zst$|.xml.zst$|.json.zst$|.gif.zst$")) |> View()
+  
+  df_packages_files <- df_packages |> 
+    left_join(df_files) |> 
+    select(package_hash, record_hash, response_file)
+  
+  df_index_files <- create_index(subpath) |> 
+    left_join(df_packages_files) |> #, by = c("hash" = "package_hash")) |> 
+    mutate(response_file = str_remove(response_file, ".zst")) |> 
+    filter(!is.na(response_file))
+}
+
+save_index_for_extraction <- function(subpath){
+  df_index_files <- create_index_with_filenames(subpath)  
+  save(df_index_files, file = paste0("../../../data/1-parsing/sites/infrastructure-",subpath,".RData"))
+}
+
+test_index_with_filenames <- create_index_with_filenames("3")
+
+save_index_for_extraction("1")
+save_index_for_extraction("2")
+save_index_for_extraction("3")
+
+# load(file = "../../../data/1-parsing/sites/infrastructure-1.RData")
+
+```
+
+## Kapitel 3: Commenting systems - Printing Snippets found
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+create_snippets_found <- function(subpath){
+  # subpath <- "1"
+  path <- paste0("../../../data/1-parsing/snippet-detection/infrastructure/")
+  snippet_detected <- list.files(path)
+  
+  snippet_traces <- map_df(snippet_detected, function(i){
+    df <- read_csv(paste0(path, i), col_names = c("site", "search_date", "snippet", "found"), show_col_types = FALSE)
+  })
+  
+  # # snippet_traces <- map_df(snippet_detected, function(i){
+  #   df_m <- read_csv("../../../data/1-parsing/snippet-detection/infrastructure-1/traces-all-snippets-90225.csv", col_names = c("site", "search_date", "snippet", "found"), show_col_types = FALSE)
+  # # # })
+  
+  df_snippet_traces <- create_index_with_filenames("1") |> 
+    bind_rows(create_index_with_filenames("2")) |>
+    bind_rows(create_index_with_filenames("3")) |>
+    distinct() |>
+    left_join(snippet_traces, by = c("response_file" = "site")) |> 
+    left_join(retranslate_snippets) #|> 
+    # filter(!is.na(snippet), !is.na(category), !is.na(site)) 
+}
+
+
+print_commenting_snippets_found <- function(){
+
+  create_snippets_found("1") |>
+    # bind_rows()
+    # left_join(retranslate_snippets) |> #View()
+    filter(!is.na(snippet), is.na(category)) |> # View()
+    ggplot(aes(x = simple_date, y = site, fill = system)) + 
+    geom_tile(alpha = .7) +
+    facet_col(vars(country), scales = "free", space = "free") +
+    scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2027-09-01")), expand = c(0,NA)) +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_panel_spacing +
+      theme_b03_timeline_faceted+ 
+            coord_cartesian(clip = "off") +
+            guides(
+              fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
+              shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
+            )
+
+}
+
+```
+
+Die Kommentarsysteme, deren Spuren hier angezeichnet werden, wurden mittels einfacher Textsuche in den HTML-Dokumenten gefunden. 
+
+:::panel-tabset
+
+### Alle Daten
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 12
+#| fig-width: 10
+
+create_snippets_found() |> 
+  # bind_rows(create_snippets_found("2")) |> #View()
+  # bind_rows(create_snippets_found("3")) |> 
+    # left_join(retranslate_snippets) |> #View()
+    filter(!is.na(snippet), is.na(category), !is.na(site)) |> # View()
+    ggplot(aes(x = simple_date, y = site, fill = system)) + 
+    geom_tile() +
+    facet_col(vars(country), scales = "free", space = "free") +
+    scale_x_continuous(limits = c(1998,2027), expand = c(0,NA), n.breaks = 6) +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_panel_spacing +
+      theme_b03_timeline_faceted+ 
+            coord_cartesian(clip = "off") +
+            guides(
+              fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
+              shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
+            )
+
+```
+
+
+:::
+
+### nach Kommentarsystemen
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 20
+#| fig-width: 10
+
+create_snippets_found("1") |> 
+  bind_rows(create_snippets_found("2")) |> #View()
+  bind_rows(create_snippets_found("3")) |> 
+    # left_join(retranslate_snippets) |> #View()
+    filter(!is.na(snippet), is.na(category)) |> # View()
+    ggplot(aes(x = simple_date, y = site, fill = system)) + 
+    geom_tile() +
+   facet_col(vars(system), scales = "free", space = "free") +
+    scale_x_continuous(limits = c(1998,2027), expand = c(0,NA), n.breaks = 6) +
+    theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_panel_spacing +
+      theme_b03_timeline_faceted+ 
+            coord_cartesian(clip = "off") +
+            guides(
+              fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
+              shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
+            )
+
+```
+
+
+**Cackle**
+Russisches Unternehmen, DK Production LLC, Sitz in St. Petersburg
+LLM sagte, Cackle ist/war in Russland verbreitet, die Daten hier spiegeln das nur bedingt wieder
+
+**Hyvor Talk**
+Französisches Unternehmen, Gründer aus Sri Lanka, privacy first
+
+**Muut**
+Amerikanisches Unternehmen, drei Gründer, zwei Finnen, Name stammt aus dem finnischen, bedeutet laut LLM so viel wie "anderes" oder "Veränderung"
+
+
+## Other infrastructure
+
+Die Grafik ist der Versuch den Fokus von den Kommentarsystemen zu nehmen und ein größeres Bild in en Blick zu bekommen. 
+
+Zu sehen sind Funde von Snippets, die auf verschiedene Anbieter hinweisen, die Teil sind von Social-Media-Unternehmen, Content-delivery-Unternehmen oder Tracking-Infrastruktur.  
+
+Nach ein wenig Recherche eröffnet das hier eine neue Perspektive auf Archive: Nicht nur die Frage "Was wird archiviert?" spielt eine Rolle für die Forschung die mit den Archivalien gemacht werden kann, sondern auch die Frage "Wo wird archiviert?". 
+
+Durch den Angriffskrieg Russlands auf die Ukraine ist Russland mit Sanktionen belegt worden, wodurch zum Beispiel cloud-basierte Unternehmenssoftware in Russland nicht mehr verfügbar ist. Auch Sicherheitszertifikate (SSL/TLS) werden seit 2026 blockiert, was dazu führt, dass russische Regierungs- und Bankenseiten in westlichen Browsern als unsicher blockiert werden. Russland seinerseits arbeitet daran ein souveränes RU-Net schaffen, ohne auf ausländische Dienste angewiesen zu sein. So wird eine eigene Zertifizierungsstelle aufgebaut, wodurch es für Nutzer in Russland notwendig wird auf andere Browser umzusteigen. Russland zwingt Internetanbieter  Hardware-Filtern zu installieren, wodurch es möglich wird bestimmte Internetverbindnung zu stören oder zu unterbrechen. Ein Anbieter, der für unseren Recherchefall relevant ist, ist Cloudflare. Das ist ein Dienst, der unter anderem DNS-Services anbietetx und massiv Privatsphäre als Geschäftsmodell hat. Mittels der genannten Hardware-Filter ist es möglich, Verbindungen zu cloudflare-Servern zu manipulieren und während der Übertragung Pakte zu entfernen (TCP/IP). Die Nutzenden bekommen keine Fehlermeldungen gezeigt, dass eine Webseite blockiert werden würde oder nicht erreichbar sei, es findet lediglich keine erfolgreiche Übertragung statt.  
+
+Um diese Veränderungen beobachten zu können, ist es relevant aus welchem Land eine Webseite aufgerufen wird. Es werden weiterhin russische Seiten in westlichen Browsern angezeigt, weiterhin können Nutzende in Europa oder den USA die Seiten aufrufen. Aber die Veränderung der Services ist dabei nicht zuverlässig zu sehen, weil in der Kommunikation unterschieden wird, ob der Empfänger innerhalb Russlands lokalisiert ist oder außerhalb. Unsere Daten stammen ausschließlich aus westlichen Archiven, zwar sind hier Spuren auf neue russische Infrastruktur angedeutet, aber es nicht möglich die innerrussiche Perspektive nachzuzeichnen. 
+
+:::panel-tabset
+
+### Alle Downloads
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 75
+#| fig-width: 10
+
+create_snippets_found("1") |> #View()
+  # bind_rows(create_snippets_found("2")) |> 
+  # bind_rows(create_snippets_found("3")) |> 
+  distinct() |> #View()
+  # left_join(retranslate_snippets, by = c()) |> 
+  filter(!is.na(snippet), !is.na(category), !is.na(site)) |> # View()
+  ggplot(aes(x = simple_date, y = system, color = category)) + 
+  geom_point() +
+  facet_col(vars(country, site), scales = "free", space = "free") +
+  scale_color_manual(values = c("blue", "red"), na.value = NA) +
+  scale_x_continuous(limits = c(1998,2027), expand = c(0,NA), n.breaks = 6) +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted+ 
+          coord_cartesian(clip = "off") +
+          guides(
+            fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
+            shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
+          )
+
+
+```
+
+
+
+:::
+
+## Kapitel 5: Hosting 
+
+cloudflare = CDN und DNS über DDoS-Schutz und Web Application Firewalls (WAF) bis hin zu Edge Computing (Workers)
+
+### Metadatenspuren in den header - Informationen der Archivdaten
+
+Um die Analyse zu erweitern, werten wir zusätzlich die HTTP-Header der archivierten Seiten aus. Eine HTML-Seite ist die Antwort eines Servers auf die Anfrage eines Clients, und neben dem eigentlichen Dokument liefert der Server in dieser Antwort Header mit, die etwa Hinweise auf eingesetzte Server-Software oder vorgeschaltete Dienste (z. B. CDNs) geben. Das ist relevant, weil Hosting-Infrastruktur im sichtbaren Inhalt einer Seite oft nicht auftaucht, obwohl viele Anbieter an ihrer Auslieferung beteiligt sind: Eine Seite besteht aus zahlreichen Einzelressourcen (Bilder, Skripte, Schriften), die jeweils eigene Anfragen auslösen und teils von verschiedenen Servern stammen. 
+
+Unser Archiv orientiert sich am Standard der Webarchivierung (WARC), liegt aber als JSON vor: Jede Seite ist ein Package, das auf die einzelnen Records ihrer Ressourcen verweist, und die Header sind in diesen Records gespeichert. Anders als in WARC-Dateien enthalten sie keine IP-Adressen, sodass wir Anbieter nur über Header und die Domains der Ressourcen erschließen können. Zu beachten ist außerdem, dass die Angaben freiwillig sind, nicht immer die Ursprungsinfrastruktur zeigen und den Zustand zum Zeitpunkt des Crawls abbilden.
+
+Für die nachfolgende Grafik sind nur die Headerdaten der HTML-Seiten ausgewertet worden. 
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 20
+#| fig-width: 10
+
+
+hosting_snippets_sourcecode <- retranslate_snippets |> filter(type == "hosting") |> select(snippet) |> pull() # |> paste(collapse = "|")
+hosting_snippets_header_specials <- read_csv(file = "../../../data/helper/26-10-05-hosting-system-detection-patterns.csv")|> select(snippet) |> pull() #|> 
+
+hosting_snippets <- c(hosting_snippets_sourcecode,hosting_snippets_header_specials) |> paste(collapse ="|")
+
+retranslate_hosting_snippets <- read_csv(file = "../../../data/helper/26-10-05-hosting-system-detection-patterns.csv")|>
+  bind_rows(retranslate_snippets)
+
+df_hosting <- create_index_with_header("1") |> 
+  bind_rows(create_index_with_header("2")) |> 
+  bind_rows(create_index_with_header("3")) |> 
+  # select(-response_file) |> 
+  distinct() |> 
+  mutate(detected = str_detect(header_value, hosting_snippets),
+         detected = ifelse(detected == FALSE, str_detect(header_attr, hosting_snippets), detected),
+         snippet = str_extract(header_value, hosting_snippets),
+         snippet = ifelse(is.na(snippet), str_extract(header_attr, hosting_snippets), snippet),
+         ) |> 
+  filter(detected) |>
+  select(-header_attr, -header_value) |>
+    distinct() |> 
+  left_join(retranslate_hosting_snippets, relationship = "many-to-many") |> 
+  select(-snippet) |> 
+  distinct()
+
+df_hosting |> 
+  filter(!is.na(site)) |> 
+  ggplot(aes(x = simple_date, y = site, color = category)) + 
+  geom_point() +
+  facet_col(vars(system), scales = "free", space = "free") +
+  scale_color_manual(values = c("blue", "red"), na.value = NA) +
+   scale_x_continuous(limits = c(1998,2027), expand = c(0,NA), n.breaks = 6) +
+  # scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2027-09-01")), expand = c(0,NA)) +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted+ 
+          coord_cartesian(clip = "off") +
+          guides(
+            fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
+            shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
+          )
+
+# create_index("1") |> 
+#   bind_rows(create_index("2")) |> 
+#   bind_rows(create_index("3")) |> # View()
+#   distinct() |> View()
+#   left_join(df_hosting) |> View()
+
+  # df_hosting |>   filter(str_detect(header_value, hosting_snippets$snippet))
+# 
+# df_hosting |> select(record_hash) |> distinct() |> nrow()
+# df_hosting |> select(record_hash, detected) |> filter(detected == TRUE)|> reframe(counted_traces = n(), .by = record_hash) |> View() #distinct() |> nrow()
+# 
+# df_hosting |> select(extraced) |> reframe(counted_traces = n(), .by = extraced) |> View()
+# retranslate_snippets |> filter(type == "hosting") |> select(snippet) |> clipr::write_clip()
+
+
+```
+
+
+### Spuren in den HTML-Seiten - gezeichnet nach Systemen
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 22
+#| fig-width: 10
+
+create_snippets_found("1") |> # View()
+  # bind_rows(create_snippets_found("2")) |> 
+  # bind_rows(create_snippets_found("3")) |> 
+  distinct() |> 
+  # left_join(retranslate_snippets, by = c()) |> 
+  filter(type == "hosting", !is.na(site)) |> # View()
+  ggplot(aes(x = simple_date, y = site, color = category)) + 
+  geom_point() +
+  facet_col(vars(system), scales = "free", space = "free") +
+  scale_color_manual(values = c("blue", "red"), na.value = NA) +
+   scale_x_continuous(limits = c(1998,2027), expand = c(0,NA), n.breaks = 6) +
+  # scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2027-09-01")), expand = c(0,NA)) +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted+ 
+          coord_cartesian(clip = "off") +
+          guides(
+            fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
+            shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
+          )
+
+```
+
+### Spuren in den HTML-Seiten - gezeichnet nach Webseiten
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 40
+#| fig-width: 10
+
+create_snippets_found("1") |> #View()
+  # bind_rows(create_snippets_found("2")) |> 
+  # bind_rows(create_snippets_found("3")) |> 
+  # left_join(retranslate_snippets, by = c()) |> 
+  filter(type == "hosting") |> # View()
+  ggplot(aes(x = simple_date, y = system, color = category)) + 
+  geom_point() +
+  facet_col(vars(country, site), scales = "free", space = "free") +
+  scale_color_manual(values = c("blue", "red"), na.value = NA) +
+  scale_x_continuous(limits = c(1998,2027), expand = c(0,NA), n.breaks = 6) +
+  # scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2027-09-01")), expand = c(0,NA)) +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted+ 
+          coord_cartesian(clip = "off") +
+          guides(
+            fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
+            shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
+          )
+
+```
+
+
+
+### Gemini-Einwand zur snippet-suche nach hosting
+
+⚠️ Wichtiger Fallstrick: "Custom Domains"
+Große Unternehmen maskieren diese Domains sehr häufig. Statt 12345.cloudfront.net sieht der Nutzer dann im Quelltext cdn.ihre-wunschdomain.de.
+Wenn ein Provider eine solche Custom Domain nutzt, verliert die reine HTML-Quelltextsuche nach diesen Snippets ihre Wirkung. In diesem Fall helfen nur:
+1. Historische DNS-Einträge (CNAME): Um zu sehen, wohin cdn.ihre-wunschdomain.de damals weitergeleitet hat.
+2. HTTP-Antwort-Header (falls im Archiv vorhanden): AWS CloudFront hinterlässt dort z. B. immer den Header Via: ... cloudfront und X-Cache: Miss from cloudfront.
+
+⚠️ Wichtige Einschränkung bei "nacktem" HTML
+Wenn eine Website Cloudflare ausschließlich als reines DNS-System und DDoS-Schutz nutzt, ohne Analytics, ohne Turnstile und ohne dass der Bot-Schutz aktiv anspringt, veränderte Cloudflare das HTML historisch kaum.
+In solchen Fällen ist das HTML absolut "sauber". Um Cloudflare dort dennoch nachzuweisen, muss man den Blick vom HTML-Code wegbewegen zu:
+1. Den HTTP-Antwort-Headern (Response Headers): Suchen nach server: cloudflare oder cf-ray: ... (die eindeutige ID des Cloudflare-Rechenzentrums).
+2. Den Nameservern (DNS): Die Nameserver der Domain enden zwingend auf *.ns.cloudflare.com.
+
+
+
+## Kapitel 4: Werbetracker
+
+### gezeichnet nach Systemen
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 25
+#| fig-width: 10
+
+create_snippets_found("1") |> #View()
+  # bind_rows(create_snippets_found("2")) |> 
+  # bind_rows(create_snippets_found("3")) |> 
+  distinct() |> 
+  # left_join(retranslate_snippets, by = c()) |> 
+  filter(type == "tracking", !is.na(site)) |> # View()
+  ggplot(aes(x = simple_date, y = site, color = category)) + 
+  geom_point() +
+  facet_col(vars(system), scales = "free", space = "free") +
+  scale_color_manual(values = c("blue", "red"), na.value = NA) +
+  scale_x_continuous(limits = c(1998,2027), expand = c(0,NA), n.breaks = 6) +
+  # scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2027-09-01")), expand = c(0,NA)) +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_panel_spacing +
+    theme_b03_timeline_faceted+ 
+          coord_cartesian(clip = "off") +
+          guides(
+            fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
+            shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
+          )
+
+```
+
+### gezeichnet nach Webseiten
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 30
+#| fig-width: 10
+
+
+# archived_sites <- create_index("1") |> 
+#   bind_rows(create_index("2")) |> 
+#   bind_rows(create_index("3")) |> 
+#   distinct() |> 
+#   # mutate(simplest_date = year(simple_date)) |> 
+#   reframe(counted_sites = n(), .by = c(simple_date, site, country)) |> 
+#   mutate(counted_sites = ifelse(counted_sites > 1, "1", NA))
+# 
+# found_snippets <- create_snippets_found("1") |> #View()
+#   bind_rows(create_snippets_found("2")) |> 
+#   bind_rows(create_snippets_found("3")) |> #View()
+#   filter(type == "tracking", !is.na(site))  |> # View()
+#   select(site, simple_date, country, system, category)
+# 
+# snippets_grid <- found_snippets |> select(site, system) |> distinct()
+# 
+# base_data <- seq(1998,2027) |> 
+#   as_tibble() |> 
+#   rename(simple_date = value) |> 
+#   expand_grid(snippets_grid)
+# 
+# base_data |>
+#   left_join(archived_sites, by = c("site", "simple_date")) |> # View()
+#   left_join(found_snippets, by = c("site", "country", "simple_date", "system")) |> # View()
+#   filter(!is.na(country)) |> 
+#   distinct() |> #View()
+#   # drop_na(category) |> 
+#   ggplot(aes(x = simple_date, y = system)) + 
+#   geom_tile(aes(fill = counted_sites), fill = "lightgrey", alpha = .6) + 
+#   geom_point(aes(color = category), na.rm = TRUE ) +
+#   facet_col(vars(country, site), scales = "free", space = "free") +
+#   scale_color_manual(values = c("blue", "red"), na.value = NA) +
+#   scale_x_continuous(limits = c(1998,2027), expand = c(0,NA), n.breaks = 6) +
+#   # scale_x_date(date_labels = "%Y", date_breaks = "2 years", limits = c(as.Date("1998-01-01"), as.Date("2027-09-01")), expand = c(0,NA)) +
+#   theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme_b03_panel_spacing +
+#     theme_b03_timeline_faceted+ 
+#           coord_cartesian(clip = "off") +
+#           guides(
+#             fill = guide_legend(title.position = "top", override.aes = list(shape = 22)),
+#             shape = guide_legend(title.position = "top", override.aes = list(color = "black"))
+#           )
+
+```
+
+**Criteo**
+Ad-Targeting aus Frankreich, "extrem dominant im Retargeting"
+
+**Teads**
+Video-Werbung
+Selbstbeschreibung: Teads versteht sich als die wichtigste Alternative zu den geschlossenen Ökosystemen der Tech-Giganten (Google, Meta, Amazon – im Fachjargon „Walled Gardens“ genannt). Teads bündelt stattdessen die Werbeplätze des „Open Internet“ (also der freien, unabhängigen Webseiten weltweit).
+
+**Facebook**
+Die Snippets für Facebook sind (hoffentlich) spezifisch für deren Ad-Tracking und Remarketing.
+
+
+### Gemini-Kommentar zur Suche nach Werbenetzwerken
+
+💡 Der ultimative Archiv-Tipp: Die ads.txt
+Wenn Sie herausfinden wollen, welche Werbeplätze eine Website im Laufe der Zeit verkauft hat, suchen Sie im Web-Archiv nach der Datei ://domain.com (eingeführt ab ca. 2017). Diese Datei ist pures Gold für Analysten: Sie listet im Klartext alle Werbenetzwerke (Google, Rubicon, AppNexus etc.) inklusive der spezifischen Publisher-ID des Website-Betreibers auf.
+Suchen Sie nach Spuren einer ganz bestimmten Website, um deren Werbepartner zu rekonstruieren, oder erstellen Sie eine statistische Auswertung über viele Seiten hinweg? Ich kann Ihnen dabei helfen, die passenden Regex-Muster für ein automatisiertes Skript weiter zu verfeinern.
+
+
+## to do
+- Wie funktionieren Werbenetzwerke?
+- adds.txt: was kann man darüber wissen? Einführt 2017, 
+- was sind historische DNS-Einträge? DNS (Domain Name System)-Einträge geben Auskunft darüber, wie eine Domain konfiguriert war. Das sind Informationen, die außerhalb der Reichweite von Internet Archiven liegen.
+- russische Kommentarsysteme in die snippet-list auf nehmen
+
+
+
+
