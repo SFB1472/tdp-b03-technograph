@@ -5,7 +5,8 @@ library(gdtools)
 # extrafont::loadfonts(quiet = TRUE)
 gdtools::register_gfont("Roboto Mono")
 
-typo_sfb_mono <- "GT America Mono LC Rg"
+typo_sfb_mono <- "Menlo"
+# typo_sfb_mono <- "GT America Mono LC Rg"
 # typo_sfb_mono_bold <- "Roboto Mono"
 
 # systemfonts::register_font(typo_sfb_mono)
