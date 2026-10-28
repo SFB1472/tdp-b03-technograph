@@ -1,5 +1,8 @@
 ---
-title: "Traces context"
+title: "Technograph - create grafics"
+toc-depth: 4
+execute:
+  eval: false
 ---
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
@@ -12,8 +15,8 @@ library(reactable)
 library(MetBrewer)
 library(ggiraph)
 
-source("../../config/config-secret-local.R")
-# source("../config/config-secret.R")
+# source("../../config/config-secret-local.R")
+source("../config/config-secret.R")
 source("../../config/config-graphic.R")
 source("../../config/config.R")
 
@@ -103,8 +106,8 @@ get_annotated_data <- function(sphere_){
 
 
 ```{r}
+#| eval: false
 
-## copied from shiny app
 
 get_traces_found <- function(sphere_, translate_domains){
   db_traces_findings <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.crawl_date, t.site, tr.trace, tr.search_type, t.sphere FROM sites t INNER JOIN traces tr ON t.sha1 = tr.site WHERE t.sphere ='", sphere_,"' AND t.of_interest = TRUE"), check_interrupts = TRUE) %>% 
@@ -178,17 +181,11 @@ plot_traces_found(sphere_, gs_domain_to_look)
 
  
  
- 
 ## sites per sphere with histogram
 
 
-
-
 ```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| message: false
+
 #| fig-height: 9
 #| fig-width: 10
 
@@ -232,6 +229,7 @@ plot_sites_archived(sphere_, gs_domain_to_look)
 
 
 ```{r}
+
 
 get_height <- function(nr_){
    # nr_systems <- as.numeric(nr_ %>% select(system) %>% distinct() %>% nrow())
@@ -362,7 +360,7 @@ get_gs_annoted_data_spez <- function(sphere_, site_){
 
 get_traces_found_subdomain <-  function(sphere_, site_) {
   # get_traces_found <- function(sphere_){
-  db_traces_findings <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.crawl_date, t.site, tr.trace, tr.search_type, t.url, t.sphere FROM sites t INNER JOIN traces tr ON t.sha1 = tr.site WHERE t.sphere ='", sphere_,"' AND t.site = '", site_, "'"), check_interrupts = TRUE) %>% 
+db_traces_findings <- dbGetQuery(conn = con, paste0("SELECT DISTINCT t.crawl_date, t.site, tr.trace, tr.search_type, t.url, t.sphere FROM sites t INNER JOIN traces tr ON t.sha1 = tr.site WHERE t.sphere ='", sphere_,"' AND t.site = '", site_, "'"), check_interrupts = TRUE) %>% 
   # filter(site == "abendblatt") %>% 
           mutate(year = year(crawl_date),
                  subdomain = urltools::domain(url) %>% suffix_extract(.) %>% select(subdomain) %>% pull(.),
@@ -393,31 +391,30 @@ get_traces_found_subdomain <-  function(sphere_, site_) {
 
 ```{r}
 
-df_annoted_data_spez <- get_gs_annoted_data_spez("German", "abendblatt")
 
-
-
-ggplot() +
-          geom_point_interactive(data = df_traces_domain, aes(x = year, y = site_subdomain), size = 3, alpha = 0.8, shape = 19) +
-          geom_point_interactive(data = df_annoted_data_spez, aes(x = year, y = site_subdomain)) +
-          scale_x_date(date_breaks = "year", date_labels = "%Y", limits = c(ymd("1997-01-01"), ymd("2021-01-01"))) +
-          scale_color_manual(values = color_values) +
-          # scale_fill_manual(values = MetBrewer::met.brewer("Cross", fill_values)) +
-          theme_b03_base + theme_b03_facets_individual + theme(legend.position = "none") + 
-          facet_col(vars(type), scales = "free_y", space = "free") +
-          # facet_grid(row = vars(type), scales = "free_y", space = "free_y", switch = "y") +
-          # facet_wrap(~type, ncol = 1, scales = "free_y") +
-          coord_cartesian(clip = "off")
+# df_annoted_data_spez <- get_gs_annoted_data_spez("German", "abendblatt")
+# 
+# 
+# 
+# ggplot() +
+#           geom_point_interactive(data = db_traces_findings, aes(x = year, y = site_subdomain), size = 3, alpha = 0.8, shape = 19) +
+#           geom_point_interactive(data = df_annoted_data_spez, aes(x = year, y = site_subdomain)) +
+#           scale_x_date(date_breaks = "year", date_labels = "%Y", limits = c(ymd("1997-01-01"), ymd("2021-01-01"))) +
+#           scale_color_manual(values = color_values) +
+#           # scale_fill_manual(values = MetBrewer::met.brewer("Cross", fill_values)) +
+#           theme_b03_base + theme_b03_facets_individual + theme(legend.position = "none") + 
+#           facet_col(vars(type), scales = "free_y", space = "free") +
+#           # facet_grid(row = vars(type), scales = "free_y", space = "free_y", switch = "y") +
+#           # facet_wrap(~type, ncol = 1, scales = "free_y") +
+#           coord_cartesian(clip = "off")
 ```
 
 
 ```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| message: false
 
 exclude_side_subdomain <- read.csv("../../../data/helper/exclude-side-subdomain.csv", header = FALSE) %>% pull(.) #%>%  paste(., collapse=("|"))
+sub_traces <- read.csv("../../../data/helper/26-02-26-search-list-comment-functions.csv", header = FALSE) 
+sub_traces_light <- sub_traces$V1[!sub_traces$V1 %in% c("even", "odd")] %>% paste(., collapse=("|"))
 sub_traces <- sub_traces %>% pull(.) %>% paste(., collapse=("|"))
 
 snippets_to_find <- read.csv("../../../data/helper/24-07-12-Commenting-system-detection-patterns.csv", sep = ";")
@@ -465,10 +462,7 @@ get_data_sub_traces <- function(sphere_, search_in){
 ### German
 
 ```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| message: false
+
 #| fig-height: 15
 #| fig-width: 10
 
@@ -549,10 +543,7 @@ ggplot() +
 ### International
 
 ```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| message: false
+
 #| fig-height: 25
 #| fig-width: 10
 
@@ -644,10 +635,7 @@ Die y-Achse zeigt für jede der Nachrichtenseiten die Stichworte, die für die j
 ### German
 
 ```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| message: false
+
 #| fig-height: 110
 #| fig-width: 10
 
@@ -692,10 +680,7 @@ ggplot() +
 ### International
 
 ```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| message: false
+
 #| fig-height: 250
 #| fig-width: 10
 
@@ -764,10 +749,7 @@ reactable(tbl_snippets)
 ## Grafik: Funktionalitäten innerhalb von eingebettende Skripten
 
 ```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| message: false
+
 #| fig-height: 8
 #| fig-width: 10
 
@@ -803,10 +785,6 @@ ggplot() +
 ### Grafik international filtered domains
 
 ```{r}
-#| echo: false
-#| warning: false
-#| error: false
-#| message: false
 #| fig-height: 50
 #| fig-width: 10
 
