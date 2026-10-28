@@ -131,8 +131,8 @@ df_sites_2th_export %>%
 
 ```
 
-## Übersicht der archivierten Seiten pro Jahr
 
+## Übersicht der archivierten Seiten pro Jahr
 ```{r}
 #| echo: false
 #| warning: false
@@ -146,6 +146,31 @@ df_sites_all <- dbGetQuery(conn = con, "SELECT s.crawl_date, s.sha1, s.sphere FR
   mutate(year = ymd(crawl_date) %>% year(),
          month = ymd(crawl_date) %>% month())#,
              # site = domain(url) %>% suffix_extract(.) %>% select(domain) %>% pull(.))
+```
+
+Insgesamt liegen für die Analyse `r df_sites_all |> nrow()` Webseiten vor. 
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+df_sites_all |> 
+  reframe(counted = n(), .by = "sphere")
+
+```
+
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 4
+#| fig-width: 10
 
 
 df_sites_all %>%
