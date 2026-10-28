@@ -1,0 +1,305 @@
+---
+title: "Jahrestagung - 2025"
+execute:
+  eval: false
+---
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+library(tidyverse)
+library(DBI)
+library(RPostgres)
+library(ggforce)
+library(MetBrewer)
+
+# source("../config/config-secret.R")
+source("../config/config-secret-local.R")
+source("../config/config-graphic.R")
+source("../config/config.R")
+
+con <- dbConnect(RPostgres::Postgres(), 
+                 dbname = dsn_database,
+                 host = dsn_hostname, 
+                 port = dsn_port,
+                 user = dsn_uid, 
+                 password = dsn_pwd
+)
+
+df_timespan_month <- seq(ymd("1997-01-01"), ymd("2021-06-01"), by = "month") %>% as_tibble()
+df_timespan_year <- seq(ymd("1997-01-01"), ymd("2021-06-01"), by = "years") %>% as_tibble()
+
+year_breaks_for_plotting <- df_timespan_year %>% 
+  mutate(years = year(value)) %>%
+  select(years) %>% pull(.)
+
+df_sites <- dbGetQuery(conn = con, paste0("SELECT s.crawl_date, s.crawl_timestamp, s.sha1, s.url FROM sites s WHERE s.site ='sueddeutsche' AND s.sphere ='German'")) %>% 
+  mutate(year = year(crawl_date),
+         month = month(crawl_date),
+         simple_date = paste0(year, "-", month, "-01") %>% ymd(.)) %>% 
+  mutate(sites_year = n(), .by = "year") # %>% 
+  # full_join(., df_timespan_month, by = c("crawl_date" = "value")) # %>% 
+
+sum_sites_year <- df_sites %>% 
+  select(year, sites_year) %>% distinct() %>% 
+  filter(!is.na(year))
+
+load(file = "../../data/1-parsing/scripts/German/scripts-embedded-db-update.RData")
+```
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 2
+#| fig-width: 10
+
+df_sites %>% 
+  summarise(counted_sites = n(), .by = c(year)) %>% 
+  ggplot(., aes(x = year, y = 0, fill = counted_sites)) +
+  geom_tile() +
+  scale_x_continuous(breaks = year_breaks_for_plotting, limits = c(min(year_breaks_for_plotting), max(year_breaks_for_plotting)), expand = c(0, NA), name = "crawl_year") +
+  scale_fill_gradientn(colors = met.brewer("Hokusai2", type="continuous"), na.value = "grey90", name = "number of websites available" ) +
+  scale_y_discrete(expand = c(0, NA)) +
+  guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines"))) +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+```
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+
+
+# https://gruppe.spiegel.de/news/pressemitteilungen/detail/quality-channel-startet-vermarktung-der-e-commerce-plattform-marktplatz-auf-spiegel-online
+# 2002 -2008
+df_site_tracker_vermarktung <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.embedded LIKE '%OAS_RICH%'"))
+
+#https://web.archive.org/web/20050209091245/http://www.websidestory.com/
+# 2006-2008
+df_site_tracker_websitestory <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.value LIKE '%http://pix.sueddeutsche.de/js/hbx.js%'"))
+
+# hierin hauptsächlich subdomains von sueddeutsche.de, die nicht im Hauptfokus liegen
+df_sitestat <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.value LIKE '%sitestat%'"))
+
+# 2008 - 2017
+df_sitestat_2 <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.embedded LIKE '%sitestat%'"))
+
+# 2011 - 2012
+df_site_tracker_yahoo_script_embedded <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.embedded LIKE '%SDE.advertisement.Yahoo.genericAd%'"))
+
+# 2009 - 2012 (01)
+df_site_tracker_yahoo_iframe <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.value LIKE '%eu-pn4.adserver.yahoo.com%'"))
+
+
+#yahoo tracking: http://d.yimg.com/mi/ywa.js
+# 2009 - 2011 (12)
+df_site_tracker_yahoo_script <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.value LIKE '%http://d.yimg.com/mi/ywa.js%'"))
+
+# df_site_tracker_yahoo <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.attr LIKE '%http://d.yimg.com/mi/ywa.js%'"))
+
+# 2011 - 2012
+df_site_tracker_yahoo_script_embedded <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.embedded LIKE '%SDE.advertisement.Yahoo.genericAd%'"))
+
+# 2011 - 2019 - eigenes Datenobjekt, das im Laufe der Zeit um eine pay-category erweitert wird
+df_site_tracker <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.embedded LIKE '%VALITON_WA%'"))
+
+# 2012 - 2021 iqd vermarktung
+df_iqd_vermarktung <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.embedded LIKE '%iqd%'"))
+
+# Ausschnitt aus dem oberen tracker-datensatz. Das script-tag, das hier gesucht wird, hat im Laufe der Zeit einen Namen bekommen
+df_payed <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.value = 'valitonInit'"))
+
+# 2016 (08) - 2008 (10)
+df_adblock_dec <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.tag = 'script' AND t.embedded LIKE '%adblockdetected%'"))
+
+#data-paycategory
+
+# 2019- 2021  nur pay Objekte, keine Info über tracking nach 2019
+df_payed_ <- dbGetQuery(conn = con, paste0("SELECT DISTINCT s.crawl_date, s.site, s.sha1, t.tag, t.attr, t.value, t.embedded, s.url FROM tags t INNER JOIN sites s ON t.site = s.sha1 WHERE s.site = 'sueddeutsche' AND t.attr = 'data-paycategory'"))
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-height: 4
+#| fig-width: 10
+
+# load(file = "../../data/4_doc/ads/findings_sz.RData")
+
+exclude <- c("google.de", "google.com", "t.co", "quality-channel.de", "realmedia")
+# include_doubleclick <- "doubleclick|google"
+include_doubleclick <- "doubleclick"
+include_early_adds <- "adserv|adtech|adver|banner|werbung|468x60|468_60|ad250|ad_1|ad6|ads.|p-Ad|ad1.|adbar"
+
+df_doubleclick <- df_findings %>% 
+  rename(pattern_ = pattern) %>% 
+  filter(!pattern_ %in% exclude) %>% # View()
+  filter(str_detect(pattern_, include_doubleclick)) %>% 
+  mutate(year = year(crawl_date),
+         trace = "doubleclick",
+         sorting = 2,
+         color = 1) %>% #View()
+  select(year, trace, sorting, color) %>% 
+  distinct() #%>% 
+
+df_early_ads <- df_findings %>% 
+  rename(pattern_ = pattern) %>% 
+  filter(!pattern_ %in% exclude) %>% # View()
+  filter(!str_detect(pattern_, include_doubleclick)) %>% 
+  filter(str_detect(pattern_, include_early_adds))%>% 
+  select(crawl_date, pattern_) %>% 
+  mutate(year = year(crawl_date),
+         trace = "Ad traces in CSS",
+         sorting = 1,
+         color = 1) %>% #View()
+  select(year, trace, sorting, color) %>% 
+  distinct() #%>% 
+
+df_automated_ads <- df_findings %>% 
+  rename(pattern_ = pattern) %>% 
+  filter(!pattern_ %in% exclude) %>% # View()
+  # filter(!str_detect(pattern_, include_doubleclick)) %>% 
+  filter(!str_detect(pattern_, include_early_adds)) %>% 
+  filter(!search_list %in% c("easylist_general_hide", "easylist_general_block", "easylist_general_hide_de")) %>% #View()
+  mutate(year = year(crawl_date),
+         trace = "Ad Server",
+         sorting = 3,
+         color = 1) %>% #View()
+  select(year, trace, sorting, color) %>% 
+  distinct() #%>% 
+
+```
+
+```{r}
+
+# df_tracker_long <- df_site_tracker %>% 
+#   select(crawl_date, sha1, embedded) %>% 
+#   mutate(first_tracker = str_remove_all(embedded, "\\\\") %>% str_extract(., "firstTracker:\\s{0,}'[a-z0-9,]{1,}'") %>% str_remove(., "firstTracker:") %>% str_remove_all(., "'")) %>% 
+#   mutate(last_tracker =  str_remove_all(embedded, "\\\\") %>% str_extract(., "lastTracker:\\s{0,}'[a-z0-9,]{0,}'") %>% str_remove(., "lastTracker:") %>% str_remove_all(., "'")
+#          ) %>% #View()
+#   # mutate(tracker = paste0(first_tracker,",",last_tracker)) %>% 
+#   separate_rows(first_tracker, sep = ",") %>% #View()
+#   separate_rows(last_tracker, sep = ",") %>% #View()
+#   pivot_longer(cols = c("first_tracker", "last_tracker"), names_to = "names", values_to = "tracker") %>% #View()
+#   mutate(tracker = trimws(tracker)) %>% 
+#   select(crawl_date, sha1, tracker) %>% 
+#   filter(!is.na(tracker)) %>% 
+#   distinct() %>% 
+#   mutate(tracker_counted = n(), .by = c(crawl_date, sha1))
+# 
+# df_tracker_short <- df_tracker_long %>% 
+#   mutate(year = year(crawl_date),
+#          color = 5) %>% 
+#   select(year, trace = tracker, color) %>% 
+#   distinct() %>% 
+#   filter(trace !="")
+
+load(file = "../../data/4-doc/ads/df_tracker_chart_sz.RData")
+
+df_tracker_chart <- df_tracker_chart %>% 
+  select(crawl_date, trace) %>% 
+  mutate(year = year(crawl_date),
+         color = 4,
+         sorting = 8)
+
+```
+
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| error: false
+#| message: false
+#| fig-dpi: 144
+#| fig-height: 4
+#| fig-width: 10
+
+
+# preparing one df for all traces 
+make_simple_trace_df <- function(df_, trace_, sorting_, color_){
+  df_return <- df_ %>% 
+    select(crawl_date) %>% 
+    mutate(trace = trace_,
+           sorting = sorting_,
+           color = color_,
+           year = year(crawl_date),
+           month = month(crawl_date),
+           simple_date = paste0(year,"-01-01") %>% ymd(.)) %>% 
+    select(year, trace, sorting, color) %>% 
+    distinct()
+}
+
+
+df_quality_channel <- make_simple_trace_df(df_site_tracker_vermarktung, "Quality Channel", 4, 2)
+df_yahoo_iframe <- make_simple_trace_df(df_site_tracker_yahoo_iframe, "Yahoo", 5, 2)
+df_iqd <- make_simple_trace_df(df_iqd_vermarktung, "IQ Digital", 6, 2)
+# df_websitestory <- make_simple_trace_df(df_site_tracker_websitestory, "websitestory", 7, 5)
+# df_sitestat <- make_simple_trace_df(df_sitestat_2, "sitestat", 8, 5)
+df_pay_1 <- make_simple_trace_df(df_site_tracker %>% filter(str_detect(embedded, "pcat")), "paid content", 7, 3)
+df_pay_2 <- make_simple_trace_df(df_payed_, "paid content", 7, 3)
+df_adblock <- make_simple_trace_df(df_adblock_dec, "Adblock-Block", 10, 5)
+
+load("../../data/4-doc/ads/df_sz_realmedia.RData")
+df_realmedia <- df_a_tag_sz %>% 
+  select(year, trace) %>% 
+  distinct() %>% 
+  mutate(color = 2,
+         sorting = 3)
+
+df_traces <- df_quality_channel %>% 
+  # bind_rows(., df_websitestory) %>%
+  # bind_rows(., df_sitestat) %>%
+  bind_rows(., df_yahoo_iframe) %>%
+  bind_rows(., df_iqd) %>%
+  bind_rows(., df_pay_1) %>% 
+  bind_rows(., df_pay_2) %>% 
+  # bind_rows(., df_adblock) %>%
+  # bind_rows(., df_doubleclick) %>% 
+  bind_rows(., df_early_ads) %>% 
+  bind_rows(., df_automated_ads) %>% 
+  # bind_rows(., df_tracker_chart) %>%
+  bind_rows(., df_realmedia)
+
+# color_names <- c("0" = "Infrastruktur", "1" = "günstig verkauft", "2" = "teuer verkauft", "4" = "Abomodell", "5" = "Adblock-Phase", "3" = "Reichweitenmessung (Auswahl)")
+
+color_names <- c("1" = "Infrastruktur", "2" = "Exklusive Vermarktung", "3" = "Abomodell", "5" = "Adblock-Phase", "4" = "Reichweitenmessung (Auswahl)")
+
+color_names <- c("1" = "Infrastruktur", "2" = "Exklusive Vermarktung", "3" = "Abomodell", "4" = "Reichweitenmessung (Auswahl)")
+
+color_names <- c("1" = "Infrastruktur", "2" = "Exklusive Vermarktung", "3" = "Abomodell", "4" = "Reichweitenmessung (Auswahl)")
+
+plot <- df_traces %>% 
+  # summarise(counted_sites = n(), .by = c(year)) %>% 
+  ggplot(., aes(x = year, y = reorder(trace, sorting), fill = as.character(color))) +
+  geom_tile(height = 0.95) +
+  scale_x_continuous(breaks = year_breaks_for_plotting, expand = c(0, NA), name = "crawl_year") +
+  scale_fill_manual(values = met.brewer("Archambault", type="discrete"), label = color_names, na.value = "grey90", name = " " ) +
+  scale_y_discrete(expand = c(0, NA)) +
+  # guides(fill = guide_colorbar(title.position = "top", barwidth = unit(20, "lines"), barheight = unit(.5, "lines"))) +
+  # guides(fill = guide_legend(title.position = "top", override.aes = list(shape = 15, size = 0.1, alpha = 1))) +
+  theme_b03_base +theme_b03_base_typo_static + theme_b03_heatmap + theme_b03_facets + theme(axis.text.x = element_text(angle = 30, hjust = 1)) + theme_b03_legend_discrete +
+  coord_cartesian(clip = "off")
+
+
+# nur die ersten 3 farben
+# ggsave(plot, filename = "../../data/4-doc/ads/ad-plot-1.png", dpi = 144, width = 1500, height = 400, units = "px")
+# # dann reichweite dazu
+# ggsave(plot, filename = "../../data/4-doc/ads/ad-plot-2.png", dpi = 144, width = 1500, height = 500, units = "px")
+# # zum schluss alles mit adblocker
+# ggsave(plot, filename = "../../data/4-doc/ads/ad-plot-3.png", dpi = 144, width = 1500, height = 550, units = "px")
+```
+
